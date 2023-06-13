@@ -23,10 +23,13 @@ type AccessPoint struct {
 
 	conn    net.Conn
 	encConn *shannonConn
+
+	recvLoopStop chan struct{}
 }
 
 func NewAccessPoint(host string, port int) (ap *AccessPoint, err error) {
 	ap = &AccessPoint{}
+	ap.recvLoopStop = make(chan struct{}, 1)
 
 	// read 16 nonce bytes
 	ap.nonce = make([]byte, 16)
@@ -81,7 +84,42 @@ func (ap *AccessPoint) Authenticate(username, password string) error {
 		return fmt.Errorf("failed authenticating: %w", err)
 	}
 
+	// start the recv loop
+	go ap.recvLoop()
+
 	return nil
+}
+
+func (ap *AccessPoint) Close() {
+	ap.recvLoopStop <- struct{}{}
+	_ = ap.conn.Close()
+}
+
+func (ap *AccessPoint) recvLoop() {
+	for {
+		select {
+		case <-ap.recvLoopStop:
+			return
+		default:
+			pkt, payload, err := ap.encConn.receivePacket()
+			if err != nil {
+				log.WithError(err).Errorf("failed receiving packet")
+				return
+			}
+
+			switch pkt {
+			case PacketTypePing:
+				if err := ap.encConn.sendPacket(PacketTypePong, payload); err != nil {
+					log.WithError(err).Errorf("failed sending Pong packet")
+					return
+				}
+			case PacketTypePongAck:
+				continue
+			default:
+				log.Debugf("skipping packet %v, len: %d", pkt, len(payload))
+			}
+		}
+	}
 }
 
 func (ap *AccessPoint) performKeyExchange() ([]byte, error) {
