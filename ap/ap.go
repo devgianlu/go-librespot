@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"net"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -57,6 +59,26 @@ func (ap *AccessPoint) Connect() (err error) {
 	// solve challenge and complete connection
 	if err := ap.solveChallenge(exchangeData); err != nil {
 		return fmt.Errorf("failed solving challenge: %w", err)
+	}
+
+	return nil
+}
+
+func (ap *AccessPoint) Authenticate(username, password string) error {
+	if ap.encConn == nil {
+		panic("accesspoint not connected")
+	}
+
+	// FIXME: make device id persistent
+	deviceIdBytes := make([]byte, 20)
+	_, _ = rand.Read(deviceIdBytes)
+
+	if err := ap.authenticate(&pb.LoginCredentials{
+		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
+		Username: proto.String(username),
+		AuthData: []byte(password),
+	}, hex.EncodeToString(deviceIdBytes)); err != nil {
+		return fmt.Errorf("failed authenticating: %w", err)
 	}
 
 	return nil
@@ -145,4 +167,51 @@ func (ap *AccessPoint) solveChallenge(exchangeData []byte) error {
 	}
 
 	return fmt.Errorf("failed login: %s", resp.LoginFailed.ErrorCode.String())
+}
+
+func (ap *AccessPoint) authenticate(credentials *pb.LoginCredentials, deviceId string) error {
+	// assemble ClientResponseEncrypted message
+	payload, err := proto.Marshal(&pb.ClientResponseEncrypted{
+		LoginCredentials: credentials,
+		VersionString:    proto.String("go-librespot"),
+		SystemInfo: &pb.SystemInfo{
+			Os:                      pb.Os_OS_UNKNOWN.Enum(),
+			CpuFamily:               pb.CpuFamily_CPU_UNKNOWN.Enum(),
+			SystemInformationString: proto.String(fmt.Sprintf("go-librespot; Go %s", runtime.Version())),
+			DeviceId:                proto.String(deviceId),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed marshalling ClientResponseEncrypted message: %w", err)
+	}
+
+	// send Login packet
+	if err := ap.encConn.sendPacket(PacketTypeLogin, payload); err != nil {
+		return fmt.Errorf("failed sending Login packet: %w", err)
+	}
+
+	// receive APWelcome or AuthFailure
+	recvPkt, recvPayload, err := ap.encConn.receivePacket()
+	if err != nil {
+		return fmt.Errorf("failed recevining Login response packet: %w", err)
+	}
+
+	if recvPkt == PacketTypeAPWelcome {
+		var welcome pb.APWelcome
+		if err := proto.Unmarshal(recvPayload, &welcome); err != nil {
+			return fmt.Errorf("failed unmarshalling APWelcome message: %w", err)
+		}
+
+		log.Debugf("authenticated as %s", *welcome.CanonicalUsername)
+		return nil
+	} else if recvPkt == PacketTypeAuthFailure {
+		var loginFailed pb.APLoginFailed
+		if err := proto.Unmarshal(recvPayload, &loginFailed); err != nil {
+			return fmt.Errorf("failed unmarshalling APLoginFailed message: %w", err)
+		}
+
+		return fmt.Errorf("failed login: %s", loginFailed.ErrorCode.String())
+	} else {
+		return fmt.Errorf("unexpected command after Login packet: %x", recvPkt)
+	}
 }

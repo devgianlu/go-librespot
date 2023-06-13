@@ -1,3 +1,5 @@
+github.com/chatoooo/shannon v0.0.0-20171225233850-cd2e2d6b8858 h1:y9/JAnRH8tw8tXT1elBfcZ3cAKKrCW+9I0yauYhIlow=
+github.com/chatoooo/shannon v0.0.0-20171225233850-cd2e2d6b8858/go.mod h1:Waj0Uj4Jzn5k/GSvsZyVuVdN3HT+HzyQ7Y+l4sxUA4Q=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/golang/protobuf v1.5.0/go.mod h1:FsONVRAS9T7sI+LIUmWTfcYkHO4aIWwzhcaSAoJOfIk=

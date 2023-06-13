@@ -26,6 +26,10 @@ func (app *App) Connect() (err error) {
 		return fmt.Errorf("failed connecting to accesspoint: %w", err)
 	}
 
+	if err = app.ap.Authenticate("xxxx", "xxxx"); err != nil {
+		return fmt.Errorf("failed authenticating with accesspoint: %w", err)
+	}
+
 	return nil
 }
 
