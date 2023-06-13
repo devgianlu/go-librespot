@@ -27,7 +27,7 @@ type AccessPoint struct {
 	recvLoopStop chan struct{}
 }
 
-func NewAccessPoint(host string, port int) (ap *AccessPoint, err error) {
+func NewAccessPoint(addr string) (ap *AccessPoint, err error) {
 	ap = &AccessPoint{}
 	ap.recvLoopStop = make(chan struct{}, 1)
 
@@ -43,7 +43,7 @@ func NewAccessPoint(host string, port int) (ap *AccessPoint, err error) {
 	}
 
 	// open connection to accesspoint
-	ap.conn, err = net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	ap.conn, err = net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed dialing accesspoint: %w", err)
 	}

@@ -4,20 +4,28 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/ap"
+	"go-librespot/apresolve"
 )
 
 type App struct {
+	resolver *apresolve.ApResolver
+
 	ap *ap.AccessPoint
 }
 
 func NewApp() (app *App, err error) {
 	app = &App{}
+	app.resolver = apresolve.NewApResolver()
 	return app, nil
 }
 
 func (app *App) Connect() (err error) {
-	// TODO: contact resolver to get accesspoint
-	app.ap, err = ap.NewAccessPoint("ap-gew4.spotify.com", 4070)
+	apAddr, err := app.resolver.GetAccessPoint()
+	if err != nil {
+		return fmt.Errorf("failed getting accesspoint from resolver: %w", err)
+	}
+
+	app.ap, err = ap.NewAccessPoint(apAddr)
 	if err != nil {
 		return fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
