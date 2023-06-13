@@ -3,7 +3,7 @@ package ap
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/chatoooo/shannon"
+	"github.com/devgianlu/shannon"
 	"io"
 	"net"
 	"sync"
@@ -75,7 +75,7 @@ func (c *shannonConn) receivePacket() (PacketType, []byte, error) {
 	c.recvNonce++
 
 	// read 8 bytes of packet header
-	packetHeader := make([]byte, 4)
+	packetHeader := make([]byte, 3)
 	if _, err := io.ReadFull(c.conn, packetHeader); err != nil {
 		return 0, nil, fmt.Errorf("failed reading packet header: %w", err)
 	}
@@ -85,19 +85,13 @@ func (c *shannonConn) receivePacket() (PacketType, []byte, error) {
 
 	// read rest of the payload
 	payloadLen := binary.BigEndian.Uint16(packetHeader[1:3])
-	if payloadLen < 1 {
-		panic("cannot read packet payload smaller than 1 bytes")
-	}
-
 	payload := make([]byte, payloadLen)
-	if _, err := io.ReadAtLeast(c.conn, payload[1:], int(payloadLen-1)); err != nil {
+	if _, err := io.ReadFull(c.conn, payload); err != nil {
 		return 0, nil, fmt.Errorf("failed reading packet payload: %w", err)
 	}
 
-	copy(payload, packetHeader[3:4])
-
 	// decrypt payload
-	c.recvCipher.Decrypt(payload[1:])
+	c.recvCipher.Decrypt(payload)
 
 	// read expected mac
 	expectedMac := make([]byte, 4)
