@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -71,20 +70,16 @@ func (ap *AccessPoint) Connect() (err error) {
 	return nil
 }
 
-func (ap *AccessPoint) Authenticate(username, password string) error {
+func (ap *AccessPoint) Authenticate(username, password, deviceId string) error {
 	if ap.encConn == nil {
 		panic("accesspoint not connected")
 	}
-
-	// FIXME: make device id persistent
-	deviceIdBytes := make([]byte, 20)
-	_, _ = rand.Read(deviceIdBytes)
 
 	if err := ap.authenticate(&pb.LoginCredentials{
 		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
 		Username: proto.String(username),
 		AuthData: []byte(password),
-	}, hex.EncodeToString(deviceIdBytes)); err != nil {
+	}, deviceId); err != nil {
 		return fmt.Errorf("failed authenticating: %w", err)
 	}
 
