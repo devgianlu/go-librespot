@@ -22,7 +22,7 @@ type ApResolver struct {
 	baseUrl *url.URL
 
 	endpoints     map[endpointType][]string
-	endpointsExp  time.Time
+	endpointsExp  map[endpointType]time.Time
 	endpointsLock sync.RWMutex
 
 	client http.Client
@@ -34,11 +34,28 @@ func NewApResolver() *ApResolver {
 		panic("invalid apresolve base URL")
 	}
 
-	return &ApResolver{baseUrl: baseUrl, endpoints: map[endpointType][]string{}}
+	return &ApResolver{
+		baseUrl:      baseUrl,
+		endpoints:    map[endpointType][]string{},
+		endpointsExp: map[endpointType]time.Time{},
+	}
 }
 
 func (r *ApResolver) fetchUrls(types ...endpointType) error {
-	if r.endpointsExp.After(time.Now()) {
+	anyExpired := false
+	r.endpointsLock.RLock()
+	for _, type_ := range types {
+		if exp, ok := r.endpointsExp[type_]; !ok {
+			anyExpired = true
+			break
+		} else if exp.Before(time.Now()) {
+			anyExpired = true
+			break
+		}
+	}
+	r.endpointsLock.RUnlock()
+
+	if !anyExpired {
 		return nil
 	}
 
@@ -73,18 +90,19 @@ func (r *ApResolver) fetchUrls(types ...endpointType) error {
 
 	if slices.Contains(types, endpointTypeAccesspoint) {
 		r.endpoints[endpointTypeAccesspoint] = respJson.Accesspoint
+		r.endpointsExp[endpointTypeAccesspoint] = time.Now().Add(1 * time.Hour)
 		log.Debugf("fetched new accesspoints: %v", respJson.Accesspoint)
 	}
 	if slices.Contains(types, endpointTypeDealer) {
 		r.endpoints[endpointTypeDealer] = respJson.Dealer
+		r.endpointsExp[endpointTypeDealer] = time.Now().Add(1 * time.Hour)
 		log.Debugf("fetched new dealers: %v", respJson.Dealer)
 	}
 	if slices.Contains(types, endpointTypeSpclient) {
 		r.endpoints[endpointTypeSpclient] = respJson.Spclient
+		r.endpointsExp[endpointTypeSpclient] = time.Now().Add(1 * time.Hour)
 		log.Debugf("fetched new spclients: %v", respJson.Spclient)
 	}
-
-	r.endpointsExp = time.Now().Add(1 * time.Hour)
 
 	return nil
 }
