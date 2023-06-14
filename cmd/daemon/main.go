@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go-librespot/ap"
 	"go-librespot/apresolve"
+	"go-librespot/spclient"
 )
 
 type App struct {
@@ -16,6 +17,7 @@ type App struct {
 	deviceId string
 
 	ap *ap.AccessPoint
+	sp *spclient.Spclient
 }
 
 func NewApp() (app *App, err error) {
@@ -47,6 +49,16 @@ func (app *App) Connect() (err error) {
 
 	if err = app.ap.Authenticate("xxxx", "xxxx", app.deviceId); err != nil {
 		return fmt.Errorf("failed authenticating with accesspoint: %w", err)
+	}
+
+	spAddr, err := app.resolver.GetSpclient()
+	if err != nil {
+		return fmt.Errorf("failed getting spclient from resolver: %w", err)
+	}
+
+	app.sp, err = spclient.NewSpclient(spAddr, app.deviceId)
+	if err != nil {
+		return fmt.Errorf("failed initializing spclient: %w", err)
 	}
 
 	return nil
