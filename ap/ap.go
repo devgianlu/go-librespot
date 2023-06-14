@@ -7,11 +7,11 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	pb "go-librespot/proto/spotify"
 	"google.golang.org/protobuf/proto"
 	"net"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 )
@@ -156,12 +156,19 @@ func (ap *AccessPoint) performKeyExchange() ([]byte, error) {
 	// accumulate transferred data for challenge
 	cc := &connAccumulator{Conn: ap.conn}
 
+	var productFlags []pb.ProductFlags
+	if librespot.VersionNumberString() == "dev" {
+		productFlags = []pb.ProductFlags{pb.ProductFlags_PRODUCT_FLAG_DEV_BUILD}
+	} else {
+		productFlags = []pb.ProductFlags{pb.ProductFlags_PRODUCT_FLAG_NONE}
+	}
+
 	// send ClientHello message
 	if err := writeMessage(cc, true, &pb.ClientHello{
 		BuildInfo: &pb.BuildInfo{
 			Product:      pb.Product_PRODUCT_CLIENT.Enum(),
-			ProductFlags: []pb.ProductFlags{pb.ProductFlags_PRODUCT_FLAG_NONE},
-			Platform:     pb.Platform_PLATFORM_WIN32_X86.Enum(),
+			ProductFlags: productFlags,
+			Platform:     librespot.GetPlatform().Enum(),
 			Version:      proto.Uint64(117300517),
 		},
 		CryptosuitesSupported: []pb.Cryptosuite{pb.Cryptosuite_CRYPTO_SUITE_SHANNON},
@@ -241,11 +248,11 @@ func (ap *AccessPoint) authenticate(credentials *pb.LoginCredentials, deviceId s
 	// assemble ClientResponseEncrypted message
 	payload, err := proto.Marshal(&pb.ClientResponseEncrypted{
 		LoginCredentials: credentials,
-		VersionString:    proto.String("go-librespot"),
+		VersionString:    proto.String(librespot.VersionString()),
 		SystemInfo: &pb.SystemInfo{
-			Os:                      pb.Os_OS_UNKNOWN.Enum(),
-			CpuFamily:               pb.CpuFamily_CPU_UNKNOWN.Enum(),
-			SystemInformationString: proto.String(fmt.Sprintf("go-librespot; Go %s", runtime.Version())),
+			Os:                      librespot.GetOS().Enum(),
+			CpuFamily:               librespot.GetCpuFamily().Enum(),
+			SystemInformationString: proto.String(librespot.SystemInfoString()),
 			DeviceId:                proto.String(deviceId),
 		},
 	})
