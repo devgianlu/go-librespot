@@ -52,6 +52,34 @@ func (app *App) Connect() (err error) {
 	return nil
 }
 
+func (app *App) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
+	switch pktType {
+	case ap.PacketTypeProductInfo:
+		var prod ProductInfo
+		if err := xml.Unmarshal(payload, &prod); err != nil {
+			return fmt.Errorf("failed umarshalling ProductInfo: %w", err)
+		}
+
+		// TODO: we may need this
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (app *App) Run() {
+	apRecv := app.ap.Receive(ap.PacketTypeProductInfo)
+
+	for {
+		select {
+		case pkt := <-apRecv:
+			if err := app.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
+				log.WithError(err).Warn("failed handling accesspoint packet")
+			}
+		}
+	}
+}
+
 func main() {
 	app, err := NewApp()
 	if err != nil {
@@ -61,4 +89,6 @@ func main() {
 	if err := app.Connect(); err != nil {
 		log.WithError(err).Fatal("failed connecting app")
 	}
+
+	app.Run()
 }
