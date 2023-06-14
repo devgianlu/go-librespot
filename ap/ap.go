@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -24,12 +25,15 @@ type AccessPoint struct {
 	conn    net.Conn
 	encConn *shannonConn
 
-	recvLoopStop chan struct{}
+	recvLoopStop  chan struct{}
+	recvChans     map[PacketType][]chan Packet
+	recvChansLock sync.RWMutex
 }
 
 func NewAccessPoint(addr string) (ap *AccessPoint, err error) {
 	ap = &AccessPoint{}
 	ap.recvLoopStop = make(chan struct{}, 1)
+	ap.recvChans = make(map[PacketType][]chan Packet)
 
 	// read 16 nonce bytes
 	ap.nonce = make([]byte, 16)
@@ -95,16 +99,29 @@ func (ap *AccessPoint) Close() {
 	_ = ap.conn.Close()
 }
 
+func (ap *AccessPoint) Receive(types ...PacketType) <-chan Packet {
+	ch := make(chan Packet)
+	ap.recvChansLock.Lock()
+	for _, type_ := range types {
+		ll, _ := ap.recvChans[type_]
+		ll = append(ll, ch)
+		ap.recvChans[type_] = ll
+	}
+	ap.recvChansLock.Unlock()
+	return ch
+}
+
 func (ap *AccessPoint) recvLoop() {
+loop:
 	for {
 		select {
 		case <-ap.recvLoopStop:
-			return
+			break loop
 		default:
 			pkt, payload, err := ap.encConn.receivePacket()
 			if err != nil {
 				log.WithError(err).Errorf("failed receiving packet")
-				return
+				break loop
 			}
 
 			switch pkt {
@@ -116,8 +133,26 @@ func (ap *AccessPoint) recvLoop() {
 			case PacketTypePongAck:
 				continue
 			default:
-				log.Debugf("skipping packet %v, len: %d", pkt, len(payload))
+				ap.recvChansLock.RLock()
+				handled := false
+				ll, _ := ap.recvChans[pkt]
+				for _, ch := range ll {
+					ch <- Packet{Type: pkt, Payload: payload}
+					handled = true
+				}
+
+				if !handled {
+					log.Debugf("skipping packet %v, len: %d", pkt, len(payload))
+				}
 			}
+		}
+	}
+
+	ap.recvChansLock.RLock()
+	defer ap.recvChansLock.RUnlock()
+	for _, ll := range ap.recvChans {
+		for _, ch := range ll {
+			close(ch)
 		}
 	}
 }

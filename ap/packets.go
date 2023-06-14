@@ -35,3 +35,8 @@ const (
 	PacketTypeUnknown0f       PacketType = 0x0f
 	PacketTypeUnknown10       PacketType = 0x10
 )
+
+type Packet struct {
+	Type    PacketType
+	Payload []byte
+}
