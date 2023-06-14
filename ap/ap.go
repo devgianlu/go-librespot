@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	pb "go-librespot/proto/base"
+	pb "go-librespot/proto/spotify"
 	"google.golang.org/protobuf/proto"
 	"net"
 	"os"
