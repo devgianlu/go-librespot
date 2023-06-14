@@ -93,19 +93,31 @@ func (r *ApResolver) FetchAll() error {
 	return r.fetchUrls(endpointTypeAccesspoint, endpointTypeDealer, endpointTypeSpclient)
 }
 
-func (r *ApResolver) GetAccessPoint() (string, error) {
-	if err := r.fetchUrls(endpointTypeAccesspoint); err != nil {
+func (r *ApResolver) get(type_ endpointType) (string, error) {
+	if err := r.fetchUrls(type_); err != nil {
 		return "", err
 	}
 
 	r.endpointsLock.RLock()
 	defer r.endpointsLock.RUnlock()
 
-	aps, ok := r.endpoints[endpointTypeAccesspoint]
+	aps, ok := r.endpoints[type_]
 	if !ok || len(aps) == 0 {
-		return "", fmt.Errorf("no accesspoint endpoint present")
+		return "", fmt.Errorf("no %s endpoint present", type_)
 	}
 
 	// TODO: perhaps we should get the first one, but choose another one if we have problems
 	return aps[rand.Intn(len(aps))], nil
+}
+
+func (r *ApResolver) GetAccessPoint() (string, error) {
+	return r.get(endpointTypeAccesspoint)
+}
+
+func (r *ApResolver) GetSpclient() (string, error) {
+	return r.get(endpointTypeSpclient)
+}
+
+func (r *ApResolver) GetDealer() (string, error) {
+	return r.get(endpointTypeDealer)
 }
