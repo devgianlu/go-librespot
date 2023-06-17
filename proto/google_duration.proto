@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package google.protobuf;
+
+option go_package = "go-librespot/proto/google";
+
+message Duration {
+  int64 seconds = 1;
+  int32 nanos = 2;
+}

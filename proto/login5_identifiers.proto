@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package spotify.login5.v3.identifiers;
+
+option go_package = "go-librespot/proto/spotify/login5/v3/identifiers";
+
+message PhoneNumber {
+  string number = 1;
+  string iso_country_code = 2;
+  string country_calling_code = 3;
+}
