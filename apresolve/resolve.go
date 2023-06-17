@@ -131,7 +131,7 @@ func (r *ApResolver) get(type_ endpointType) (string, error) {
 	return aps[rand.Intn(len(aps))], nil
 }
 
-func (r *ApResolver) GetAccessPoint() (string, error) {
+func (r *ApResolver) GetAccesspoint() (string, error) {
 	return r.get(endpointTypeAccesspoint)
 }
 

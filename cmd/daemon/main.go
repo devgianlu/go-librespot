@@ -20,7 +20,7 @@ type App struct {
 
 	deviceId string
 
-	ap     *ap.AccessPoint
+	ap     *ap.Accesspoint
 	sp     *spclient.Spclient
 	dealer *dealer.Dealer
 }
@@ -40,12 +40,12 @@ func NewApp() (app *App, err error) {
 
 func (app *App) Connect() (err error) {
 	// connect and authenticate to the accesspoint
-	apAddr, err := app.resolver.GetAccessPoint()
+	apAddr, err := app.resolver.GetAccesspoint()
 	if err != nil {
 		return fmt.Errorf("failed getting accesspoint from resolver: %w", err)
 	}
 
-	app.ap, err = ap.NewAccessPoint(apAddr)
+	app.ap, err = ap.NewAccesspoint(apAddr)
 	if err != nil {
 		return fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
@@ -120,6 +120,8 @@ func (app *App) Run() {
 }
 
 func main() {
+	log.SetLevel(log.TraceLevel)
+
 	app, err := NewApp()
 	if err != nil {
 		log.WithError(err).Fatal("failed creating app")

@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-type AccessPoint struct {
+type Accesspoint struct {
 	nonce []byte
 
 	dh *diffieHellman
@@ -31,8 +31,8 @@ type AccessPoint struct {
 	welcome *pb.APWelcome
 }
 
-func NewAccessPoint(addr string) (ap *AccessPoint, err error) {
-	ap = &AccessPoint{}
+func NewAccesspoint(addr string) (ap *Accesspoint, err error) {
+	ap = &Accesspoint{}
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.recvChans = make(map[PacketType][]chan Packet)
 
@@ -56,7 +56,7 @@ func NewAccessPoint(addr string) (ap *AccessPoint, err error) {
 	return ap, nil
 }
 
-func (ap *AccessPoint) Connect() (err error) {
+func (ap *Accesspoint) Connect() (err error) {
 	// perform key exchange with diffiehellman
 	var exchangeData []byte
 	exchangeData, err = ap.performKeyExchange()
@@ -72,7 +72,7 @@ func (ap *AccessPoint) Connect() (err error) {
 	return nil
 }
 
-func (ap *AccessPoint) Authenticate(username, password, deviceId string) error {
+func (ap *Accesspoint) Authenticate(username, password, deviceId string) error {
 	if ap.encConn == nil {
 		panic("accesspoint not connected")
 	}
@@ -91,12 +91,12 @@ func (ap *AccessPoint) Authenticate(username, password, deviceId string) error {
 	return nil
 }
 
-func (ap *AccessPoint) Close() {
+func (ap *Accesspoint) Close() {
 	ap.recvLoopStop <- struct{}{}
 	_ = ap.conn.Close()
 }
 
-func (ap *AccessPoint) Receive(types ...PacketType) <-chan Packet {
+func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
 	ch := make(chan Packet)
 	ap.recvChansLock.Lock()
 	for _, type_ := range types {
@@ -108,7 +108,7 @@ func (ap *AccessPoint) Receive(types ...PacketType) <-chan Packet {
 	return ch
 }
 
-func (ap *AccessPoint) recvLoop() {
+func (ap *Accesspoint) recvLoop() {
 loop:
 	for {
 		select {
@@ -154,7 +154,7 @@ loop:
 	}
 }
 
-func (ap *AccessPoint) performKeyExchange() ([]byte, error) {
+func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
 	// accumulate transferred data for challenge
 	cc := &connAccumulator{Conn: ap.conn}
 
@@ -204,7 +204,7 @@ func (ap *AccessPoint) performKeyExchange() ([]byte, error) {
 	return cc.Dump(), nil
 }
 
-func (ap *AccessPoint) solveChallenge(exchangeData []byte) error {
+func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 	macData := make([]byte, 0, sha1.Size*5)
 
 	mac := hmac.New(sha1.New, ap.dh.sharedSecret)
@@ -246,7 +246,7 @@ func (ap *AccessPoint) solveChallenge(exchangeData []byte) error {
 	return fmt.Errorf("failed login: %s", resp.LoginFailed.ErrorCode.String())
 }
 
-func (ap *AccessPoint) authenticate(credentials *pb.LoginCredentials, deviceId string) error {
+func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials, deviceId string) error {
 	// assemble ClientResponseEncrypted message
 	payload, err := proto.Marshal(&pb.ClientResponseEncrypted{
 		LoginCredentials: credentials,
@@ -294,7 +294,7 @@ func (ap *AccessPoint) authenticate(credentials *pb.LoginCredentials, deviceId s
 	}
 }
 
-func (ap *AccessPoint) Username() string {
+func (ap *Accesspoint) Username() string {
 	if ap.welcome == nil {
 		panic("accesspoint not authenticated")
 	}
@@ -303,7 +303,7 @@ func (ap *AccessPoint) Username() string {
 	return *ap.welcome.CanonicalUsername
 }
 
-func (ap *AccessPoint) StoredCredentials() []byte {
+func (ap *Accesspoint) StoredCredentials() []byte {
 	if ap.welcome == nil {
 		panic("accesspoint not authenticated")
 	}
