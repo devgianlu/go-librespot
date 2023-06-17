@@ -27,6 +27,8 @@ type AccessPoint struct {
 	recvLoopStop  chan struct{}
 	recvChans     map[PacketType][]chan Packet
 	recvChansLock sync.RWMutex
+
+	welcome *pb.APWelcome
 }
 
 func NewAccessPoint(addr string) (ap *AccessPoint, err error) {
@@ -277,6 +279,7 @@ func (ap *AccessPoint) authenticate(credentials *pb.LoginCredentials, deviceId s
 			return fmt.Errorf("failed unmarshalling APWelcome message: %w", err)
 		}
 
+		ap.welcome = &welcome
 		log.Debugf("authenticated as %s", *welcome.CanonicalUsername)
 		return nil
 	} else if recvPkt == PacketTypeAuthFailure {
@@ -289,4 +292,22 @@ func (ap *AccessPoint) authenticate(credentials *pb.LoginCredentials, deviceId s
 	} else {
 		return fmt.Errorf("unexpected command after Login packet: %x", recvPkt)
 	}
+}
+
+func (ap *AccessPoint) Username() string {
+	if ap.welcome == nil {
+		panic("accesspoint not authenticated")
+	}
+
+	// FIXME: we may need a lock on this at some point
+	return *ap.welcome.CanonicalUsername
+}
+
+func (ap *AccessPoint) StoredCredentials() []byte {
+	if ap.welcome == nil {
+		panic("accesspoint not authenticated")
+	}
+
+	// FIXME: we may need a lock on this at some point
+	return ap.welcome.ReusableAuthCredentials
 }

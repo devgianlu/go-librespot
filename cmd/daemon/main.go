@@ -8,21 +8,27 @@ import (
 	log "github.com/sirupsen/logrus"
 	"go-librespot/ap"
 	"go-librespot/apresolve"
+	"go-librespot/dealer"
+	"go-librespot/login5"
+	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
 	"go-librespot/spclient"
 )
 
 type App struct {
 	resolver *apresolve.ApResolver
+	login5   *login5.Login5
 
 	deviceId string
 
-	ap *ap.AccessPoint
-	sp *spclient.Spclient
+	ap     *ap.AccessPoint
+	sp     *spclient.Spclient
+	dealer *dealer.Dealer
 }
 
 func NewApp() (app *App, err error) {
 	app = &App{}
 	app.resolver = apresolve.NewApResolver()
+	app.login5 = login5.NewLogin5()
 
 	// FIXME: make device id persistent
 	deviceIdBytes := make([]byte, 20)
@@ -33,6 +39,7 @@ func NewApp() (app *App, err error) {
 }
 
 func (app *App) Connect() (err error) {
+	// connect and authenticate to the accesspoint
 	apAddr, err := app.resolver.GetAccessPoint()
 	if err != nil {
 		return fmt.Errorf("failed getting accesspoint from resolver: %w", err)
@@ -51,6 +58,15 @@ func (app *App) Connect() (err error) {
 		return fmt.Errorf("failed authenticating with accesspoint: %w", err)
 	}
 
+	// authenticate with login5 and get token
+	if err = app.login5.Login(&credentialspb.StoredCredential{
+		Username: app.ap.Username(),
+		Data:     app.ap.StoredCredentials(),
+	}, app.deviceId); err != nil {
+		return fmt.Errorf("failed authenticating with login5: %w", err)
+	}
+
+	// initialize spclient
 	spAddr, err := app.resolver.GetSpclient()
 	if err != nil {
 		return fmt.Errorf("failed getting spclient from resolver: %w", err)
@@ -59,6 +75,17 @@ func (app *App) Connect() (err error) {
 	app.sp, err = spclient.NewSpclient(spAddr, app.deviceId)
 	if err != nil {
 		return fmt.Errorf("failed initializing spclient: %w", err)
+	}
+
+	// initialize dealer
+	dealerAddr, err := app.resolver.GetDealer()
+	if err != nil {
+		return fmt.Errorf("failed getting dealer from resolver: %w", err)
+	}
+
+	app.dealer, err = dealer.NewDealer(dealerAddr, app.login5.AccessToken())
+	if err != nil {
+		return fmt.Errorf("failed initializing dealer: %w", err)
 	}
 
 	return nil

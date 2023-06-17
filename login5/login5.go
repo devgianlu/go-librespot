@@ -129,3 +129,13 @@ func (c *Login5) Login(credentials proto.Message, deviceId string) error {
 		return fmt.Errorf("failed authenticating with login5: %v", resp.GetError())
 	}
 }
+
+func (c *Login5) AccessToken() string {
+	if c.loginOk == nil {
+		panic("login5 not authenticated")
+	}
+
+	// FIXME: we may need a lock on this at some point
+	// FIXME: the token expires
+	return c.loginOk.AccessToken
+}
