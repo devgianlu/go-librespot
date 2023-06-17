@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	pb "go-librespot/proto/spotify"
@@ -27,43 +28,62 @@ type Accesspoint struct {
 	conn    net.Conn
 	encConn *shannonConn
 
+	stop          bool
 	recvLoopStop  chan struct{}
 	recvChans     map[PacketType][]chan Packet
 	recvChansLock sync.RWMutex
 
-	welcome *pb.APWelcome
+	// reconnectLock is held for writing when performing reconnection and for reading mainly when accessing welcome
+	// or sending packets. If it's not held, a valid connection (and APWelcome) is available. Be careful not to deadlock
+	// anything with this.
+	reconnectLock sync.RWMutex
+	welcome       *pb.APWelcome
 }
 
 func NewAccesspoint(addr librespot.GetAddressFunc, deviceId string) (ap *Accesspoint, err error) {
 	ap = &Accesspoint{addr: addr, deviceId: deviceId}
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.recvChans = make(map[PacketType][]chan Packet)
-	ap.deviceId = deviceId
 
-	// read 16 nonce bytes
-	ap.nonce = make([]byte, 16)
-	if _, err = rand.Read(ap.nonce); err != nil {
-		return nil, fmt.Errorf("failed reading random nonce: %w", err)
-	}
-
-	// init diffiehellman parameters
-	if ap.dh, err = newDiffieHellman(); err != nil {
-		return nil, fmt.Errorf("failed initializing diffiehellman: %w", err)
-	}
-
-	// open connection to accesspoint
-	ap.conn, err = net.Dial("tcp", ap.addr())
-	if err != nil {
-		return nil, fmt.Errorf("failed dialing accesspoint: %w", err)
+	if err = ap.init(); err != nil {
+		return nil, err
 	}
 
 	return ap, nil
 }
 
-func (ap *Accesspoint) Connect() (err error) {
+func (ap *Accesspoint) init() (err error) {
+	// read 16 nonce bytes
+	ap.nonce = make([]byte, 16)
+	if _, err = rand.Read(ap.nonce); err != nil {
+		return fmt.Errorf("failed reading random nonce: %w", err)
+	}
+
+	// init diffiehellman parameters
+	if ap.dh, err = newDiffieHellman(); err != nil {
+		return fmt.Errorf("failed initializing diffiehellman: %w", err)
+	}
+
+	// open connection to accesspoint
+	ap.conn, err = net.Dial("tcp", ap.addr())
+	if err != nil {
+		return fmt.Errorf("failed dialing accesspoint: %w", err)
+	}
+
+	return nil
+}
+
+func (ap *Accesspoint) ConnectUserPass(username, password string) error {
+	return ap.Connect(&pb.LoginCredentials{
+		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
+		Username: proto.String(username),
+		AuthData: []byte(password),
+	})
+}
+
+func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
 	// perform key exchange with diffiehellman
-	var exchangeData []byte
-	exchangeData, err = ap.performKeyExchange()
+	exchangeData, err := ap.performKeyExchange()
 	if err != nil {
 		return fmt.Errorf("failed performing keyexchange: %w", err)
 	}
@@ -73,29 +93,12 @@ func (ap *Accesspoint) Connect() (err error) {
 		return fmt.Errorf("failed solving challenge: %w", err)
 	}
 
-	return nil
-}
-
-func (ap *Accesspoint) Authenticate(username, password string) error {
-	if ap.encConn == nil {
-		panic("accesspoint not connected")
-	}
-
-	if err := ap.authenticate(&pb.LoginCredentials{
-		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
-		Username: proto.String(username),
-		AuthData: []byte(password),
-	}); err != nil {
-		return fmt.Errorf("failed authenticating: %w", err)
-	}
-
-	// start the recv loop
-	go ap.recvLoop()
-
-	return nil
+	// do authentication with credentials
+	return ap.authenticate(creds)
 }
 
 func (ap *Accesspoint) Close() {
+	ap.stop = true
 	ap.recvLoopStop <- struct{}{}
 	_ = ap.conn.Close()
 }
@@ -119,6 +122,7 @@ loop:
 		case <-ap.recvLoopStop:
 			break loop
 		default:
+			// no need to hold the reconnectLock since reconnection happens in this routine
 			pkt, payload, err := ap.encConn.receivePacket()
 			if err != nil {
 				log.WithError(err).Errorf("failed receiving packet")
@@ -151,6 +155,21 @@ loop:
 		}
 	}
 
+	_ = ap.conn.Close()
+
+	// if we shouldn't stop, try to reconnect
+	if !ap.stop {
+		ap.reconnectLock.Lock()
+		if err := backoff.Retry(ap.reconnect, backoff.NewExponentialBackOff()); err != nil {
+			log.WithError(err).Errorf("failed reconnecting accesspoint, bye bye")
+			log.Exit(1)
+		}
+		ap.reconnectLock.Unlock()
+
+		// reconnection was successful, do not close receivers
+		return
+	}
+
 	ap.recvChansLock.RLock()
 	defer ap.recvChansLock.RUnlock()
 	for _, ll := range ap.recvChans {
@@ -158,9 +177,25 @@ loop:
 			close(ch)
 		}
 	}
+}
 
-	_ = ap.conn.Close()
-	// TODO: reconnect
+func (ap *Accesspoint) reconnect() (err error) {
+	if ap.welcome == nil {
+		return backoff.Permanent(fmt.Errorf("cannot reconnect without APWelcome"))
+	}
+
+	if err = ap.init(); err != nil {
+		return err
+	} else if err = ap.Connect(&pb.LoginCredentials{
+		Typ:      ap.welcome.ReusableAuthCredentialsType,
+		Username: ap.welcome.CanonicalUsername,
+		AuthData: ap.welcome.ReusableAuthCredentials,
+	}); err != nil {
+		return err
+	}
+
+	log.Debugf("re-established accesspoint connection")
+	return nil
 }
 
 func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
@@ -256,6 +291,10 @@ func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 }
 
 func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
+	if ap.encConn == nil {
+		panic("accesspoint not connected")
+	}
+
 	// assemble ClientResponseEncrypted message
 	payload, err := proto.Marshal(&pb.ClientResponseEncrypted{
 		LoginCredentials: credentials,
@@ -290,6 +329,10 @@ func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
 
 		ap.welcome = &welcome
 		log.Debugf("authenticated as %s", *welcome.CanonicalUsername)
+
+		// start the recv loop
+		go ap.recvLoop()
+
 		return nil
 	} else if recvPkt == PacketTypeAuthFailure {
 		var loginFailed pb.APLoginFailed
@@ -304,19 +347,23 @@ func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
 }
 
 func (ap *Accesspoint) Username() string {
+	ap.reconnectLock.RLock()
+	defer ap.reconnectLock.RUnlock()
+
 	if ap.welcome == nil {
 		panic("accesspoint not authenticated")
 	}
 
-	// FIXME: we may need a lock on this at some point
 	return *ap.welcome.CanonicalUsername
 }
 
 func (ap *Accesspoint) StoredCredentials() []byte {
+	ap.reconnectLock.RLock()
+	defer ap.reconnectLock.RUnlock()
+
 	if ap.welcome == nil {
 		panic("accesspoint not authenticated")
 	}
 
-	// FIXME: we may need a lock on this at some point
 	return ap.welcome.ReusableAuthCredentials
 }

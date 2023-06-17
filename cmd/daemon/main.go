@@ -59,11 +59,7 @@ func (app *App) Connect() (err error) {
 		return fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
 
-	if err = app.ap.Connect(); err != nil {
-		return fmt.Errorf("failed connecting to accesspoint: %w", err)
-	}
-
-	if err = app.ap.Authenticate("xxxx", "xxxx"); err != nil {
+	if err = app.ap.ConnectUserPass("xxxx", "xxxx"); err != nil {
 		return fmt.Errorf("failed authenticating with accesspoint: %w", err)
 	}
 
@@ -94,7 +90,7 @@ func (app *App) Connect() (err error) {
 
 	app.dealer, err = dealer.NewDealer(dealerAddr, app.login5.AccessToken())
 	if err != nil {
-		return fmt.Errorf("failed initializing dealer: %w", err)
+		return fmt.Errorf("failed connecting to dealer: %w", err)
 	}
 
 	return nil
