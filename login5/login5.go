@@ -17,18 +17,23 @@ type Login5 struct {
 	baseUrl *url.URL
 	client  *http.Client
 
+	deviceId    string
+	clientToken string
+
 	loginOk *pb.LoginOk
 }
 
-func NewLogin5() *Login5 {
+func NewLogin5(deviceId, clientToken string) *Login5 {
 	baseUrl, err := url.Parse("https://login5.spotify.com/")
 	if err != nil {
 		panic("invalid apresolve base URL")
 	}
 
 	return &Login5{
-		baseUrl: baseUrl,
-		client:  &http.Client{},
+		baseUrl:     baseUrl,
+		client:      &http.Client{},
+		deviceId:    deviceId,
+		clientToken: clientToken,
 	}
 }
 
@@ -42,8 +47,9 @@ func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
 		Method: "POST",
 		URL:    c.baseUrl.JoinPath("/v3/login"),
 		Header: http.Header{
-			"Accept":     []string{"application/x-protobuf"},
-			"User-Agent": []string{librespot.UserAgent()},
+			"Accept":       []string{"application/x-protobuf"},
+			"User-Agent":   []string{librespot.UserAgent()},
+			"Client-Token": []string{c.clientToken},
 		},
 		Body: io.NopCloser(bytes.NewReader(body)),
 	})
@@ -64,11 +70,11 @@ func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	return &protoResp, nil
 }
 
-func (c *Login5) Login(credentials proto.Message, deviceId string) error {
+func (c *Login5) Login(credentials proto.Message) error {
 	req := &pb.LoginRequest{
 		ClientInfo: &pb.ClientInfo{
 			ClientId: librespot.ClientId,
-			DeviceId: deviceId,
+			DeviceId: c.deviceId,
 		},
 	}
 

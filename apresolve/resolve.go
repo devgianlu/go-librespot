@@ -26,7 +26,7 @@ type ApResolver struct {
 	endpointsExp  map[endpointType]time.Time
 	endpointsLock sync.RWMutex
 
-	client http.Client
+	client *http.Client
 }
 
 func NewApResolver() *ApResolver {
@@ -37,6 +37,7 @@ func NewApResolver() *ApResolver {
 
 	return &ApResolver{
 		baseUrl:      baseUrl,
+		client:       &http.Client{},
 		endpoints:    map[endpointType][]string{},
 		endpointsExp: map[endpointType]time.Time{},
 	}

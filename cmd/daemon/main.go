@@ -18,7 +18,8 @@ type App struct {
 	resolver *apresolve.ApResolver
 	login5   *login5.Login5
 
-	deviceId string
+	deviceId    string
+	clientToken string
 
 	ap     *ap.Accesspoint
 	sp     *spclient.Spclient
@@ -28,12 +29,19 @@ type App struct {
 func NewApp() (app *App, err error) {
 	app = &App{}
 	app.resolver = apresolve.NewApResolver()
-	app.login5 = login5.NewLogin5()
 
 	// FIXME: make device id persistent
 	deviceIdBytes := make([]byte, 20)
 	_, _ = rand.Read(deviceIdBytes)
 	app.deviceId = hex.EncodeToString(deviceIdBytes)
+
+	// FIXME: make client token persistent
+	app.clientToken, err = retrieveClientToken(app.deviceId)
+	if err != nil {
+		return nil, fmt.Errorf("failed obtaining client token: %w", err)
+	}
+
+	app.login5 = login5.NewLogin5(app.deviceId, app.clientToken)
 
 	return app, nil
 }
@@ -45,7 +53,7 @@ func (app *App) Connect() (err error) {
 		return fmt.Errorf("failed getting accesspoint from resolver: %w", err)
 	}
 
-	app.ap, err = ap.NewAccesspoint(apAddr)
+	app.ap, err = ap.NewAccesspoint(apAddr, app.deviceId)
 	if err != nil {
 		return fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
@@ -54,7 +62,7 @@ func (app *App) Connect() (err error) {
 		return fmt.Errorf("failed connecting to accesspoint: %w", err)
 	}
 
-	if err = app.ap.Authenticate("xxxx", "xxxx", app.deviceId); err != nil {
+	if err = app.ap.Authenticate("xxxx", "xxxx"); err != nil {
 		return fmt.Errorf("failed authenticating with accesspoint: %w", err)
 	}
 
@@ -62,7 +70,7 @@ func (app *App) Connect() (err error) {
 	if err = app.login5.Login(&credentialspb.StoredCredential{
 		Username: app.ap.Username(),
 		Data:     app.ap.StoredCredentials(),
-	}, app.deviceId); err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed authenticating with login5: %w", err)
 	}
 
@@ -72,7 +80,7 @@ func (app *App) Connect() (err error) {
 		return fmt.Errorf("failed getting spclient from resolver: %w", err)
 	}
 
-	app.sp, err = spclient.NewSpclient(spAddr, app.deviceId)
+	app.sp, err = spclient.NewSpclient(spAddr, app.clientToken)
 	if err != nil {
 		return fmt.Errorf("failed initializing spclient: %w", err)
 	}

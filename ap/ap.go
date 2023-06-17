@@ -17,7 +17,8 @@ import (
 )
 
 type Accesspoint struct {
-	nonce []byte
+	nonce    []byte
+	deviceId string
 
 	dh *diffieHellman
 
@@ -31,10 +32,11 @@ type Accesspoint struct {
 	welcome *pb.APWelcome
 }
 
-func NewAccesspoint(addr string) (ap *Accesspoint, err error) {
+func NewAccesspoint(addr, deviceId string) (ap *Accesspoint, err error) {
 	ap = &Accesspoint{}
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.recvChans = make(map[PacketType][]chan Packet)
+	ap.deviceId = deviceId
 
 	// read 16 nonce bytes
 	ap.nonce = make([]byte, 16)
@@ -72,7 +74,7 @@ func (ap *Accesspoint) Connect() (err error) {
 	return nil
 }
 
-func (ap *Accesspoint) Authenticate(username, password, deviceId string) error {
+func (ap *Accesspoint) Authenticate(username, password string) error {
 	if ap.encConn == nil {
 		panic("accesspoint not connected")
 	}
@@ -81,7 +83,7 @@ func (ap *Accesspoint) Authenticate(username, password, deviceId string) error {
 		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
 		Username: proto.String(username),
 		AuthData: []byte(password),
-	}, deviceId); err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed authenticating: %w", err)
 	}
 
@@ -246,7 +248,7 @@ func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 	return fmt.Errorf("failed login: %s", resp.LoginFailed.ErrorCode.String())
 }
 
-func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials, deviceId string) error {
+func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
 	// assemble ClientResponseEncrypted message
 	payload, err := proto.Marshal(&pb.ClientResponseEncrypted{
 		LoginCredentials: credentials,
@@ -255,7 +257,7 @@ func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials, deviceId s
 			Os:                      librespot.GetOS().Enum(),
 			CpuFamily:               librespot.GetCpuFamily().Enum(),
 			SystemInformationString: proto.String(librespot.SystemInfoString()),
-			DeviceId:                proto.String(deviceId),
+			DeviceId:                proto.String(ap.deviceId),
 		},
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-package spclient
+package main
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"net/url"
 )
 
-func retrieveClientToken(client *http.Client, deviceId string) (string, error) {
+func retrieveClientToken(deviceId string) (string, error) {
 	body, err := proto.Marshal(&pbhttp.ClientTokenRequest{
 		RequestType: pbhttp.ClientTokenRequestType_REQUEST_CLIENT_DATA_REQUEST,
 		Request: &pbhttp.ClientTokenRequest_ClientData{
@@ -38,7 +38,7 @@ func retrieveClientToken(client *http.Client, deviceId string) (string, error) {
 		return "", fmt.Errorf("invalid clienttoken url: %w", err)
 	}
 
-	resp, err := client.Do(&http.Request{
+	resp, err := http.DefaultClient.Do(&http.Request{
 		Method: "POST",
 		URL:    reqUrl,
 		Header: http.Header{
