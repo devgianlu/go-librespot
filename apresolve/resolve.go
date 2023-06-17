@@ -6,7 +6,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"golang.org/x/exp/slices"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"sync"
@@ -115,9 +114,9 @@ func (r *ApResolver) FetchAll() error {
 	return r.fetchUrls(endpointTypeAccesspoint, endpointTypeDealer, endpointTypeSpclient)
 }
 
-func (r *ApResolver) get(type_ endpointType) (string, error) {
+func (r *ApResolver) get(type_ endpointType) ([]string, error) {
 	if err := r.fetchUrls(type_); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	r.endpointsLock.RLock()
@@ -125,21 +124,50 @@ func (r *ApResolver) get(type_ endpointType) (string, error) {
 
 	aps, ok := r.endpoints[type_]
 	if !ok || len(aps) == 0 {
-		return "", fmt.Errorf("no %s endpoint present", type_)
+		return nil, fmt.Errorf("no %s endpoint present", type_)
 	}
 
-	// TODO: perhaps we should get the first one, but choose another one if we have problems
-	return aps[rand.Intn(len(aps))], nil
+	return aps, nil
 }
 
-func (r *ApResolver) GetAccesspoint() (string, error) {
-	return r.get(endpointTypeAccesspoint)
+func (r *ApResolver) getFunc(type_ endpointType) (librespot.GetAddressFunc, error) {
+	addrs, err := r.get(type_)
+	if err != nil {
+		return nil, err
+	}
+
+	idx := 0
+	return func() string {
+		// if we haven't overflowed the available addresses, return one
+		if idx < len(addrs) {
+			newAddr := addrs[idx]
+			idx++
+			return newAddr
+		}
+
+		// try fetching new addresses
+		newAddrs, err := r.get(type_)
+		if err != nil {
+			// if we cannot fetch new endpoints, eat it and return the first one
+			log.WithError(err).Warnf("failed fetching new endpoint for %s", type_)
+			return addrs[0]
+		}
+
+		// replace the old addresses, return the first one and set index for the next iteration
+		addrs = newAddrs
+		idx = 1
+		return addrs[0]
+	}, nil
 }
 
-func (r *ApResolver) GetSpclient() (string, error) {
-	return r.get(endpointTypeSpclient)
+func (r *ApResolver) GetAccesspoint() (librespot.GetAddressFunc, error) {
+	return r.getFunc(endpointTypeAccesspoint)
 }
 
-func (r *ApResolver) GetDealer() (string, error) {
-	return r.get(endpointTypeDealer)
+func (r *ApResolver) GetSpclient() (librespot.GetAddressFunc, error) {
+	return r.getFunc(endpointTypeSpclient)
+}
+
+func (r *ApResolver) GetDealer() (librespot.GetAddressFunc, error) {
+	return r.getFunc(endpointTypeDealer)
 }

@@ -27,8 +27,8 @@ type Dealer struct {
 	requestReceiversLock sync.RWMutex
 }
 
-func NewDealer(dealerAddr string, accessToken string) (*Dealer, error) {
-	conn, _, err := websocket.Dial(context.TODO(), fmt.Sprintf("wss://%s/?access_token=%s", dealerAddr, accessToken), &websocket.DialOptions{
+func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken string) (*Dealer, error) {
+	conn, _, err := websocket.Dial(context.TODO(), fmt.Sprintf("wss://%s/?access_token=%s", dealerAddr(), accessToken), &websocket.DialOptions{
 		HTTPHeader: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
 		},

@@ -17,6 +17,8 @@ import (
 )
 
 type Accesspoint struct {
+	addr librespot.GetAddressFunc
+
 	nonce    []byte
 	deviceId string
 
@@ -32,8 +34,8 @@ type Accesspoint struct {
 	welcome *pb.APWelcome
 }
 
-func NewAccesspoint(addr, deviceId string) (ap *Accesspoint, err error) {
-	ap = &Accesspoint{}
+func NewAccesspoint(addr librespot.GetAddressFunc, deviceId string) (ap *Accesspoint, err error) {
+	ap = &Accesspoint{addr: addr, deviceId: deviceId}
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.recvChans = make(map[PacketType][]chan Packet)
 	ap.deviceId = deviceId
@@ -50,7 +52,7 @@ func NewAccesspoint(addr, deviceId string) (ap *Accesspoint, err error) {
 	}
 
 	// open connection to accesspoint
-	ap.conn, err = net.Dial("tcp", addr)
+	ap.conn, err = net.Dial("tcp", ap.addr())
 	if err != nil {
 		return nil, fmt.Errorf("failed dialing accesspoint: %w", err)
 	}

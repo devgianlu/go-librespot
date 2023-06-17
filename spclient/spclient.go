@@ -2,6 +2,7 @@ package spclient
 
 import (
 	"fmt"
+	librespot "go-librespot"
 	"net/http"
 	"net/url"
 )
@@ -13,8 +14,8 @@ type Spclient struct {
 	clientToken string
 }
 
-func NewSpclient(addr, clientToken string) (*Spclient, error) {
-	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr))
+func NewSpclient(addr librespot.GetAddressFunc, clientToken string) (*Spclient, error) {
+	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr()))
 	if err != nil {
 		return nil, fmt.Errorf("invalid spclient base url: %w", err)
 	}
