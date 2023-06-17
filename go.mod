@@ -9,4 +9,8 @@ require (
 	google.golang.org/protobuf v1.30.0
 )
 
-require golang.org/x/sys v0.1.0 // indirect
+require (
+	github.com/klauspost/compress v1.10.3 // indirect
+	golang.org/x/sys v0.1.0 // indirect
+	nhooyr.io/websocket v1.8.7 // indirect
+)
