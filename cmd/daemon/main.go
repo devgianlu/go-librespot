@@ -12,6 +12,7 @@ import (
 	"go-librespot/login5"
 	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
 	"go-librespot/spclient"
+	"strings"
 )
 
 type App struct {
@@ -114,14 +115,30 @@ func (app *App) handleAccesspointPacket(pktType ap.PacketType, payload []byte) e
 	}
 }
 
+func (app *App) handleDealerMessage(msg dealer.Message) error {
+	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
+		spotConnId := msg.Headers["Spotify-Connection-Id"]
+		log.Debugf("received connection id: %s", spotConnId)
+
+		// TODO: we need this
+	}
+
+	return nil
+}
+
 func (app *App) Run() {
 	apRecv := app.ap.Receive(ap.PacketTypeProductInfo)
+	msgRecv := app.dealer.ReceiveMessage("hm://pusher/v1/connections/")
 
 	for {
 		select {
 		case pkt := <-apRecv:
 			if err := app.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
 				log.WithError(err).Warn("failed handling accesspoint packet")
+			}
+		case msg := <-msgRecv:
+			if err := app.handleDealerMessage(msg); err != nil {
+				log.WithError(err).Warn("failed handling dealer message")
 			}
 		}
 	}
