@@ -127,14 +127,16 @@ loop:
 			case PacketTypePing:
 				if err := ap.encConn.sendPacket(PacketTypePong, payload); err != nil {
 					log.WithError(err).Errorf("failed sending Pong packet")
-					return
+					break loop
 				}
 			case PacketTypePongAck:
 				continue
 			default:
 				ap.recvChansLock.RLock()
-				handled := false
 				ll, _ := ap.recvChans[pkt]
+				ap.recvChansLock.RUnlock()
+
+				handled := false
 				for _, ch := range ll {
 					ch <- Packet{Type: pkt, Payload: payload}
 					handled = true
@@ -154,6 +156,9 @@ loop:
 			close(ch)
 		}
 	}
+
+	_ = ap.conn.Close()
+	// TODO: reconnect
 }
 
 func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
