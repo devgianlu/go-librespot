@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	"golang.org/x/exp/slices"
 	"math/rand"
 	"net/http"
@@ -67,10 +68,12 @@ func (r *ApResolver) fetchUrls(types ...endpointType) error {
 	reqUrl := *r.baseUrl
 	reqUrl.RawQuery = query.Encode()
 
-	// TODO: customize user agent
 	resp, err := r.client.Do(&http.Request{
 		Method: "GET",
 		URL:    &reqUrl,
+		Header: http.Header{
+			"User-Agent": []string{librespot.UserAgent()},
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed fetching apresolve URL: %w", err)

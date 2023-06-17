@@ -42,7 +42,8 @@ func retrieveClientToken(client *http.Client, deviceId string) (string, error) {
 		Method: "POST",
 		URL:    reqUrl,
 		Header: http.Header{
-			"Accept": []string{"application/x-protobuf"},
+			"Accept":     []string{"application/x-protobuf"},
+			"User-Agent": []string{librespot.UserAgent()},
 		},
 		Body: io.NopCloser(bytes.NewReader(body)),
 	})

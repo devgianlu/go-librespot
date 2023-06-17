@@ -18,3 +18,7 @@ func SystemInfoString() string {
 	// TODO: add operating system?
 	return fmt.Sprintf("%s; Go %s", VersionString(), runtime.Version())
 }
+
+func UserAgent() string {
+	return fmt.Sprintf("go-librespot/%s Go/%s", VersionNumberString(), runtime.Version())
+}
