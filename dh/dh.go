@@ -1,4 +1,4 @@
-package ap
+package dh
 
 import (
 	"crypto/rand"
@@ -21,31 +21,35 @@ func init() {
 	})
 }
 
-type diffieHellman struct {
+type DiffieHellman struct {
 	privateKey *big.Int
 	publicKey  *big.Int
 
 	sharedSecret []byte
 }
 
-func newDiffieHellman() (dh *diffieHellman, err error) {
+func NewDiffieHellman() (dh *DiffieHellman, err error) {
 	privateKeyData := make([]byte, 95)
 	if _, err = rand.Read(privateKeyData); err != nil {
 		return nil, fmt.Errorf("failed reading random private key: %w", err)
 	}
 
-	dh = &diffieHellman{}
+	dh = &DiffieHellman{}
 	dh.privateKey = new(big.Int).SetBytes(privateKeyData)
 	dh.publicKey = new(big.Int).Exp(dhGenerator, dh.privateKey, dhPrime)
 	return dh, nil
 }
 
-func (dh *diffieHellman) exchange(remoteKeyBytes []byte) []byte {
+func (dh *DiffieHellman) Exchange(remoteKeyBytes []byte) []byte {
 	remoteKey := new(big.Int).SetBytes(remoteKeyBytes)
 	dh.sharedSecret = new(big.Int).Exp(remoteKey, dh.privateKey, dhPrime).Bytes()
 	return dh.sharedSecret
 }
 
-func (dh *diffieHellman) publicKeyBytes() []byte {
+func (dh *DiffieHellman) PublicKeyBytes() []byte {
 	return dh.publicKey.Bytes()
+}
+
+func (dh *DiffieHellman) SharedSecretBytes() []byte {
+	return dh.sharedSecret
 }

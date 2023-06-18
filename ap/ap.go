@@ -9,6 +9,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
+	"go-librespot/dh"
 	pb "go-librespot/proto/spotify"
 	"google.golang.org/protobuf/proto"
 	"net"
@@ -23,7 +24,7 @@ type Accesspoint struct {
 	nonce    []byte
 	deviceId string
 
-	dh *diffieHellman
+	dh *dh.DiffieHellman
 
 	conn    net.Conn
 	encConn *shannonConn
@@ -60,7 +61,7 @@ func (ap *Accesspoint) init() (err error) {
 	}
 
 	// init diffiehellman parameters
-	if ap.dh, err = newDiffieHellman(); err != nil {
+	if ap.dh, err = dh.NewDiffieHellman(); err != nil {
 		return fmt.Errorf("failed initializing diffiehellman: %w", err)
 	}
 
@@ -222,7 +223,7 @@ func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
 		Padding:               []byte{0x1e},
 		LoginCryptoHello: &pb.LoginCryptoHelloUnion{
 			DiffieHellman: &pb.LoginCryptoDiffieHellmanHello{
-				Gc:              ap.dh.publicKeyBytes(),
+				Gc:              ap.dh.PublicKeyBytes(),
 				ServerKeysKnown: proto.Uint32(1),
 			},
 		},
@@ -242,7 +243,7 @@ func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
 	}
 
 	// exchange keys and compute shared secret
-	ap.dh.exchange(apResponse.Challenge.LoginCryptoChallenge.DiffieHellman.Gs)
+	ap.dh.Exchange(apResponse.Challenge.LoginCryptoChallenge.DiffieHellman.Gs)
 
 	log.Debugf("completed keyexchange")
 	return cc.Dump(), nil
@@ -251,7 +252,7 @@ func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
 func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 	macData := make([]byte, 0, sha1.Size*5)
 
-	mac := hmac.New(sha1.New, ap.dh.sharedSecret)
+	mac := hmac.New(sha1.New, ap.dh.SharedSecretBytes())
 	for i := byte(1); i < 6; i++ {
 		mac.Reset()
 		mac.Write(exchangeData)
