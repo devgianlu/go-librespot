@@ -1,9 +1,13 @@
 package ap
 
 import (
+	"bytes"
+	"crypto/aes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha1"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
@@ -11,7 +15,9 @@ import (
 	librespot "go-librespot"
 	"go-librespot/dh"
 	pb "go-librespot/proto/spotify"
+	"golang.org/x/crypto/pbkdf2"
 	"google.golang.org/protobuf/proto"
+	"io"
 	"net"
 	"os"
 	"sync"
@@ -82,6 +88,65 @@ func (ap *Accesspoint) ConnectUserPass(username, password string) error {
 	})
 }
 
+func (ap *Accesspoint) ConnectBlob(username string, encryptedBlob64 []byte) error {
+	encryptedBlob := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBlob64)))
+	if written, err := base64.StdEncoding.Decode(encryptedBlob, encryptedBlob64); err != nil {
+		return fmt.Errorf("failed decodeing encrypted blob: %w", err)
+	} else {
+		encryptedBlob = encryptedBlob[:written]
+	}
+
+	secret := sha1.Sum([]byte(ap.deviceId))
+	baseKey := pbkdf2.Key(secret[:], []byte(username), 256, 20, sha1.New)
+
+	key := make([]byte, 24)
+	copy(key, func() []byte { sum := sha1.Sum(baseKey); return sum[:] }())
+	binary.BigEndian.PutUint32(key[20:], 20)
+
+	bc, err := aes.NewCipher(key)
+	if err != nil {
+		return fmt.Errorf("failed initializing aes cihper: %w", err)
+	}
+
+	decryptedBlob := make([]byte, len(encryptedBlob))
+	for i := 0; i < len(encryptedBlob)-1; i += aes.BlockSize {
+		bc.Decrypt(decryptedBlob[i:], encryptedBlob[i:])
+	}
+
+	for i := 0; i < len(decryptedBlob)-16; i++ {
+		decryptedBlob[len(decryptedBlob)-i-1] ^= decryptedBlob[len(decryptedBlob)-i-17]
+	}
+
+	blob := bytes.NewReader(decryptedBlob)
+
+	// discard first byte
+	_, _ = blob.Seek(1, io.SeekCurrent)
+
+	// discard some more bytes
+	discardLen, _ := binary.ReadUvarint(blob)
+	_, _ = blob.Seek(int64(discardLen), io.SeekCurrent)
+
+	// discard another byte
+	_, _ = blob.Seek(1, io.SeekCurrent)
+
+	// read authentication type
+	authTyp, _ := binary.ReadUvarint(blob)
+
+	// discard another byte
+	_, _ = blob.Seek(1, io.SeekCurrent)
+
+	// read auth data
+	authDataLen, _ := binary.ReadUvarint(blob)
+	authData := make([]byte, authDataLen)
+	_, _ = blob.Read(authData)
+
+	return ap.Connect(&pb.LoginCredentials{
+		Typ:      pb.AuthenticationType(authTyp).Enum(),
+		Username: proto.String(username),
+		AuthData: authData,
+	})
+}
+
 func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
 	// perform key exchange with diffiehellman
 	exchangeData, err := ap.performKeyExchange()
@@ -95,7 +160,11 @@ func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
 	}
 
 	// do authentication with credentials
-	return ap.authenticate(creds)
+	if err := ap.authenticate(creds); err != nil {
+		return fmt.Errorf("failed authenticating: %w", err)
+	}
+
+	return nil
 }
 
 func (ap *Accesspoint) Close() {
