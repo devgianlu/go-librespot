@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sync"
+	"time"
 )
 
 type Login5 struct {
@@ -20,7 +22,9 @@ type Login5 struct {
 	deviceId    string
 	clientToken string
 
-	loginOk *pb.LoginOk
+	loginOk     *pb.LoginOk
+	loginOkExp  time.Time
+	loginOkLock sync.RWMutex
 }
 
 func NewLogin5(deviceId, clientToken string) *Login5 {
@@ -71,6 +75,9 @@ func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
 }
 
 func (c *Login5) Login(credentials proto.Message) error {
+	c.loginOkLock.Lock()
+	defer c.loginOkLock.Unlock()
+
 	req := &pb.LoginRequest{
 		ClientInfo: &pb.ClientInfo{
 			ClientId: librespot.ClientId,
@@ -129,6 +136,7 @@ func (c *Login5) Login(credentials proto.Message) error {
 
 	if ok := resp.GetOk(); ok != nil {
 		c.loginOk = ok
+		c.loginOkExp = time.Now().Add(time.Duration(c.loginOk.AccessTokenExpiresIn) * time.Second)
 		log.Debugf("authenticated as %s", c.loginOk.Username)
 		return nil
 	} else {
@@ -136,12 +144,32 @@ func (c *Login5) Login(credentials proto.Message) error {
 	}
 }
 
-func (c *Login5) AccessToken() string {
-	if c.loginOk == nil {
-		panic("login5 not authenticated")
-	}
+func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {
+	return func() (string, error) {
+		c.loginOkLock.RLock()
+		if c.loginOk == nil {
+			panic("login5 not authenticated")
+		}
 
-	// FIXME: we may need a lock on this at some point
-	// FIXME: the token expires
-	return c.loginOk.AccessToken
+		// if not expired, just return it
+		if c.loginOkExp.After(time.Now()) {
+			defer c.loginOkLock.RUnlock()
+			return c.loginOk.AccessToken, nil
+		}
+
+		username, storedCred := c.loginOk.Username, c.loginOk.StoredCredential
+		c.loginOkLock.RUnlock()
+
+		log.Debug("renewing login5 access token")
+		if err := c.Login(&credentialspb.StoredCredential{
+			Username: username,
+			Data:     storedCred,
+		}); err != nil {
+			return "", fmt.Errorf("failed renewing login5 access token: %w", err)
+		}
+
+		c.loginOkLock.RLock()
+		defer c.loginOkLock.RUnlock()
+		return c.loginOk.AccessToken, nil
+	}
 }

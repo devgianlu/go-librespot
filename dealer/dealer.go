@@ -17,7 +17,7 @@ const pingInterval = 30 * time.Second
 
 type Dealer struct {
 	addr        librespot.GetAddressFunc
-	accessToken string
+	accessToken librespot.GetLogin5TokenFunc
 
 	conn *websocket.Conn
 
@@ -38,7 +38,7 @@ type Dealer struct {
 	requestReceiversLock sync.RWMutex
 }
 
-func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken string) (*Dealer, error) {
+func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) (*Dealer, error) {
 	dealer := &Dealer{addr: dealerAddr, accessToken: accessToken}
 	dealer.requestReceivers = map[string]requestReceiver{}
 	dealer.recvLoopStop = make(chan struct{}, 1)
@@ -57,7 +57,12 @@ func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken string) (*Dealer
 }
 
 func (d *Dealer) connect() (err error) {
-	d.conn, _, err = websocket.Dial(context.TODO(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), d.accessToken), &websocket.DialOptions{
+	accessToken, err := d.accessToken()
+	if err != nil {
+		return fmt.Errorf("failed obtaining dealer access token: %w", err)
+	}
+
+	d.conn, _, err = websocket.Dial(context.TODO(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), accessToken), &websocket.DialOptions{
 		HTTPHeader: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
 		},
