@@ -3,32 +3,26 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/xml"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"go-librespot/ap"
 	"go-librespot/apresolve"
-	"go-librespot/dealer"
-	"go-librespot/login5"
-	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
-	"go-librespot/spclient"
-	"strings"
+	"go-librespot/zeroconf"
+	"sync"
 )
 
 type App struct {
 	resolver *apresolve.ApResolver
-	login5   *login5.Login5
 
+	deviceName  string
 	deviceId    string
 	clientToken string
 
-	ap     *ap.Accesspoint
-	sp     *spclient.Spclient
-	dealer *dealer.Dealer
+	sess     *Session
+	sessLock sync.Mutex
 }
 
-func NewApp() (app *App, err error) {
-	app = &App{}
+func NewApp(deviceName string) (app *App, err error) {
+	app = &App{deviceName: deviceName}
 	app.resolver = apresolve.NewApResolver()
 
 	// FIXME: make device id persistent
@@ -42,115 +36,85 @@ func NewApp() (app *App, err error) {
 		return nil, fmt.Errorf("failed obtaining client token: %w", err)
 	}
 
-	app.login5 = login5.NewLogin5(app.deviceId, app.clientToken)
-
 	return app, nil
 }
 
-func (app *App) Connect() (err error) {
-	// connect and authenticate to the accesspoint
-	apAddr, err := app.resolver.GetAccesspoint()
+func (app *App) newSession(creds SessionCredentials) (*Session, error) {
+	// connect new session
+	sess := &Session{app: app}
+	if err := sess.Connect(creds); err != nil {
+		return nil, err
+	}
+
+	app.sessLock.Lock()
+	defer app.sessLock.Unlock()
+
+	// disconnect previous session
+	if app.sess != nil {
+		app.sess.Close()
+	}
+
+	// update current session
+	app.sess = sess
+	return sess, nil
+}
+
+func (app *App) Zeroconf() error {
+	// pre fetch resolver endpoints
+	if err := app.resolver.FetchAll(); err != nil {
+		return fmt.Errorf("failed getting endpoints from resolver: %w", err)
+	}
+
+	// start zeroconf server and dispatch
+	z, err := zeroconf.NewZeroconf(app.deviceName, app.deviceId)
 	if err != nil {
-		return fmt.Errorf("failed getting accesspoint from resolver: %w", err)
+		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
 
-	app.ap, err = ap.NewAccesspoint(apAddr, app.deviceId)
+	return z.Serve(func(req zeroconf.NewUserRequest) bool {
+		sess, err := app.newSession(SessionBlobCredentials{
+			Username: req.Username,
+			Blob:     req.AuthBlob,
+		})
+		if err != nil {
+			log.WithError(err).Errorf("failed creating new session for %s from %s", req.Username, req.DeviceName)
+			return false
+		}
+
+		go sess.Run()
+		return true
+	})
+}
+
+func (app *App) UserPass(username, password string) error {
+	sess, err := app.newSession(SessionUserPassCredentials{username, password})
 	if err != nil {
-		return fmt.Errorf("failed initializing accesspoint: %w", err)
+		return err
 	}
 
-	if err = app.ap.ConnectUserPass("xxxx", "xxxx"); err != nil {
-		return fmt.Errorf("failed authenticating with accesspoint: %w", err)
-	}
-
-	// authenticate with login5 and get token
-	if err = app.login5.Login(&credentialspb.StoredCredential{
-		Username: app.ap.Username(),
-		Data:     app.ap.StoredCredentials(),
-	}); err != nil {
-		return fmt.Errorf("failed authenticating with login5: %w", err)
-	}
-
-	// initialize spclient
-	spAddr, err := app.resolver.GetSpclient()
-	if err != nil {
-		return fmt.Errorf("failed getting spclient from resolver: %w", err)
-	}
-
-	app.sp, err = spclient.NewSpclient(spAddr, app.clientToken)
-	if err != nil {
-		return fmt.Errorf("failed initializing spclient: %w", err)
-	}
-
-	// initialize dealer
-	dealerAddr, err := app.resolver.GetDealer()
-	if err != nil {
-		return fmt.Errorf("failed getting dealer from resolver: %w", err)
-	}
-
-	app.dealer, err = dealer.NewDealer(dealerAddr, app.login5.AccessToken())
-	if err != nil {
-		return fmt.Errorf("failed connecting to dealer: %w", err)
-	}
-
+	sess.Run()
 	return nil
 }
 
-func (app *App) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
-	switch pktType {
-	case ap.PacketTypeProductInfo:
-		var prod ProductInfo
-		if err := xml.Unmarshal(payload, &prod); err != nil {
-			return fmt.Errorf("failed umarshalling ProductInfo: %w", err)
-		}
-
-		// TODO: we may need this
-		return nil
-	default:
-		return nil
-	}
-}
-
-func (app *App) handleDealerMessage(msg dealer.Message) error {
-	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
-		spotConnId := msg.Headers["Spotify-Connection-Id"]
-		log.Debugf("received connection id: %s", spotConnId)
-
-		// TODO: we need this
-	}
-
-	return nil
-}
-
-func (app *App) Run() {
-	apRecv := app.ap.Receive(ap.PacketTypeProductInfo)
-	msgRecv := app.dealer.ReceiveMessage("hm://pusher/v1/connections/")
-
-	for {
-		select {
-		case pkt := <-apRecv:
-			if err := app.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
-				log.WithError(err).Warn("failed handling accesspoint packet")
-			}
-		case msg := <-msgRecv:
-			if err := app.handleDealerMessage(msg); err != nil {
-				log.WithError(err).Warn("failed handling dealer message")
-			}
-		}
-	}
-}
+const UseZeroconf = true
+const AuthUsername = "xxxx"
+const AuthPassword = "xxxx"
 
 func main() {
 	log.SetLevel(log.TraceLevel)
 
-	app, err := NewApp()
+	app, err := NewApp("go-librespot test")
 	if err != nil {
 		log.WithError(err).Fatal("failed creating app")
 	}
 
-	if err := app.Connect(); err != nil {
-		log.WithError(err).Fatal("failed connecting app")
+	if UseZeroconf {
+		if err := app.Zeroconf(); err != nil {
+			log.WithError(err).Fatal("failed running zeroconf")
+		}
+	} else {
+		if err := app.UserPass(AuthUsername, AuthPassword); err != nil {
+			log.WithError(err).Fatal("failed running with username and password")
+		}
 	}
-
-	app.Run()
 }
