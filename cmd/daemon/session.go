@@ -4,7 +4,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"go-librespot/ap"
 	"go-librespot/dealer"
 	"go-librespot/login5"
@@ -12,7 +11,7 @@ import (
 	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
 	"go-librespot/spclient"
 	"strings"
-	"time"
+	"sync"
 )
 
 const VolumeSteps = 64
@@ -28,6 +27,9 @@ type Session struct {
 	dealer *dealer.Dealer
 
 	spotConnId string
+
+	state     *State
+	stateLock sync.Mutex
 }
 
 func (s *Session) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -51,54 +53,7 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 		log.Debugf("received connection id: %s", s.spotConnId)
 
 		// put the initial state
-		if err := s.sp.PutConnectState(s.spotConnId, &connectpb.PutStateRequest{
-			ClientSideTimestamp: uint64(time.Now().UnixMilli()),
-			MemberType:          connectpb.MemberType_CONNECT_STATE,
-			PutStateReason:      connectpb.PutStateReason_NEW_DEVICE,
-			Device: &connectpb.Device{
-				DeviceInfo: &connectpb.DeviceInfo{
-					CanPlay:               true,
-					Volume:                0, // TODO
-					Name:                  s.app.deviceName,
-					DeviceId:              s.app.deviceId,
-					DeviceType:            s.app.deviceType,
-					DeviceSoftwareVersion: librespot.VersionString(),
-					ClientId:              librespot.ClientId,
-					SpircVersion:          "3.2.6",
-					Capabilities: &connectpb.Capabilities{
-						CanBePlayer:                true,
-						RestrictToLocal:            false,
-						GaiaEqConnectId:            true,
-						SupportsLogout:             true,
-						IsObservable:               true,
-						VolumeSteps:                VolumeSteps,
-						SupportedTypes:             []string{"audio/track"}, // TODO: support episodes
-						CommandAcks:                true,                    // TODO: actually send ack
-						SupportsRename:             false,
-						Hidden:                     false,
-						DisableVolume:              false,
-						ConnectDisabled:            false,
-						SupportsPlaylistV2:         true,
-						IsControllable:             true,
-						SupportsExternalEpisodes:   false, // TODO: support external episodes
-						SupportsSetBackendMetadata: false,
-						SupportsTransferCommand:    true, // TODO: actually support transfer command
-						SupportsCommandRequest:     true,
-						IsVoiceEnabled:             false,
-						NeedsFullPlayerState:       false,
-						SupportsGzipPushes:         true, // TODO: actually support gzip pushes
-						SupportsSetOptionsCommand:  false,
-						SupportsHifi:               nil, // TODO: nice to have?
-						ConnectCapabilities:        "",
-					},
-				},
-				PlayerState: &connectpb.PlayerState{
-					IsSystemInitiated: true,
-					// TODO
-				},
-			},
-			IsActive: false,
-		}); err != nil {
+		if err := s.putConnectState(connectpb.PutStateReason_NEW_DEVICE); err != nil {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/volume") {
@@ -174,6 +129,9 @@ func (s *Session) Connect(creds_ SessionCredentials) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed connecting to dealer: %w", err)
 	}
+
+	// init internal state
+	s.initState()
 
 	return nil
 }
