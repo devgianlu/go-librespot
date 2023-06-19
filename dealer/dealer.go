@@ -7,6 +7,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
+	"math"
 	"net/http"
 	"nhooyr.io/websocket"
 	"sync"
@@ -70,6 +71,9 @@ func (d *Dealer) connect() (err error) {
 	if err != nil {
 		return err
 	}
+
+	// remove the read limit
+	d.conn.SetReadLimit(math.MaxUint32)
 
 	// set last pong in the future
 	d.lastPong = time.Now().Add(pingInterval)
