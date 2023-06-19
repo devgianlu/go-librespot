@@ -13,7 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/dh"
-	"go-librespot/proto/spotify/connectstate/devices"
+	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	"net"
 	"net/http"
 	"sync"
@@ -22,6 +22,7 @@ import (
 type Zeroconf struct {
 	deviceName string
 	deviceId   string
+	deviceType devicespb.DeviceType
 
 	listener net.Listener
 	server   *zeroconf.Server
@@ -43,8 +44,8 @@ type NewUserRequest struct {
 	result chan bool
 }
 
-func NewZeroconf(deviceName, deviceId string) (_ *Zeroconf, err error) {
-	z := &Zeroconf{deviceId: deviceId, deviceName: deviceName}
+func NewZeroconf(deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
+	z := &Zeroconf{deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
 	z.reqsChan = make(chan NewUserRequest)
 
 	z.dh, err = dh.NewDiffieHellman()
@@ -103,7 +104,7 @@ func (z *Zeroconf) handleGetInfo(writer http.ResponseWriter, _ *http.Request) er
 		DeviceID:   z.deviceId,
 		RemoteName: z.deviceName,
 		PublicKey:  base64.StdEncoding.EncodeToString(z.dh.PublicKeyBytes()),
-		DeviceType: devices.DeviceType_COMPUTER.String(),
+		DeviceType: z.deviceType.String(),
 		ActiveUser: currentUsername,
 	})
 }

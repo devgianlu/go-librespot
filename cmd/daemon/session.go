@@ -94,7 +94,7 @@ func (s *Session) Connect(creds_ SessionCredentials) (err error) {
 		return fmt.Errorf("failed getting spclient from resolver: %w", err)
 	}
 
-	s.sp, err = spclient.NewSpclient(spAddr, s.app.clientToken)
+	s.sp, err = spclient.NewSpclient(spAddr, s.login5.AccessToken(), s.app.deviceId, s.app.clientToken)
 	if err != nil {
 		return fmt.Errorf("failed initializing spclient: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/apresolve"
+	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	"go-librespot/zeroconf"
 	"sync"
 )
@@ -15,6 +16,7 @@ type App struct {
 
 	deviceName  string
 	deviceId    string
+	deviceType  devicespb.DeviceType
 	clientToken string
 
 	sess     *Session
@@ -24,6 +26,8 @@ type App struct {
 func NewApp(deviceName string) (app *App, err error) {
 	app = &App{deviceName: deviceName}
 	app.resolver = apresolve.NewApResolver()
+
+	app.deviceType = devicespb.DeviceType_COMPUTER
 
 	// FIXME: make device id persistent
 	deviceIdBytes := make([]byte, 20)
@@ -66,7 +70,7 @@ func (app *App) Zeroconf() error {
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.deviceName, app.deviceId)
+	z, err := zeroconf.NewZeroconf(app.deviceName, app.deviceId, app.deviceType)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
