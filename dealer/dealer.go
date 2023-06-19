@@ -202,6 +202,25 @@ loop:
 	d.messageReceiversLock.RUnlock()
 }
 
+func (d *Dealer) sendReply(key string, success bool) error {
+	reply := Reply{Type: "reply", Key: key}
+	reply.Payload.Success = success
+
+	replyBytes, err := json.Marshal(reply)
+	if err != nil {
+		return fmt.Errorf("failed marshalling reply: %w", err)
+	}
+
+	d.reconnectLock.RLock()
+	err = d.conn.Write(context.TODO(), websocket.MessageText, replyBytes)
+	d.reconnectLock.RUnlock()
+	if err != nil {
+		return fmt.Errorf("failed sending dealer reply: %w", err)
+	}
+
+	return nil
+}
+
 func (d *Dealer) reconnect() error {
 	if err := d.connect(); err != nil {
 		return err

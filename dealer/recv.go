@@ -1,8 +1,12 @@
 package dealer
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"io"
 	"strings"
 )
 
@@ -14,7 +18,6 @@ type messageReceiver struct {
 type Message struct {
 	Uri     string
 	Headers map[string]string
-	// TODO
 }
 
 type requestReceiver struct {
@@ -22,7 +25,31 @@ type requestReceiver struct {
 }
 
 type Request struct {
-	// TODO
+	resp chan bool
+
+	MessageIdent string
+	Payload      RequestPayload
+}
+
+func (req Request) Reply(success bool) {
+	req.resp <- success
+}
+
+type RequestPayload struct {
+	MessageId      uint32 `json:"message_id"`
+	TargetAliasId  string `json:"target_alias_id"`
+	SentByDeviceId string `json:"sent_by_device_id"`
+	Command        struct {
+		Endpoint string `json:"endpoint"`
+		Data     []byte `json:"data"`
+		Options  struct {
+			RestorePaused   string `json:"restore_paused"`
+			RestorePosition string `json:"restore_position"`
+			RestoreTrack    string `json:"restore_track"`
+			License         string `json:"license"`
+		} `json:"options"`
+		FromDeviceIdentifier string `json:"from_device_identifier"`
+	} `json:"command"`
 }
 
 func (d *Dealer) handleMessage(rawMsg *RawMessage) {
@@ -75,15 +102,60 @@ func (d *Dealer) ReceiveMessage(uriPrefixes ...string) <-chan Message {
 
 func (d *Dealer) handleRequest(rawMsg *RawMessage) {
 	d.requestReceiversLock.RLock()
-	recv, ok := d.requestReceivers[rawMsg.Uri]
+	recv, ok := d.requestReceivers[rawMsg.MessageIdent]
 	d.requestReceiversLock.RUnlock()
 
 	if !ok {
-		log.Warnf("ignoring dealer request for %s", rawMsg.Uri)
+		log.Warnf("ignoring dealer request for %s", rawMsg.MessageIdent)
 		return
 	}
 
-	recv.c <- Request{} // TODO
+	var payloadBytes []byte
+	if transEnc, ok := rawMsg.Headers["Transfer-Encoding"]; ok {
+		switch transEnc {
+		case "gzip":
+			gz, err := gzip.NewReader(bytes.NewReader(rawMsg.Payload.Compressed))
+			if err != nil {
+				log.WithError(err).Error("invalid gzip stream")
+				return
+			}
+
+			payloadBytes, err = io.ReadAll(gz)
+			if err != nil {
+				_ = gz.Close()
+				log.WithError(err).Error("failed decompressing gzip payload")
+				return
+			}
+
+			_ = gz.Close()
+		default:
+			log.Warnf("unsupported transfer encoding: %s", transEnc)
+			return
+		}
+
+		delete(rawMsg.Headers, "Transfer-Encoding")
+	}
+
+	var payload RequestPayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		log.WithError(err).Error("failed unmarshalling dealer request payload")
+		return
+	}
+
+	// dispatch request
+	resp := make(chan bool)
+	recv.c <- Request{
+		resp:         resp,
+		MessageIdent: rawMsg.MessageIdent,
+		Payload:      payload,
+	}
+
+	// wait for response and send it
+	success := <-resp
+	if err := d.sendReply(rawMsg.Key, success); err != nil {
+		log.WithError(err).Error("failed sending dealer reply")
+		return
+	}
 }
 
 func (d *Dealer) ReceiveRequest(uri string) <-chan Request {
