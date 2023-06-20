@@ -51,6 +51,8 @@ func retrieveClientToken(deviceId string) (string, error) {
 		return "", fmt.Errorf("failed requesting clienttoken: %w", err)
 	}
 
+	defer func() { _ = resp.Body.Close() }()
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("failed reading clienttoken response: %w", err)

@@ -61,6 +61,8 @@ func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
 		return nil, fmt.Errorf("failed requesting login5: %w", err)
 	}
 
+	defer func() { _ = resp.Body.Close() }()
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed reading login5 response: %w", err)

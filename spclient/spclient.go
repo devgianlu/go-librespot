@@ -93,6 +93,8 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *pb.PutStateReque
 		return err
 	}
 
+	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode == 413 {
 		return fmt.Errorf("connect state put request too big: %d bytes", len(reqBody))
 	} else if resp.StatusCode != 200 {

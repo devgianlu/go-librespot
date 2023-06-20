@@ -79,6 +79,8 @@ func (r *ApResolver) fetchUrls(types ...endpointType) error {
 		return fmt.Errorf("failed fetching apresolve URL: %w", err)
 	}
 
+	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("invalid status code from apresolve: %d", resp.StatusCode)
 	}
