@@ -2,11 +2,14 @@ package spclient
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	pb "go-librespot/proto/spotify/connectstate/model"
+	storagepb "go-librespot/proto/spotify/download"
+	metadatapb "go-librespot/proto/spotify/metadata"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
@@ -103,4 +106,61 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *pb.PutStateReque
 		log.Debugf("put connect state at %d because %s", reqProto.ClientSideTimestamp, reqProto.PutStateReason)
 		return nil
 	}
+}
+
+func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*storagepb.StorageResolveResponse, error) {
+	var path string
+	if prefetch {
+		path = fmt.Sprintf("/storage-resolve/files/audio/interactive_prefetch/%s", hex.EncodeToString(fileId))
+	} else {
+		path = fmt.Sprintf("/storage-resolve/files/audio/interactive/%s", hex.EncodeToString(fileId))
+	}
+
+	resp, err := c.request("GET", path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from storage resolve: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var protoResp storagepb.StorageResolveResponse
+	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling StorageResolveResponse: %w", err)
+	}
+
+	return &protoResp, nil
+}
+
+func (c *Spclient) MetadataForTrack(track librespot.TrackId) (*metadatapb.Track, error) {
+	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from track metadata: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var protoResp metadatapb.Track
+	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling Track: %w", err)
+	}
+
+	return &protoResp, nil
 }
