@@ -173,6 +173,12 @@ func (ap *Accesspoint) Close() {
 	_ = ap.conn.Close()
 }
 
+func (ap *Accesspoint) Send(pktType PacketType, payload []byte) error {
+	ap.reconnectLock.RLock()
+	defer ap.reconnectLock.RUnlock()
+	return ap.encConn.sendPacket(pktType, payload)
+}
+
 func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
 	ch := make(chan Packet)
 	ap.recvChansLock.Lock()

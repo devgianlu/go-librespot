@@ -12,7 +12,8 @@ import (
 type shannonConn struct {
 	conn net.Conn
 
-	lock sync.Mutex
+	sendLock sync.Mutex
+	recvLock sync.Mutex
 
 	sendCipher *shannon.Shannon
 	sendNonce  uint32
@@ -42,8 +43,8 @@ func (c *shannonConn) sendPacket(pktType PacketType, payload []byte) error {
 	binary.BigEndian.PutUint16(packet[1:3], uint16(len(payload)))
 	copy(packet[3:], payload)
 
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.sendLock.Lock()
+	defer c.sendLock.Unlock()
 
 	// set nonce on cipher and increment
 	c.sendCipher.NonceU32(c.sendNonce)
@@ -67,8 +68,8 @@ func (c *shannonConn) sendPacket(pktType PacketType, payload []byte) error {
 }
 
 func (c *shannonConn) receivePacket() (PacketType, []byte, error) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
+	c.recvLock.Lock()
+	defer c.recvLock.Unlock()
 
 	// set nonce on cipher and increment
 	c.recvCipher.NonceU32(c.recvNonce)
