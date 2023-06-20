@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/ap"
+	audiokey "go-librespot/audio_key"
 	"go-librespot/dealer"
 	"go-librespot/login5"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
@@ -25,6 +26,8 @@ type Session struct {
 	login5 *login5.Login5
 	sp     *spclient.Spclient
 	dealer *dealer.Dealer
+
+	audioKey *audiokey.AudioKeyProvider
 
 	spotConnId string
 
@@ -133,11 +136,15 @@ func (s *Session) Connect(creds_ SessionCredentials) (err error) {
 	// init internal state
 	s.initState()
 
+	// init audio key provider
+	s.audioKey = audiokey.NewAudioKeyProvider(s.ap)
+
 	return nil
 }
 
 func (s *Session) Close() {
 	s.stop <- struct{}{}
+	s.audioKey.Close()
 	s.dealer.Close()
 	s.ap.Close()
 }
