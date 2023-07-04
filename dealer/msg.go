@@ -7,6 +7,7 @@ type RawMessage struct {
 	Headers      map[string]string `json:"headers"`
 	MessageIdent string            `json:"message_ident"`
 	Key          string            `json:"key"`
+	Payloads     [][]byte          `json:"payloads"`
 	Payload      struct {
 		Compressed []byte `json:"compressed"`
 	} `json:"payload"`

@@ -18,6 +18,7 @@ type messageReceiver struct {
 type Message struct {
 	Uri     string
 	Headers map[string]string
+	Payload []byte
 }
 
 type requestReceiver struct {
@@ -52,7 +53,36 @@ type RequestPayload struct {
 	} `json:"command"`
 }
 
+func handleTransferEncoding(headers map[string]string, data []byte) ([]byte, error) {
+	if transEnc, ok := headers["Transfer-Encoding"]; ok {
+		switch transEnc {
+		case "gzip":
+			gz, err := gzip.NewReader(bytes.NewReader(data))
+			if err != nil {
+				return nil, fmt.Errorf("invalid gzip stream: %w", err)
+			}
+
+			defer func() { _ = gz.Close() }()
+
+			data, err = io.ReadAll(gz)
+			if err != nil {
+				return nil, fmt.Errorf("failed decompressing gzip payload: %w", err)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported transfer encoding: %s", transEnc)
+		}
+
+		delete(headers, "Transfer-Encoding")
+	}
+
+	return data, nil
+}
+
 func (d *Dealer) handleMessage(rawMsg *RawMessage) {
+	if len(rawMsg.Payloads) > 1 {
+		panic("unsupported number of payloads")
+	}
+
 	var matchedReceivers []messageReceiver
 
 	// lookup receivers that want to match this message
@@ -72,9 +102,20 @@ func (d *Dealer) handleMessage(rawMsg *RawMessage) {
 		return
 	}
 
+	var payloadBytes []byte
+	if len(rawMsg.Payloads) > 0 {
+		var err error
+		payloadBytes, err = handleTransferEncoding(rawMsg.Headers, rawMsg.Payloads[0])
+		if err != nil {
+			log.WithError(err).Errorf("failed decoding message transfer encoding")
+			return
+		}
+	}
+
 	msg := Message{
 		Uri:     rawMsg.Uri,
 		Headers: rawMsg.Headers,
+		Payload: payloadBytes,
 	}
 
 	for _, recv := range matchedReceivers {
@@ -110,30 +151,10 @@ func (d *Dealer) handleRequest(rawMsg *RawMessage) {
 		return
 	}
 
-	var payloadBytes []byte
-	if transEnc, ok := rawMsg.Headers["Transfer-Encoding"]; ok {
-		switch transEnc {
-		case "gzip":
-			gz, err := gzip.NewReader(bytes.NewReader(rawMsg.Payload.Compressed))
-			if err != nil {
-				log.WithError(err).Error("invalid gzip stream")
-				return
-			}
-
-			payloadBytes, err = io.ReadAll(gz)
-			if err != nil {
-				_ = gz.Close()
-				log.WithError(err).Error("failed decompressing gzip payload")
-				return
-			}
-
-			_ = gz.Close()
-		default:
-			log.Warnf("unsupported transfer encoding: %s", transEnc)
-			return
-		}
-
-		delete(rawMsg.Headers, "Transfer-Encoding")
+	payloadBytes, err := handleTransferEncoding(rawMsg.Headers, rawMsg.Payload.Compressed)
+	if err != nil {
+		log.WithError(err).Errorf("failed decoding request transfer encoding")
+		return
 	}
 
 	var payload RequestPayload
