@@ -1,8 +1,10 @@
 package main
 
 import (
+	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/dealer"
+	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"time"
 )
@@ -22,7 +24,7 @@ func (s *Session) initState() {
 		lastCommand: nil,
 		deviceInfo: &connectpb.DeviceInfo{
 			CanPlay:               true,
-			Volume:                VolumeSteps,
+			Volume:                player.MaxVolume,
 			Name:                  s.app.deviceName,
 			DeviceId:              s.app.deviceId,
 			DeviceType:            s.app.deviceType,
@@ -63,6 +65,16 @@ func (s *Session) initState() {
 	}
 }
 
+func (s *Session) updateState(f func(s *State)) {
+	s.stateLock.Lock()
+	f(s.state)
+	s.stateLock.Unlock()
+
+	if err := s.putConnectState(connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
+		log.WithError(err).Error("failed put state after update")
+	}
+}
+
 func (s *Session) withState(f func(s *State)) {
 	s.stateLock.Lock()
 	f(s.state)
@@ -74,6 +86,13 @@ func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
 		ClientSideTimestamp: uint64(time.Now().UnixMilli()),
 		MemberType:          connectpb.MemberType_CONNECT_STATE,
 		PutStateReason:      reason,
+	}
+
+	if t := s.player.StartedPlayingAt(); !t.IsZero() {
+		putStateReq.StartedPlayingAt = uint64(t.UnixMilli())
+	}
+	if t := s.player.HasBeenPlayingFor(); t > 0 {
+		putStateReq.HasBeenPlayingForMs = uint64(t.Milliseconds())
 	}
 
 	s.withState(func(s *State) {
