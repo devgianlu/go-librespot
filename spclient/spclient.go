@@ -78,6 +78,11 @@ func (c *Spclient) request(method string, path string, header http.Header, body 
 	return resp, nil
 }
 
+type putStateError struct {
+	ErrorType string `json:"error_type"`
+	Message   string `json:"message"`
+}
+
 func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutStateRequest) error {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {
@@ -99,10 +104,13 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutSta
 
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode == 413 {
-		return fmt.Errorf("connect state put request too big: %d bytes", len(reqBody))
-	} else if resp.StatusCode != 200 {
-		return fmt.Errorf("invalid status code from connect state put request: %d", resp.StatusCode)
+	if resp.StatusCode != 200 {
+		var putError putStateError
+		if err := json.NewDecoder(resp.Body).Decode(&putError); err != nil {
+			return fmt.Errorf("failed reading error response: %w", err)
+		}
+
+		return fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
 	} else {
 		log.Debugf("put connect state because %s", reqProto.PutStateReason)
 		return nil
