@@ -37,11 +37,21 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 }
 
 func (s *Session) loadCurrentTrack() error {
+	if s.stream != nil {
+		s.stream.Stop()
+		s.stream = nil
+	}
+
 	var trackPosition int64
 	var trackId librespot.TrackId
 	s.updateState(func(s *State) {
 		trackId = librespot.TrackIdFromUri(s.playerState.Track.Uri)
-		trackPosition = time.Now().UnixMilli() - s.playerState.Timestamp + s.playerState.PositionAsOfTimestamp
+
+		if s.playerState.IsPaused {
+			trackPosition = s.playerState.PositionAsOfTimestamp
+		} else {
+			trackPosition = time.Now().UnixMilli() - s.playerState.Timestamp + s.playerState.PositionAsOfTimestamp
+		}
 
 		s.playerState.IsPlaying = true
 		s.playerState.IsBuffering = true

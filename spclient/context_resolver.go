@@ -17,15 +17,24 @@ type ContextResolver struct {
 	ctx *connectpb.Context
 }
 
-func NewContextResolver(sp *Spclient, uri string) (*ContextResolver, error) {
-	ctx, err := sp.ContextResolve(uri)
-	if err != nil {
-		return nil, fmt.Errorf("failed resolving context %s: %w", uri, err)
-	} else if ctx.Loading {
-		return nil, fmt.Errorf("context %s is loading", uri)
-	}
+func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver, error) {
+	if len(ctx.Pages) > 0 {
+		return &ContextResolver{sp, ctx}, nil
+	} else {
+		newCtx, err := sp.ContextResolve(ctx.Uri)
+		if err != nil {
+			return nil, fmt.Errorf("failed resolving context %s: %w", newCtx.Uri, err)
+		} else if newCtx.Loading {
+			return nil, fmt.Errorf("context %s is loading", newCtx.Uri)
+		}
 
-	return &ContextResolver{sp, ctx}, nil
+		// copy some metadata
+		for key, val := range ctx.Metadata {
+			newCtx.Metadata[key] = val
+		}
+
+		return &ContextResolver{sp, newCtx}, nil
+	}
 }
 
 func (r *ContextResolver) Metadata() map[string]string {

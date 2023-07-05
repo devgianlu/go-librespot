@@ -16,9 +16,9 @@ type TracksList struct {
 	trackIdx int
 }
 
-func NewTrackListFromContext(sp *spclient.Spclient, uri string) (_ *TracksList, err error) {
+func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *TracksList, err error) {
 	tl := &TracksList{}
-	tl.ctx, err = spclient.NewContextResolver(sp, uri)
+	tl.ctx, err = spclient.NewContextResolver(sp, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing context resolver: %w", err)
 	}
@@ -30,7 +30,13 @@ func (tl *TracksList) Metadata() map[string]string {
 	return tl.ctx.Metadata()
 }
 
-func (tl *TracksList) Seek(f func(track *connectpb.ContextTrack) bool) error {
+func (tl *TracksList) TrySeek(f func(track *connectpb.ContextTrack) bool) {
+	if err := tl.Seek(f); err != nil {
+		tl.pageIdx, tl.trackIdx = 0, 0
+	}
+}
+
+func (tl *TracksList) Seek(f func(*connectpb.ContextTrack) bool) error {
 	tl.pageIdx, tl.trackIdx = 0, 0
 
 	for {
@@ -131,4 +137,16 @@ func (tl *TracksList) NextTracks() []*connectpb.ProvidedTrack {
 
 func (tl *TracksList) Index() *connectpb.ContextIndex {
 	return &connectpb.ContextIndex{Page: uint32(tl.pageIdx), Track: uint32(tl.trackIdx)}
+}
+
+func (tl *TracksList) CurrentTrack() *connectpb.ProvidedTrack {
+	page, _, err := tl.ctx.Page(tl.pageIdx)
+	if errors.Is(err, spclient.ErrNoMorePages) {
+		return nil
+	} else if err != nil {
+		log.WithError(err).Errorf("failed loading page at %d", tl.pageIdx)
+		return nil
+	}
+
+	return librespot.ContextTrackToProvidedTrack(page[tl.trackIdx])
 }

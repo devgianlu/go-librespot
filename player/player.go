@@ -66,7 +66,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider) (*Player, err
 		audioKey: audioKey,
 		oto:      otoCtx,
 		cmd:      make(chan playerCmd),
-		ev:       make(chan Event),
+		ev:       make(chan Event, 1), // FIXME: is too messsy?
 	}
 	go p.manageLoop()
 
@@ -182,7 +182,7 @@ func (p *Player) SetVolume(val uint32) {
 }
 
 func (p *Player) newStream(pp oto.Player) int {
-	resp := make(chan any)
+	resp := make(chan any, 1)
 	p.cmd <- playerCmd{typ: playerCmdNew, data: pp, resp: resp}
 	return (<-resp).(int)
 }

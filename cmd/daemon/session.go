@@ -40,6 +40,7 @@ type Session struct {
 	state     *State
 	stateLock sync.Mutex
 
+	// TODO: this should probably be locked
 	stream *player.Stream
 }
 
@@ -120,14 +121,10 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
 		}
 
-		// TODO: transferState.CurrentSession.Context.Loading
-		// TODO: transferState.CurrentSession.Context.Pages
-		tracks, err := NewTrackListFromContext(s.sp, transferState.CurrentSession.Context.Uri)
+		tracks, err := NewTrackListFromContext(s.sp, transferState.CurrentSession.Context)
 		if err != nil {
 			return fmt.Errorf("failed creating track list: %w", err)
 		}
-
-		currentTrack := librespot.ContextTrackToProvidedTrack(transferState.Playback.CurrentTrack)
 
 		s.withState(func(s *State) {
 			s.isActive = true
@@ -143,7 +140,6 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			s.playerState.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
 			s.playerState.PlaybackSpeed = transferState.Playback.PlaybackSpeed
 			s.playerState.IsPaused = transferState.Playback.IsPaused
-			s.playerState.Track = currentTrack
 
 			// current session
 			s.playerState.PlayOrigin = transferState.CurrentSession.PlayOrigin
@@ -165,11 +161,11 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		})
 
 		if err := tracks.Seek(func(track *connectpb.ContextTrack) bool {
-			if len(track.Uid) > 0 && track.Uid == currentTrack.Uid {
+			if len(track.Uid) > 0 && track.Uid == transferState.Playback.CurrentTrack.Uid {
 				return true
-			} else if len(track.Uri) > 0 && track.Uri == currentTrack.Uri {
+			} else if len(track.Uri) > 0 && track.Uri == transferState.Playback.CurrentTrack.Uri {
 				return true
-			} else if len(track.Gid) > 0 && librespot.TrackId(track.Gid).Uri() == currentTrack.Uri {
+			} else if len(track.Gid) > 0 && librespot.TrackId(track.Gid).Uri() == transferState.Playback.CurrentTrack.Uri {
 				return true
 			} else {
 				return false
@@ -179,6 +175,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		s.withState(func(s *State) {
+			s.playerState.Track = tracks.CurrentTrack()
 			s.playerState.PrevTracks = tracks.PrevTracks()
 			s.playerState.NextTracks = tracks.NextTracks()
 			s.playerState.Index = tracks.Index()
@@ -197,6 +194,56 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		return nil
+	case "play":
+		tracks, err := NewTrackListFromContext(s.sp, req.Command.Context)
+		if err != nil {
+			return fmt.Errorf("failed creating track list: %w", err)
+		}
+
+		s.withState(func(s *State) {
+			s.playerState.IsPaused = req.Command.Options.InitiallyPaused
+
+			s.playerState.PlayOrigin = req.Command.PlayOrigin
+			s.playerState.ContextUri = req.Command.Context.Uri
+			s.playerState.ContextUrl = req.Command.Context.Url
+			s.playerState.ContextRestrictions = req.Command.Context.Restrictions
+			s.playerState.Suppressions = req.Command.Options.Suppressions
+
+			s.playerState.Timestamp = time.Now().UnixMilli()
+			s.playerState.PositionAsOfTimestamp = 0
+		})
+
+		// if we fail to seek, just fallback to the first track
+		tracks.TrySeek(func(track *connectpb.ContextTrack) bool {
+			if len(req.Command.Options.SkipTo.TrackUid) > 0 && req.Command.Options.SkipTo.TrackUid == track.Uid {
+				return true
+			} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
+				return true
+			} else {
+				return false
+			}
+		})
+
+		s.withState(func(s *State) {
+			s.playerState.Track = tracks.CurrentTrack()
+			s.playerState.PrevTracks = tracks.PrevTracks()
+			s.playerState.NextTracks = tracks.NextTracks()
+			s.playerState.Index = tracks.Index()
+		})
+
+		// load current track into stream
+		if err := s.loadCurrentTrack(); err != nil {
+			return fmt.Errorf("failed loading current track: %w", err)
+		}
+
+		// start playing if not initially paused
+		if !req.Command.Options.InitiallyPaused {
+			if err := s.play(); err != nil {
+				return fmt.Errorf("failed playing: %w", err)
+			}
+		}
+
+		return nil
 	case "pause":
 		if s.stream != nil {
 			s.stream.Pause()
@@ -204,6 +251,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		s.updateState(func(s *State) {
 			s.playerState.IsPaused = true
+			// TODO: update player position
 		})
 		return nil
 	case "resume":
@@ -213,6 +261,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		s.updateState(func(s *State) {
 			s.playerState.IsPaused = false
+			// TODO: update player position
 		})
 		return nil
 	case "seek_to":

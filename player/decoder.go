@@ -88,3 +88,7 @@ func (s *sampleDecoder) Seek(offset int64, whence int) (int64, error) {
 
 	return offset, nil
 }
+
+func (s *sampleDecoder) Position() int64 {
+	return s.r.Position() * 1000 / SampleRate
+}

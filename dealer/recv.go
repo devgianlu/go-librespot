@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"io"
 	"strings"
 )
@@ -41,19 +42,45 @@ type RequestPayload struct {
 	TargetAliasId  string `json:"target_alias_id"`
 	SentByDeviceId string `json:"sent_by_device_id"`
 	Command        struct {
-		Endpoint      string `json:"endpoint"`
-		Data          []byte `json:"data"`
-		Position      int64  `json:"position"`
-		Relative      string `json:"relative"`
+		Endpoint      string                `json:"endpoint"`
+		Data          []byte                `json:"data"`
+		Position      int64                 `json:"position"`
+		Relative      string                `json:"relative"`
+		Context       *connectpb.Context    `json:"context"`
+		PlayOrigin    *connectpb.PlayOrigin `json:"play_origin"`
 		LoggingParams struct {
-			DeviceIdentifier string `json:"device_identifier"`
+			CommandInitiatedTime int64    `json:"command_initiated_time"`
+			PageInstanceIds      []string `json:"page_instance_ids"`
+			InteractionIds       []string `json:"interaction_ids"`
+			DeviceIdentifier     string   `json:"device_identifier"`
 		} `json:"logging_params"`
 		Options struct {
-			RestorePaused   string `json:"restore_paused"`
-			RestorePosition string `json:"restore_position"`
-			RestoreTrack    string `json:"restore_track"`
-			License         string `json:"license"`
+			RestorePaused       string `json:"restore_paused"`
+			RestorePosition     string `json:"restore_position"`
+			RestoreTrack        string `json:"restore_track"`
+			AlwaysPlaySomething bool   `json:"always_play_something"`
+			SkipTo              struct {
+				TrackUid   string `json:"track_uid"`
+				TrackUri   string `json:"track_uri"`
+				TrackIndex int    `json:"track_index"`
+			} `json:"skip_to"`
+			InitiallyPaused       bool                                    `json:"initially_paused"`
+			SystemInitiated       bool                                    `json:"system_initiated"`
+			PlayerOptionsOverride *connectpb.ContextPlayerOptionOverrides `json:"player_options_override"`
+			Suppressions          *connectpb.Suppressions                 `json:"suppressions"`
+			PrefetchLevel         string                                  `json:"prefetch_level"`
+			AudioStream           string                                  `json:"audio_stream"`
+			SessionId             string                                  `json:"session_id"`
+			License               string                                  `json:"license"`
 		} `json:"options"`
+		PlayOptions struct {
+			OverrideRestrictions bool   `json:"override_restrictions"`
+			OnlyForLocalDevice   bool   `json:"only_for_local_device"`
+			SystemInitiated      bool   `json:"system_initiated"`
+			Reason               string `json:"reason"`
+			Operation            string `json:"operation"`
+			Trigger              string `json:"trigger"`
+		} `json:"play_options"`
 		FromDeviceIdentifier string `json:"from_device_identifier"`
 	} `json:"command"`
 }
