@@ -9,7 +9,7 @@ import (
 	downloadpb "go-librespot/proto/spotify/download"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"go-librespot/spclient"
-	"net/http"
+	"io"
 	"time"
 )
 
@@ -36,6 +36,7 @@ const (
 	playerCmdNew playerCmdType = iota
 	playerCmdPlay
 	playerCmdStop
+	playerCmdSeek
 	playerCmdVolume
 	playerCmdClose
 )
@@ -107,6 +108,11 @@ loop:
 				cmd.resp <- struct{}{}
 
 				p.ev <- Event{Type: EventTypeStopped}
+			case playerCmdSeek:
+				// seek directly with milliseconds
+				pp := players[cmd.data.(playerCmdSeekData).idx]
+				_, err := pp.(io.Seeker).Seek(cmd.data.(playerCmdSeekData).pos, io.SeekStart)
+				cmd.resp <- err
 			case playerCmdVolume:
 				vol := cmd.data.(float64)
 				for _, pp := range players {
@@ -219,23 +225,23 @@ func (p *Player) NewStream(tid librespot.TrackId) (*Stream, error) {
 		return nil, fmt.Errorf("unknown storage resolve result: %s", storageResolve.Result)
 	}
 
-	req, _ := http.NewRequest("GET", trackUrl, nil)
-	resp, err := http.DefaultClient.Do(req)
+	rawStream, err := audio.NewHttpChunkedReader(trackUrl)
 	if err != nil {
-		return nil, fmt.Errorf("failed retreving stream: %w", err)
+		return nil, fmt.Errorf("failed initializing chunked reader: %w", err)
 	}
 
-	dec, err := audio.NewAesAudioDecryptor(resp.Body, audioKey)
+	// TODO: consider decrypting in the HttpChunkedReader
+	decryptedStream, err := audio.NewAesAudioDecryptor(rawStream, audioKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
 	}
 
-	norm, err := readReplayGainMetadata(dec)
+	audioStream, norm, err := audio.ExtractReplayGainMetadata(decryptedStream, rawStream.Size())
 	if err != nil {
 		return nil, fmt.Errorf("failed reading ReplayGain metadata: %w", err)
 	}
 
-	stream, err := oggvorbis.NewReader(dec)
+	stream, err := oggvorbis.NewReader(audioStream)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}

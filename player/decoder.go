@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/jfreymuth/oggvorbis"
 	log "github.com/sirupsen/logrus"
+	"go-librespot/audio"
 	"io"
 	"math"
 	"sync"
@@ -17,7 +18,7 @@ type sampleDecoder struct {
 	stop bool
 }
 
-func newSampleDecoder(reader *oggvorbis.Reader, norm *ReplayGain) *sampleDecoder {
+func newSampleDecoder(reader *oggvorbis.Reader, norm *audio.ReplayGain) *sampleDecoder {
 	// TODO: use ReplayGain metadata for normalisation
 	return &sampleDecoder{r: reader, c: make(chan [Channels * 4]byte, 65536)}
 }
@@ -70,4 +71,20 @@ func (s *sampleDecoder) Read(p []byte) (n int, err error) {
 func (s *sampleDecoder) Close() error {
 	s.stop = true
 	return nil
+}
+
+// Seek will seek the stream to the offset position in milliseconds.
+func (s *sampleDecoder) Seek(offset int64, whence int) (int64, error) {
+	if whence != io.SeekStart {
+		panic("unsupported seek whence") // TODO
+	}
+
+	// TODO: clear the buffer?
+
+	pos := offset * SampleRate / 1000
+	if err := s.r.SetPosition(pos); err != nil {
+		return 0, err
+	}
+
+	return offset, nil
 }

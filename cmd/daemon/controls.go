@@ -6,6 +6,7 @@ import (
 	librespot "go-librespot"
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
+	"time"
 )
 
 func (s *Session) handlePlayerEvent(ev *player.Event) {
@@ -36,9 +37,11 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 }
 
 func (s *Session) loadCurrentTrack() error {
+	var trackPosition int64
 	var trackId librespot.TrackId
 	s.updateState(func(s *State) {
 		trackId = librespot.TrackIdFromUri(s.playerState.Track.Uri)
+		trackPosition = time.Now().UnixMilli() - s.playerState.Timestamp + s.playerState.PositionAsOfTimestamp
 
 		s.playerState.IsPlaying = true
 		s.playerState.IsBuffering = true
@@ -49,7 +52,10 @@ func (s *Session) loadCurrentTrack() error {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
 
-	// TODO: seek to position
+	log.Debugf("seek track to %dms", trackPosition)
+	if err := stream.SeekMs(trackPosition); err != nil {
+		return fmt.Errorf("failed seeking track: %w", err)
+	}
 
 	s.updateState(func(s *State) {
 		s.playerState.Duration = int64(*stream.Track.Duration)
