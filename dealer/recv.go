@@ -41,9 +41,14 @@ type RequestPayload struct {
 	TargetAliasId  string `json:"target_alias_id"`
 	SentByDeviceId string `json:"sent_by_device_id"`
 	Command        struct {
-		Endpoint string `json:"endpoint"`
-		Data     []byte `json:"data"`
-		Options  struct {
+		Endpoint      string `json:"endpoint"`
+		Data          []byte `json:"data"`
+		Position      int64  `json:"position"`
+		Relative      string `json:"relative"`
+		LoggingParams struct {
+			DeviceIdentifier string `json:"device_identifier"`
+		} `json:"logging_params"`
+		Options struct {
 			RestorePaused   string `json:"restore_paused"`
 			RestorePosition string `json:"restore_position"`
 			RestoreTrack    string `json:"restore_track"`

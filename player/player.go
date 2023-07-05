@@ -35,6 +35,7 @@ type playerCmdType int
 const (
 	playerCmdNew playerCmdType = iota
 	playerCmdPlay
+	playerCmdPause
 	playerCmdStop
 	playerCmdSeek
 	playerCmdVolume
@@ -99,6 +100,13 @@ loop:
 				cmd.resp <- struct{}{}
 
 				p.ev <- Event{Type: EventTypePlaying}
+			case playerCmdPause:
+				pp := players[cmd.data.(int)]
+				pp.Pause()
+
+				cmd.resp <- struct{}{}
+
+				p.ev <- Event{Type: EventTypePaused}
 			case playerCmdStop:
 				pp := players[cmd.data.(int)]
 				_ = pp.Close()

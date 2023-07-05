@@ -16,6 +16,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"strings"
 	"sync"
+	"time"
 )
 
 const VolumeSteps = 64
@@ -151,7 +152,10 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			s.playerState.ContextRestrictions = transferState.CurrentSession.Context.Restrictions
 			s.playerState.Suppressions = transferState.CurrentSession.Suppressions
 
-			s.playerState.ContextMetadata = transferState.CurrentSession.Context.Metadata
+			s.playerState.ContextMetadata = map[string]string{}
+			for k, v := range transferState.CurrentSession.Context.Metadata {
+				s.playerState.ContextMetadata[k] = v
+			}
 			for k, v := range tracks.Metadata() {
 				s.playerState.ContextMetadata[k] = v
 			}
@@ -192,6 +196,41 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			}
 		}
 
+		return nil
+	case "pause":
+		if s.stream != nil {
+			s.stream.Pause()
+		}
+
+		s.updateState(func(s *State) {
+			s.playerState.IsPaused = true
+		})
+		return nil
+	case "resume":
+		if s.stream != nil {
+			s.stream.Play()
+		}
+
+		s.updateState(func(s *State) {
+			s.playerState.IsPaused = false
+		})
+		return nil
+	case "seek_to":
+		if req.Command.Relative != "beginning" {
+			log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
+			return nil
+		}
+
+		if s.stream != nil {
+			if err := s.stream.SeekMs(req.Command.Position); err != nil {
+				return fmt.Errorf("failed seeking stream: %w", err)
+			}
+		}
+
+		s.updateState(func(s *State) {
+			s.playerState.Timestamp = time.Now().UnixMilli()
+			s.playerState.PositionAsOfTimestamp = req.Command.Position
+		})
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)

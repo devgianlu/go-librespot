@@ -21,6 +21,12 @@ func (s *Stream) Play() {
 	<-resp
 }
 
+func (s *Stream) Pause() {
+	resp := make(chan any, 1)
+	s.p.cmd <- playerCmd{typ: playerCmdPause, data: s.idx, resp: resp}
+	<-resp
+}
+
 func (s *Stream) Stop() {
 	resp := make(chan any, 1)
 	s.p.cmd <- playerCmd{typ: playerCmdStop, data: s.idx, resp: resp}
