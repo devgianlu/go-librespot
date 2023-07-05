@@ -18,9 +18,16 @@ type State struct {
 	lastCommand *dealer.RequestPayload
 }
 
+func (s *State) reset() {
+	s.isActive = false
+	s.playerState = &connectpb.PlayerState{
+		IsSystemInitiated: true,
+		Options:           &connectpb.ContextPlayerOptions{},
+	}
+}
+
 func (s *Session) initState() {
 	s.state = &State{
-		isActive:    false,
 		lastCommand: nil,
 		deviceInfo: &connectpb.DeviceInfo{
 			CanPlay:               true,
@@ -58,11 +65,8 @@ func (s *Session) initState() {
 				ConnectCapabilities:        "",
 			},
 		},
-		playerState: &connectpb.PlayerState{
-			IsSystemInitiated: true,
-			Options:           &connectpb.ContextPlayerOptions{},
-		},
 	}
+	s.state.reset()
 }
 
 func (s *Session) updateState(f func(s *State)) {

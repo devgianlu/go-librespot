@@ -28,6 +28,8 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			s.playerState.IsPaused = true
 			s.playerState.IsBuffering = false
 		})
+	case player.EventTypeStopped:
+		// do nothing
 	default:
 		panic("unhandled player event")
 	}

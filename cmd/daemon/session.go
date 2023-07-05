@@ -78,7 +78,32 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 		log.Infof("logging out from %s", s.ap.Username())
 		s.Close()
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
-		// TODO: detect switching to another device and logout ourselves
+		var clusterUpdate connectpb.ClusterUpdate
+		if err := proto.Unmarshal(msg.Payload, &clusterUpdate); err != nil {
+			return fmt.Errorf("failed unmarshalling ClusterUpdate: %w", err)
+		}
+
+		var stopBeingActive bool
+		s.withState(func(ss *State) {
+			stopBeingActive = ss.isActive && clusterUpdate.Cluster.ActiveDeviceId != s.app.deviceId
+		})
+
+		// We are still the active device, do not quit
+		if !stopBeingActive {
+			return nil
+		}
+
+		if s.stream != nil {
+			<-s.stream.Stop()
+		}
+
+		// FIXME: Fails with 422: Ignoring BECAME_INACTIVE
+		s.withState(func(s *State) { s.reset() })
+		if err := s.putConnectState(connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
+			return fmt.Errorf("failed inactive state put: %w", err)
+		}
+
+		// TODO: logout if using zeroconf (?)
 	}
 
 	return nil
