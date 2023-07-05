@@ -5,7 +5,7 @@ import (
 	"github.com/hajimehoshi/oto/v2"
 	"github.com/jfreymuth/oggvorbis"
 	librespot "go-librespot"
-	audiokey "go-librespot/audio_key"
+	"go-librespot/audio"
 	downloadpb "go-librespot/proto/spotify/download"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"go-librespot/spclient"
@@ -21,7 +21,7 @@ const MaxVolume = 65535
 
 type Player struct {
 	sp       *spclient.Spclient
-	audioKey *audiokey.AudioKeyProvider
+	audioKey *audio.KeyProvider
 
 	oto *oto.Context
 	cmd chan playerCmd
@@ -46,7 +46,7 @@ type playerCmd struct {
 	resp chan any
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audiokey.AudioKeyProvider) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider) (*Player, error) {
 	otoCtx, readyChan, err := oto.NewContextWithOptions(&oto.NewContextOptions{
 		SampleRate:   SampleRate,
 		ChannelCount: Channels,
@@ -225,7 +225,7 @@ func (p *Player) NewStream(tid librespot.TrackId) (*Stream, error) {
 		return nil, fmt.Errorf("failed retreving stream: %w", err)
 	}
 
-	dec, err := audiokey.NewAesAudioDecryptor(resp.Body, audioKey)
+	dec, err := audio.NewAesAudioDecryptor(resp.Body, audioKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
 	}

@@ -6,7 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/ap"
-	audiokey "go-librespot/audio_key"
+	"go-librespot/audio"
 	"go-librespot/dealer"
 	"go-librespot/login5"
 	"go-librespot/player"
@@ -30,7 +30,7 @@ type Session struct {
 	sp     *spclient.Spclient
 	dealer *dealer.Dealer
 
-	audioKey *audiokey.AudioKeyProvider
+	audioKey *audio.KeyProvider
 
 	player *player.Player
 
@@ -273,7 +273,7 @@ func (s *Session) Connect(creds_ SessionCredentials) (err error) {
 	s.initState()
 
 	// init audio key provider
-	s.audioKey = audiokey.NewAudioKeyProvider(s.ap)
+	s.audioKey = audio.NewAudioKeyProvider(s.ap)
 
 	// init player
 	s.player, err = player.NewPlayer(s.sp, s.audioKey)

@@ -1,4 +1,4 @@
-package audio_key
+package audio
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"go-librespot/ap"
 )
 
-type AudioKeyProvider struct {
+type KeyProvider struct {
 	ap *ap.Accesspoint
 
 	reqChan  chan keyRequest
@@ -28,15 +28,15 @@ type keyResponse struct {
 	err error
 }
 
-func NewAudioKeyProvider(ap *ap.Accesspoint) *AudioKeyProvider {
-	p := &AudioKeyProvider{ap: ap}
+func NewAudioKeyProvider(ap *ap.Accesspoint) *KeyProvider {
+	p := &KeyProvider{ap: ap}
 	p.reqChan = make(chan keyRequest)
 	p.stopChan = make(chan struct{}, 1)
 	go p.recvLoop()
 	return p
 }
 
-func (p *AudioKeyProvider) recvLoop() {
+func (p *KeyProvider) recvLoop() {
 	ch := p.ap.Receive(ap.PacketTypeAesKey, ap.PacketTypeAesKeyError)
 
 	seq := uint32(0)
@@ -94,7 +94,7 @@ func (p *AudioKeyProvider) recvLoop() {
 	}
 }
 
-func (p *AudioKeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
+func (p *KeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
 	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse)}
 	p.reqChan <- req
 
@@ -106,6 +106,6 @@ func (p *AudioKeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
 	return resp.key, nil
 }
 
-func (p *AudioKeyProvider) Close() {
+func (p *KeyProvider) Close() {
 	p.stopChan <- struct{}{}
 }
