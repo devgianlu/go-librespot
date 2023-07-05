@@ -6,9 +6,10 @@ import (
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"math/big"
 	"regexp"
+	"strings"
 )
 
-var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{22})$")
+var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{21,22})$")
 
 func ContextTrackToProvidedTrack(track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
 	var uri string
@@ -40,7 +41,8 @@ func (id TrackId) Hex() string {
 }
 
 func (id TrackId) Base62() string {
-	return new(big.Int).SetBytes(id).Text(62)
+	s := new(big.Int).SetBytes(id).Text(62)
+	return strings.Repeat("0", 22-len(s)) + s
 }
 
 func (id TrackId) Uri() string {
@@ -61,14 +63,5 @@ func TrackIdFromUri(uri string) TrackId {
 		panic("failed decoding base62 track uri")
 	}
 
-	data := i.Bytes()
-	if len(data) > 16 {
-		panic("invalid track gid")
-	} else if len(data) < 16 {
-		paddedData := make([]byte, 16)
-		copy(paddedData[16-len(data):], data)
-		return paddedData
-	} else {
-		return data
-	}
+	return i.FillBytes(make([]byte, 16))
 }
