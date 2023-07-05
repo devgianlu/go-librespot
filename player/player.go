@@ -35,6 +35,7 @@ type playerCmdType int
 const (
 	playerCmdNew playerCmdType = iota
 	playerCmdPlay
+	playerCmdStop
 	playerCmdVolume
 	playerCmdClose
 )
@@ -81,11 +82,11 @@ loop:
 			case playerCmdNew:
 				for i := 0; i < MaxPlayers; i++ {
 					if players[i] == nil {
+						players[i] = cmd.data.(oto.Player)
+
 						if p.startedPlaying.IsZero() {
 							p.startedPlaying = time.Now()
 						}
-
-						players[i] = cmd.data.(oto.Player)
 						cmd.resp <- i
 						break
 					}
@@ -94,7 +95,18 @@ loop:
 				pp := players[cmd.data.(int)]
 				pp.Play()
 
+				cmd.resp <- struct{}{}
+
 				p.ev <- Event{Type: EventTypePlaying}
+			case playerCmdStop:
+				pp := players[cmd.data.(int)]
+				_ = pp.Close()
+				players[cmd.data.(int)] = nil
+
+				p.startedPlaying = time.Time{}
+				cmd.resp <- struct{}{}
+
+				p.ev <- Event{Type: EventTypeStopped}
 			case playerCmdVolume:
 				vol := cmd.data.(float64)
 				for _, pp := range players {

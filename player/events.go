@@ -6,6 +6,7 @@ const (
 	EventTypePlaying EventType = iota
 	EventTypeBuffering
 	EventTypePaused
+	EventTypeStopped
 )
 
 type Event struct {

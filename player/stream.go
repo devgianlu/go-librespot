@@ -10,6 +10,14 @@ type Stream struct {
 	File  *metadatapb.AudioFile
 }
 
-func (s *Stream) Play() {
-	s.p.cmd <- playerCmd{typ: playerCmdPlay, data: s.idx}
+func (s *Stream) Play() <-chan any {
+	resp := make(chan any, 1)
+	s.p.cmd <- playerCmd{typ: playerCmdPlay, data: s.idx, resp: resp}
+	return resp
+}
+
+func (s *Stream) Stop() <-chan any {
+	resp := make(chan any, 1)
+	s.p.cmd <- playerCmd{typ: playerCmdStop, data: s.idx, resp: resp}
+	return resp
 }
