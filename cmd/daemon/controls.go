@@ -11,12 +11,6 @@ import (
 
 func (s *Session) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
-	case player.EventTypeBuffering:
-		s.updateState(func(s *State) {
-			s.playerState.IsPlaying = true
-			s.playerState.IsPaused = false
-			s.playerState.IsBuffering = true
-		})
 	case player.EventTypePlaying:
 		s.updateState(func(s *State) {
 			s.playerState.IsPlaying = true
@@ -29,6 +23,32 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			s.playerState.IsPaused = true
 			s.playerState.IsBuffering = false
 		})
+	case player.EventTypeNotPlaying:
+		s.withState(func(s *State) {
+			if s.tracks != nil {
+				s.tracks.GoNext()
+
+				s.playerState.Track = s.tracks.CurrentTrack()
+				s.playerState.PrevTracks = s.tracks.PrevTracks()
+				s.playerState.NextTracks = s.tracks.NextTracks()
+				s.playerState.Index = s.tracks.Index()
+			}
+
+			s.playerState.Timestamp = time.Now().UnixMilli()
+			s.playerState.PositionAsOfTimestamp = 0
+		})
+
+		// load current track into stream
+		if err := s.loadCurrentTrack(); err != nil {
+			log.WithError(err).Error("failed loading current track")
+			return
+		}
+
+		// start playing
+		if err := s.play(); err != nil {
+			log.WithError(err).Error("failed playing")
+			return
+		}
 	case player.EventTypeStopped:
 		// do nothing
 	default:

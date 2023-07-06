@@ -4,9 +4,9 @@ type EventType int
 
 const (
 	EventTypePlaying EventType = iota
-	EventTypeBuffering
 	EventTypePaused
 	EventTypeStopped
+	EventTypeNotPlaying
 )
 
 type Event struct {

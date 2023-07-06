@@ -66,7 +66,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider) (*Player, err
 		audioKey: audioKey,
 		oto:      otoCtx,
 		cmd:      make(chan playerCmd),
-		ev:       make(chan Event, 1), // FIXME: is too messsy?
+		ev:       make(chan Event, 1), // FIXME: is too messy?
 	}
 	go p.manageLoop()
 
@@ -75,6 +75,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider) (*Player, err
 
 func (p *Player) manageLoop() {
 	players := [MaxPlayers]oto.Player{}
+	started := [MaxPlayers]bool{}
 
 loop:
 	for {
@@ -96,25 +97,20 @@ loop:
 			case playerCmdPlay:
 				pp := players[cmd.data.(int)]
 				pp.Play()
-
+				started[cmd.data.(int)] = true
 				cmd.resp <- struct{}{}
-
 				p.ev <- Event{Type: EventTypePlaying}
 			case playerCmdPause:
 				pp := players[cmd.data.(int)]
 				pp.Pause()
-
 				cmd.resp <- struct{}{}
-
 				p.ev <- Event{Type: EventTypePaused}
 			case playerCmdStop:
 				pp := players[cmd.data.(int)]
 				_ = pp.Close()
+				started[cmd.data.(int)] = false
 				players[cmd.data.(int)] = nil
-
-				p.startedPlaying = time.Time{}
 				cmd.resp <- struct{}{}
-
 				p.ev <- Event{Type: EventTypeStopped}
 			case playerCmdSeek:
 				// seek directly with milliseconds
@@ -136,12 +132,15 @@ loop:
 				panic("unknown player command")
 			}
 		default:
-			for _, pp := range players {
-				if pp == nil {
+			// FIXME: this is all awful
+			for i, pp := range players {
+				if pp == nil || !started[i] {
 					continue
 				}
 
-				pp.IsPlaying() // TODO: do something with this
+				if !pp.IsPlaying() {
+					p.ev <- Event{Type: EventTypeNotPlaying}
+				}
 			}
 
 			time.Sleep(10 * time.Millisecond)
