@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-06/schema#",
+  "$ref": "#/definitions/config",
+  "definitions": {
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "log_level": {
+          "type": "string",
+          "enum": ["panic", "fatal", "error", "warn", "warning", "info", "debug", "trace"],
+          "default": "info"
+        },
+        "device_name": {
+          "type": "string",
+          "default": "go-librespot"
+        },
+        "auth_method": {
+          "type": "string",
+          "enum": ["password", "zeroconf"],
+          "default": "zeroconf"
+        },
+        "username": {
+          "type": "string",
+          "default": ""
+        },
+        "password": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+      ],
+      "title": "config"
+    }
+  }
+}

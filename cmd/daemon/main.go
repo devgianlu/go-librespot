@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/ilyakaznacheev/cleanenv"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/apresolve"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
@@ -23,8 +24,8 @@ type App struct {
 	sessLock sync.Mutex
 }
 
-func NewApp(deviceName string) (app *App, err error) {
-	app = &App{deviceName: deviceName}
+func NewApp(cfg *Config) (app *App, err error) {
+	app = &App{deviceName: cfg.DeviceName}
 	app.resolver = apresolve.NewApResolver()
 
 	app.deviceType = devicespb.DeviceType_COMPUTER
@@ -100,25 +101,44 @@ func (app *App) UserPass(username, password string) error {
 	return nil
 }
 
-const UseZeroconf = true
-const AuthUsername = "xxxx"
-const AuthPassword = "xxxx"
+type Config struct {
+	LogLevel   string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
+	DeviceName string `yaml:"device_name" env:"DEVICE_NAME" env-default:"go-librespot"`
+	AuthMethod string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
+	Username   string `yaml:"username" env:"USERNAME" env-default:""`
+	Password   string `yaml:"password" env:"PASSWORD" env-default:""`
+}
 
 func main() {
-	log.SetLevel(log.TraceLevel)
+	var cfg Config
+	if err := cleanenv.ReadConfig("config.yml", &cfg); err != nil {
+		log.WithError(err).Fatal("failed reading configuration")
+	}
 
-	app, err := NewApp("go-librespot test")
+	// parse and set log level
+	logLevel, err := log.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		log.WithError(err).Fatalf("invalid log level: %s", cfg.LogLevel)
+	} else {
+		log.SetLevel(logLevel)
+	}
+
+	// create new app
+	app, err := NewApp(&cfg)
 	if err != nil {
 		log.WithError(err).Fatal("failed creating app")
 	}
 
-	if UseZeroconf {
+	switch cfg.AuthMethod {
+	case "zeroconf":
 		if err := app.Zeroconf(); err != nil {
 			log.WithError(err).Fatal("failed running zeroconf")
 		}
-	} else {
-		if err := app.UserPass(AuthUsername, AuthPassword); err != nil {
+	case "password":
+		if err := app.UserPass(cfg.Username, cfg.Password); err != nil {
 			log.WithError(err).Fatal("failed running with username and password")
 		}
+	default:
+		log.Fatalf("unknown auth method: %s", cfg.AuthMethod)
 	}
 }
