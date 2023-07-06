@@ -160,12 +160,13 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			// TODO: transfer queue
 		})
 
+		currentTrack := librespot.ContextTrackToProvidedTrack(transferState.Playback.CurrentTrack)
 		if err := tracks.Seek(func(track *connectpb.ContextTrack) bool {
-			if len(track.Uid) > 0 && track.Uid == transferState.Playback.CurrentTrack.Uid {
+			if len(track.Uid) > 0 && track.Uid == currentTrack.Uid {
 				return true
-			} else if len(track.Uri) > 0 && track.Uri == transferState.Playback.CurrentTrack.Uri {
+			} else if len(track.Uri) > 0 && track.Uri == currentTrack.Uri {
 				return true
-			} else if len(track.Gid) > 0 && librespot.TrackId(track.Gid).Uri() == transferState.Playback.CurrentTrack.Uri {
+			} else if len(track.Gid) > 0 && librespot.TrackId(track.Gid).Uri() == currentTrack.Uri {
 				return true
 			} else {
 				return false
