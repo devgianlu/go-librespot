@@ -22,6 +22,8 @@ type App struct {
 
 	sess     *Session
 	sessLock sync.Mutex
+
+	server *ApiServer
 }
 
 func NewApp(cfg *Config) (app *App, err error) {
@@ -104,6 +106,7 @@ func (app *App) UserPass(username, password string) error {
 type Config struct {
 	LogLevel   string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
 	DeviceName string `yaml:"device_name" env:"DEVICE_NAME" env-default:"go-librespot"`
+	ServerPort int    `yaml:"server_port" env:"SERVER_PORT" env-default:"0"`
 	AuthMethod string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
 	Username   string `yaml:"username" env:"USERNAME" env-default:""`
 	Password   string `yaml:"password" env:"PASSWORD" env-default:""`
@@ -127,6 +130,16 @@ func main() {
 	app, err := NewApp(&cfg)
 	if err != nil {
 		log.WithError(err).Fatal("failed creating app")
+	}
+
+	// create api server if needed
+	if cfg.ServerPort != 0 {
+		app.server, err = NewApiServer(cfg.ServerPort)
+		if err != nil {
+			log.WithError(err).Fatal("failed creating api server")
+		}
+	} else {
+		app.server, _ = NewStubApiServer()
 	}
 
 	switch cfg.AuthMethod {

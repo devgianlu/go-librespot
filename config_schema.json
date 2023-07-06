@@ -15,6 +15,10 @@
           "type": "string",
           "default": "go-librespot"
         },
+        "server_port": {
+          "type": "integer",
+          "default": 0
+        },
         "auth_method": {
           "type": "string",
           "enum": ["password", "zeroconf"],

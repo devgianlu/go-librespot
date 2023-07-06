@@ -17,11 +17,19 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			s.playerState.IsPaused = false
 			s.playerState.IsBuffering = false
 		})
+
+		s.app.server.Emit(&ApiEvent{
+			Type: "playing",
+		})
 	case player.EventTypePaused:
 		s.updateState(func(s *State) {
 			s.playerState.IsPlaying = true
 			s.playerState.IsPaused = true
 			s.playerState.IsBuffering = false
+		})
+
+		s.app.server.Emit(&ApiEvent{
+			Type: "paused",
 		})
 	case player.EventTypeNotPlaying:
 		s.withState(func(s *State) {
@@ -93,6 +101,16 @@ func (s *Session) loadCurrentTrack() error {
 		s.playerState.IsBuffering = false
 	})
 
+	s.app.server.Emit(&ApiEvent{
+		Type: "track",
+		Data: ApiEventDataTrack{
+			Uri:      librespot.TrackId(stream.Track.Gid).Uri(),
+			Name:     *stream.Track.Name,
+			Position: int(trackPosition),
+			Duration: int(*s.stream.Track.Duration),
+		},
+	})
+
 	s.stream = stream
 	return nil
 }
@@ -121,4 +139,12 @@ func (s *Session) updateVolume(newVal uint32) {
 	if err := s.putConnectState(connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after volume change")
 	}
+
+	s.app.server.Emit(&ApiEvent{
+		Type: "volume",
+		Data: ApiEventDataVolume{
+			Current: int(newVal),
+			Max:     player.MaxVolume,
+		},
+	})
 }
