@@ -150,3 +150,57 @@ func (tl *TracksList) CurrentTrack() *connectpb.ProvidedTrack {
 
 	return librespot.ContextTrackToProvidedTrack(page[tl.trackIdx])
 }
+
+func (tl *TracksList) GoNext() bool {
+	// Get the current page
+	page, _, err := tl.ctx.Page(tl.pageIdx)
+	if errors.Is(err, spclient.ErrNoMorePages) {
+		return false
+	} else if err != nil {
+		log.WithError(err).Errorf("failed loading page at %d", tl.pageIdx)
+		return false
+	}
+
+	// We fit in this page
+	if tl.trackIdx+1 < len(page) {
+		tl.trackIdx += 1
+		return true
+	}
+
+	// Get the next page
+	page, _, err = tl.ctx.Page(tl.pageIdx + 1)
+	if errors.Is(err, spclient.ErrNoMorePages) {
+		return false
+	} else if err != nil {
+		log.WithError(err).Errorf("failed loading page at %d", tl.pageIdx+1)
+		return false
+	}
+
+	tl.pageIdx, tl.trackIdx = tl.pageIdx+1, 0
+	return true
+}
+
+func (tl *TracksList) GoPrev() bool {
+	// We fit in the current page
+	if tl.trackIdx-1 >= 0 {
+		tl.trackIdx -= 1
+		return true
+	}
+
+	// Can we get the previous page?
+	if tl.pageIdx-1 < 0 {
+		return false
+	}
+
+	// Get the previous page
+	page, _, err := tl.ctx.Page(tl.pageIdx - 1)
+	if errors.Is(err, spclient.ErrNoMorePages) {
+		return false
+	} else if err != nil {
+		log.WithError(err).Errorf("failed loading page at %d", tl.pageIdx-1)
+		return false
+	}
+
+	tl.pageIdx, tl.trackIdx = tl.pageIdx-1, len(page)-1
+	return true
+}

@@ -10,10 +10,11 @@ import (
 )
 
 type State struct {
-	isActive   bool
-	deviceInfo *connectpb.DeviceInfo
-
+	isActive    bool
+	deviceInfo  *connectpb.DeviceInfo
 	playerState *connectpb.PlayerState
+
+	tracks *TracksList
 
 	lastCommand *dealer.RequestPayload
 }

@@ -37,6 +37,7 @@ type Session struct {
 
 	spotConnId string
 
+	// TODO: consider not locking this if we are modifying it always from the same routine
 	state     *State
 	stateLock sync.Mutex
 
@@ -176,6 +177,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		s.withState(func(s *State) {
+			s.tracks = tracks
 			s.playerState.Track = tracks.CurrentTrack()
 			s.playerState.PrevTracks = tracks.PrevTracks()
 			s.playerState.NextTracks = tracks.NextTracks()
@@ -226,6 +228,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		})
 
 		s.withState(func(s *State) {
+			s.tracks = tracks
 			s.playerState.Track = tracks.CurrentTrack()
 			s.playerState.PrevTracks = tracks.PrevTracks()
 			s.playerState.NextTracks = tracks.NextTracks()
@@ -281,6 +284,68 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			s.playerState.Timestamp = time.Now().UnixMilli()
 			s.playerState.PositionAsOfTimestamp = req.Command.Position
 		})
+		return nil
+	case "skip_prev":
+		// TODO: handle rewinding track if pos < 3000ms
+
+		var paused bool
+		s.withState(func(s *State) {
+			paused = s.playerState.IsPaused
+
+			if s.tracks != nil {
+				s.tracks.GoPrev()
+
+				s.playerState.Track = s.tracks.CurrentTrack()
+				s.playerState.PrevTracks = s.tracks.PrevTracks()
+				s.playerState.NextTracks = s.tracks.NextTracks()
+				s.playerState.Index = s.tracks.Index()
+			}
+
+			s.playerState.Timestamp = time.Now().UnixMilli()
+			s.playerState.PositionAsOfTimestamp = 0
+		})
+
+		// load current track into stream
+		if err := s.loadCurrentTrack(); err != nil {
+			return fmt.Errorf("failed loading current track: %w", err)
+		}
+
+		// start playing if not paused
+		if !paused {
+			if err := s.play(); err != nil {
+				return fmt.Errorf("failed playing: %w", err)
+			}
+		}
+		return nil
+	case "skip_next":
+		var paused bool
+		s.withState(func(s *State) {
+			paused = s.playerState.IsPaused
+
+			if s.tracks != nil {
+				s.tracks.GoNext()
+
+				s.playerState.Track = s.tracks.CurrentTrack()
+				s.playerState.PrevTracks = s.tracks.PrevTracks()
+				s.playerState.NextTracks = s.tracks.NextTracks()
+				s.playerState.Index = s.tracks.Index()
+			}
+
+			s.playerState.Timestamp = time.Now().UnixMilli()
+			s.playerState.PositionAsOfTimestamp = 0
+		})
+
+		// load current track into stream
+		if err := s.loadCurrentTrack(); err != nil {
+			return fmt.Errorf("failed loading current track: %w", err)
+		}
+
+		// start playing if not paused
+		if !paused {
+			if err := s.play(); err != nil {
+				return fmt.Errorf("failed playing: %w", err)
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)
