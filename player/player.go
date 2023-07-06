@@ -103,6 +103,7 @@ loop:
 			case playerCmdPause:
 				pp := players[cmd.data.(int)]
 				pp.Pause()
+				started[cmd.data.(int)] = false
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypePaused}
 			case playerCmdStop:
