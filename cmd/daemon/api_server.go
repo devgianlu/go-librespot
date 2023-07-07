@@ -53,7 +53,9 @@ type apiResponse struct {
 }
 
 type ApiResponseStatus struct {
-	Username string `json:"username"`
+	Username  string `json:"username"`
+	TrackUri  string `json:"track_uri"`
+	TrackName string `json:"track_name"`
 }
 
 type ApiEvent struct {

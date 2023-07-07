@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	"go-librespot/apresolve"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	"go-librespot/zeroconf"
@@ -69,6 +70,15 @@ func (app *App) newSession(creds SessionCredentials) (*Session, error) {
 func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 	switch req.Type {
 	case ApiRequestTypeStatus:
+		resp := &ApiResponseStatus{
+			Username: sess.ap.Username(),
+		}
+
+		if sess.stream != nil {
+			resp.TrackUri = librespot.TrackId(sess.stream.Track.Gid).Uri()
+			resp.TrackName = *sess.stream.Track.Name
+		}
+
 		return &ApiResponseStatus{
 			Username: sess.ap.Username(),
 		}, nil
