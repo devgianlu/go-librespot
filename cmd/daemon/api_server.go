@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"net"
@@ -21,7 +23,33 @@ type ApiServer struct {
 	clientsLock sync.RWMutex
 }
 
+var ErrNoSession = errors.New("no session")
+
+type ApiRequestType string
+
+const (
+	ApiRequestTypeStatus ApiRequestType = "status"
+	ApiRequestTypeResume ApiRequestType = "resume"
+	ApiRequestTypePause  ApiRequestType = "pause"
+)
+
 type ApiRequest struct {
+	Type ApiRequestType
+
+	resp chan apiResponse
+}
+
+func (r *ApiRequest) Reply(data any, err error) {
+	r.resp <- apiResponse{data, err}
+}
+
+type apiResponse struct {
+	data any
+	err  error
+}
+
+type ApiResponseStatus struct {
+	Username string `json:"username"`
 }
 
 type ApiEvent struct {
@@ -65,11 +93,37 @@ func NewStubApiServer() (*ApiServer, error) {
 	return s, nil
 }
 
+func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
+	req.resp = make(chan apiResponse, 1)
+	s.requests <- req
+	resp := <-req.resp
+	if errors.Is(resp.err, ErrNoSession) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	} else if resp.err != nil {
+		log.WithError(resp.err).Error("failed handling status request")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp.data)
+}
+
 func (s *ApiServer) serve() {
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{}"))
+	})
+	m.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
+	})
+	m.HandleFunc("/player/resume", func(w http.ResponseWriter, r *http.Request) {
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeResume}, w)
+	})
+	m.HandleFunc("/status/pause", func(w http.ResponseWriter, r *http.Request) {
+		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)

@@ -124,6 +124,15 @@ func (s *Session) play() error {
 	return nil
 }
 
+func (s *Session) pause() error {
+	if s.stream == nil {
+		return fmt.Errorf("no stream")
+	}
+
+	s.stream.Pause()
+	return nil
+}
+
 func (s *Session) updateVolume(newVal uint32) {
 	if newVal > player.MaxVolume {
 		newVal = player.MaxVolume

@@ -66,6 +66,23 @@ func (app *App) newSession(creds SessionCredentials) (*Session, error) {
 	return sess, nil
 }
 
+func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
+	switch req.Type {
+	case ApiRequestTypeStatus:
+		return &ApiResponseStatus{
+			Username: sess.ap.Username(),
+		}, nil
+	case ApiRequestTypeResume:
+		_ = sess.play()
+		return nil, nil
+	case ApiRequestTypePause:
+		_ = sess.pause()
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("unknown request type: %s", req.Type)
+	}
+}
+
 func (app *App) Zeroconf() error {
 	// pre fetch resolver endpoints
 	if err := app.resolver.FetchAll(); err != nil {
@@ -78,6 +95,23 @@ func (app *App) Zeroconf() error {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
 
+	var currentSession *Session
+
+	go func() {
+		for {
+			select {
+			case req := <-app.server.Receive():
+				if currentSession == nil {
+					req.Reply(nil, ErrNoSession)
+					break
+				}
+
+				data, err := app.handleApiRequest(req, currentSession)
+				req.Reply(data, err)
+			}
+		}
+	}()
+
 	return z.Serve(func(req zeroconf.NewUserRequest) bool {
 		sess, err := app.newSession(SessionBlobCredentials{
 			Username: req.Username,
@@ -88,6 +122,7 @@ func (app *App) Zeroconf() error {
 			return false
 		}
 
+		currentSession = sess
 		go sess.Run()
 		return true
 	})
@@ -98,6 +133,16 @@ func (app *App) UserPass(username, password string) error {
 	if err != nil {
 		return err
 	}
+
+	go func() {
+		for {
+			select {
+			case req := <-app.server.Receive():
+				data, err := app.handleApiRequest(req, sess)
+				req.Reply(data, err)
+			}
+		}
+	}()
 
 	sess.Run()
 	return nil

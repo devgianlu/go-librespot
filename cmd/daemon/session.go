@@ -249,9 +249,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "pause":
-		if s.stream != nil {
-			s.stream.Pause()
-		}
+		_ = s.pause()
 
 		s.updateState(func(s *State) {
 			s.playerState.IsPaused = true
