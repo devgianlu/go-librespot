@@ -78,6 +78,15 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 	case ApiRequestTypePause:
 		_ = sess.pause()
 		return nil, nil
+	case ApiRequestTypeSeek:
+		_ = sess.seek(req.Data.(int64))
+		return nil, nil
+	case ApiRequestTypePrev:
+		_ = sess.skipPrev()
+		return nil, nil
+	case ApiRequestTypeNext:
+		_ = sess.skipNext()
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}
@@ -95,6 +104,7 @@ func (app *App) Zeroconf() error {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
 
+	// TODO: unset this when logging out
 	var currentSession *Session
 
 	go func() {

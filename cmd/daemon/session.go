@@ -249,39 +249,18 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "pause":
-		_ = s.pause()
-
-		s.updateState(func(s *State) {
-			s.playerState.IsPaused = true
-			// TODO: update player position
-		})
-		return nil
+		return s.pause()
 	case "resume":
-		if s.stream != nil {
-			s.stream.Play()
-		}
-
-		s.updateState(func(s *State) {
-			s.playerState.IsPaused = false
-			// TODO: update player position
-		})
-		return nil
+		return s.play()
 	case "seek_to":
 		if req.Command.Relative != "beginning" {
 			log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
 			return nil
 		}
 
-		if s.stream != nil {
-			if err := s.stream.SeekMs(req.Command.Position); err != nil {
-				return fmt.Errorf("failed seeking stream: %w", err)
-			}
+		if err := s.seek(req.Command.Position); err != nil {
+			return fmt.Errorf("failed seeking stream: %w", err)
 		}
-
-		s.updateState(func(s *State) {
-			s.playerState.Timestamp = time.Now().UnixMilli()
-			s.playerState.PositionAsOfTimestamp = req.Command.Position
-		})
 
 		s.app.server.Emit(&ApiEvent{
 			Type: "seek",
@@ -293,66 +272,9 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		return nil
 	case "skip_prev":
 		// TODO: handle rewinding track if pos < 3000ms
-
-		var paused bool
-		s.withState(func(s *State) {
-			paused = s.playerState.IsPaused
-
-			if s.tracks != nil {
-				s.tracks.GoPrev()
-
-				s.playerState.Track = s.tracks.CurrentTrack()
-				s.playerState.PrevTracks = s.tracks.PrevTracks()
-				s.playerState.NextTracks = s.tracks.NextTracks()
-				s.playerState.Index = s.tracks.Index()
-			}
-
-			s.playerState.Timestamp = time.Now().UnixMilli()
-			s.playerState.PositionAsOfTimestamp = 0
-		})
-
-		// load current track into stream
-		if err := s.loadCurrentTrack(); err != nil {
-			return fmt.Errorf("failed loading current track: %w", err)
-		}
-
-		// start playing if not paused
-		if !paused {
-			if err := s.play(); err != nil {
-				return fmt.Errorf("failed playing: %w", err)
-			}
-		}
-		return nil
+		return s.skipPrev()
 	case "skip_next":
-		var paused bool
-		s.withState(func(s *State) {
-			paused = s.playerState.IsPaused
-
-			if s.tracks != nil {
-				s.tracks.GoNext()
-
-				s.playerState.Track = s.tracks.CurrentTrack()
-				s.playerState.PrevTracks = s.tracks.PrevTracks()
-				s.playerState.NextTracks = s.tracks.NextTracks()
-				s.playerState.Index = s.tracks.Index()
-			}
-
-			s.playerState.Timestamp = time.Now().UnixMilli()
-			s.playerState.PositionAsOfTimestamp = 0
-		})
-
-		// load current track into stream
-		if err := s.loadCurrentTrack(); err != nil {
-			return fmt.Errorf("failed loading current track: %w", err)
-		}
-
-		// start playing if not paused
-		if !paused {
-			if err := s.play(); err != nil {
-				return fmt.Errorf("failed playing: %w", err)
-			}
-		}
-		return nil
+		return s.skipNext()
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)
 	}

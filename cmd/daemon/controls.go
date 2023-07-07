@@ -121,6 +121,11 @@ func (s *Session) play() error {
 	}
 
 	s.stream.Play()
+
+	s.updateState(func(s *State) {
+		s.playerState.IsPaused = false
+		// TODO: update player position
+	})
 	return nil
 }
 
@@ -130,6 +135,94 @@ func (s *Session) pause() error {
 	}
 
 	s.stream.Pause()
+
+	s.updateState(func(s *State) {
+		s.playerState.IsPaused = true
+		// TODO: update player position
+	})
+	return nil
+}
+
+func (s *Session) seek(position int64) error {
+	if s.stream == nil {
+		return fmt.Errorf("no stream")
+	}
+
+	if err := s.stream.SeekMs(position); err != nil {
+		return err
+	}
+
+	s.updateState(func(s *State) {
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = position
+	})
+
+	return nil
+}
+
+func (s *Session) skipPrev() error {
+	var paused bool
+	s.withState(func(s *State) {
+		paused = s.playerState.IsPaused
+
+		if s.tracks != nil {
+			s.tracks.GoPrev()
+
+			s.playerState.Track = s.tracks.CurrentTrack()
+			s.playerState.PrevTracks = s.tracks.PrevTracks()
+			s.playerState.NextTracks = s.tracks.NextTracks()
+			s.playerState.Index = s.tracks.Index()
+		}
+
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = 0
+	})
+
+	// load current track into stream
+	if err := s.loadCurrentTrack(); err != nil {
+		return fmt.Errorf("failed loading current track: %w", err)
+	}
+
+	// start playing if not paused
+	if !paused {
+		if err := s.play(); err != nil {
+			return fmt.Errorf("failed playing: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Session) skipNext() error {
+	var paused bool
+	s.withState(func(s *State) {
+		paused = s.playerState.IsPaused
+
+		if s.tracks != nil {
+			s.tracks.GoNext()
+
+			s.playerState.Track = s.tracks.CurrentTrack()
+			s.playerState.PrevTracks = s.tracks.PrevTracks()
+			s.playerState.NextTracks = s.tracks.NextTracks()
+			s.playerState.Index = s.tracks.Index()
+		}
+
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = 0
+	})
+
+	// load current track into stream
+	if err := s.loadCurrentTrack(); err != nil {
+		return fmt.Errorf("failed loading current track: %w", err)
+	}
+
+	// start playing if not paused
+	if !paused {
+		if err := s.play(); err != nil {
+			return fmt.Errorf("failed playing: %w", err)
+		}
+	}
+
 	return nil
 }
 

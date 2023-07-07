@@ -31,10 +31,14 @@ const (
 	ApiRequestTypeStatus ApiRequestType = "status"
 	ApiRequestTypeResume ApiRequestType = "resume"
 	ApiRequestTypePause  ApiRequestType = "pause"
+	ApiRequestTypeSeek   ApiRequestType = "seek"
+	ApiRequestTypePrev   ApiRequestType = "prev"
+	ApiRequestTypeNext   ApiRequestType = "next"
 )
 
 type ApiRequest struct {
 	Type ApiRequestType
+	Data any
 
 	resp chan apiResponse
 }
@@ -117,13 +121,56 @@ func (s *ApiServer) serve() {
 		_, _ = w.Write([]byte("{}"))
 	})
 	m.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
 	})
 	m.HandleFunc("/player/resume", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeResume}, w)
 	})
 	m.HandleFunc("/status/pause", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
+	})
+	m.HandleFunc("/status/next", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeNext}, w)
+	})
+	m.HandleFunc("/status/prev", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypePrev}, w)
+	})
+	m.HandleFunc("/status/seek", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var data struct {
+			Position int64 `json:"position"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&data)
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
