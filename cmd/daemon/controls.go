@@ -170,6 +170,7 @@ func (s *Session) play() error {
 		return fmt.Errorf("no stream")
 	}
 
+	log.Debug("resume track")
 	s.stream.Play()
 
 	s.updateState(func(s *State) {
@@ -184,6 +185,7 @@ func (s *Session) pause() error {
 		return fmt.Errorf("no stream")
 	}
 
+	log.Debug("pause track")
 	s.stream.Pause()
 
 	s.updateState(func(s *State) {
@@ -198,6 +200,7 @@ func (s *Session) seek(position int64) error {
 		return fmt.Errorf("no stream")
 	}
 
+	log.Debugf("seek track to %dms", position)
 	if err := s.stream.SeekMs(position); err != nil {
 		return err
 	}
@@ -216,6 +219,7 @@ func (s *Session) skipPrev() error {
 		paused = s.playerState.IsPaused
 
 		if s.tracks != nil {
+			log.Debug("skip previous track")
 			s.tracks.GoPrev()
 
 			s.playerState.Track = s.tracks.CurrentTrack()
@@ -249,6 +253,7 @@ func (s *Session) skipNext() error {
 		paused = s.playerState.IsPaused
 
 		if s.tracks != nil {
+			log.Debug("skip next track")
 			s.tracks.GoNext()
 
 			s.playerState.Track = s.tracks.CurrentTrack()
@@ -283,6 +288,7 @@ func (s *Session) updateVolume(newVal uint32) {
 		newVal = 0
 	}
 
+	log.Debugf("update volume to %d/%d", newVal, player.MaxVolume)
 	s.player.SetVolume(newVal)
 	s.withState(func(s *State) {
 		s.deviceInfo.Volume = newVal
