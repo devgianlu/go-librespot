@@ -21,7 +21,6 @@ type App struct {
 
 	resolver *apresolve.ApResolver
 
-	deviceName  string
 	deviceId    string
 	deviceType  devicespb.DeviceType
 	clientToken string
@@ -33,7 +32,7 @@ type App struct {
 }
 
 func NewApp(cfg *Config) (app *App, err error) {
-	app = &App{cfg: cfg, deviceName: cfg.DeviceName}
+	app = &App{cfg: cfg}
 	app.resolver = apresolve.NewApResolver()
 
 	app.deviceType = devicespb.DeviceType_COMPUTER
@@ -111,8 +110,9 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 
 		sess.withState(func(s *State) {
 			s.isActive = true
-			s.playerState.IsPlaying = true
-			s.playerState.IsBuffering = true
+
+			s.playerState.Suppressions = &connectpb.Suppressions{}
+			s.playerState.PlayOrigin = &connectpb.PlayOrigin{}
 		})
 
 		if err := sess.loadContext(ctx, func(track *connectpb.ContextTrack) bool {
@@ -134,7 +134,7 @@ func (app *App) Zeroconf() error {
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.deviceName, app.deviceId, app.deviceType)
+	z, err := zeroconf.NewZeroconf(app.cfg.DeviceName, app.deviceId, app.deviceType)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}

@@ -33,7 +33,7 @@ func (s *Session) initState() {
 		deviceInfo: &connectpb.DeviceInfo{
 			CanPlay:               true,
 			Volume:                player.MaxVolume,
-			Name:                  s.app.deviceName,
+			Name:                  s.app.cfg.DeviceName,
 			DeviceId:              s.app.deviceId,
 			DeviceType:            s.app.deviceType,
 			DeviceSoftwareVersion: librespot.VersionString(),
