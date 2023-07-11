@@ -77,6 +77,13 @@ func (s *Session) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.Con
 		s.playerState.ContextUrl = ctx.Url
 		s.playerState.ContextRestrictions = ctx.Restrictions
 
+		if s.playerState.ContextMetadata == nil {
+			s.playerState.ContextMetadata = map[string]string{}
+		}
+		for k, v := range ctx.Metadata {
+			s.playerState.ContextMetadata[k] = v
+		}
+
 		s.playerState.Timestamp = time.Now().UnixMilli()
 		s.playerState.PositionAsOfTimestamp = 0
 	})
@@ -150,7 +157,7 @@ func (s *Session) loadCurrentTrack() error {
 			Uri:      librespot.TrackId(stream.Track.Gid).Uri(),
 			Name:     *stream.Track.Name,
 			Position: int(trackPosition),
-			Duration: int(*s.stream.Track.Duration),
+			Duration: int(*stream.Track.Duration),
 		},
 	})
 
