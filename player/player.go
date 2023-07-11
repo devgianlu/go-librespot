@@ -48,12 +48,13 @@ type playerCmd struct {
 	resp chan any
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, preferredDevice string) (*Player, error) {
 	otoCtx, readyChan, err := oto.NewContextWithOptions(&oto.NewContextOptions{
-		SampleRate:   SampleRate,
-		ChannelCount: Channels,
-		Format:       oto.FormatFloat32LE,
-		BufferSize:   100 * time.Millisecond,
+		SampleRate:      SampleRate,
+		ChannelCount:    Channels,
+		Format:          oto.FormatFloat32LE,
+		BufferSize:      100 * time.Millisecond,
+		PreferredDevice: preferredDevice,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing oto context: %w", err)

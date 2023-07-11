@@ -17,6 +17,8 @@ import (
 )
 
 type App struct {
+	cfg *Config
+
 	resolver *apresolve.ApResolver
 
 	deviceName  string
@@ -31,7 +33,7 @@ type App struct {
 }
 
 func NewApp(cfg *Config) (app *App, err error) {
-	app = &App{deviceName: cfg.DeviceName}
+	app = &App{cfg: cfg, deviceName: cfg.DeviceName}
 	app.resolver = apresolve.NewApResolver()
 
 	app.deviceType = devicespb.DeviceType_COMPUTER
@@ -226,12 +228,13 @@ func (app *App) UserPass(username, password string) (err error) {
 }
 
 type Config struct {
-	LogLevel   string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
-	DeviceName string `yaml:"device_name" env:"DEVICE_NAME" env-default:"go-librespot"`
-	ServerPort int    `yaml:"server_port" env:"SERVER_PORT" env-default:"0"`
-	AuthMethod string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
-	Username   string `yaml:"username" env:"USERNAME" env-default:""`
-	Password   string `yaml:"password" env:"PASSWORD" env-default:""`
+	LogLevel    string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
+	DeviceName  string `yaml:"device_name" env:"DEVICE_NAME" env-default:"go-librespot"`
+	ServerPort  int    `yaml:"server_port" env:"SERVER_PORT" env-default:"0"`
+	AudioDevice string `yaml:"audio_device" env:"AUDIO_DEVICE" env-default:""`
+	AuthMethod  string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
+	Username    string `yaml:"username" env:"USERNAME" env-default:""`
+	Password    string `yaml:"password" env:"PASSWORD" env-default:""`
 }
 
 func main() {
