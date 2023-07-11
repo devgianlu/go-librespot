@@ -28,7 +28,9 @@ func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver,
 			return nil, fmt.Errorf("context %s is loading", newCtx.Uri)
 		}
 
-		// copy some metadata
+		if newCtx.Metadata == nil {
+			newCtx.Metadata = map[string]string{}
+		}
 		for key, val := range ctx.Metadata {
 			newCtx.Metadata[key] = val
 		}
