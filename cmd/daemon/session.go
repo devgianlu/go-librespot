@@ -97,6 +97,7 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 
 		if s.stream != nil {
 			s.stream.Stop()
+			s.stream = nil
 		}
 
 		// FIXME: Fails with 422: Ignoring BECAME_INACTIVE
