@@ -9,6 +9,7 @@ import (
 	librespot "go-librespot"
 	"go-librespot/apresolve"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
+	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/zeroconf"
 	"sync"
 )
@@ -96,6 +97,26 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 		return nil, nil
 	case ApiRequestTypeNext:
 		_ = sess.skipNext()
+		return nil, nil
+	case ApiRequestTypePlay:
+		data := req.Data.(ApiRequestDataPlay)
+		ctx, err := sess.sp.ContextResolve(data.Uri)
+		if err != nil {
+			return nil, fmt.Errorf("failed resolving context: %w", err)
+		}
+
+		sess.withState(func(s *State) {
+			s.isActive = true
+			s.playerState.IsPlaying = true
+			s.playerState.IsBuffering = true
+		})
+
+		if err := sess.loadContext(ctx, func(track *connectpb.ContextTrack) bool {
+			return len(data.SkipToUri) != 0 && data.SkipToUri == track.Uri
+		}, data.Paused); err != nil {
+			return nil, fmt.Errorf("failed loading context: %w", err)
+		}
+
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)

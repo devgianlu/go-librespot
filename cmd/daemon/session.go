@@ -16,7 +16,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"strings"
 	"sync"
-	"time"
 )
 
 const VolumeSteps = 64
@@ -198,56 +197,24 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "play":
-		tracks, err := NewTrackListFromContext(s.sp, req.Command.Context)
-		if err != nil {
-			return fmt.Errorf("failed creating track list: %w", err)
-		}
-
 		s.withState(func(s *State) {
-			s.playerState.IsPaused = req.Command.Options.InitiallyPaused
-
 			s.playerState.PlayOrigin = req.Command.PlayOrigin
-			s.playerState.ContextUri = req.Command.Context.Uri
-			s.playerState.ContextUrl = req.Command.Context.Url
-			s.playerState.ContextRestrictions = req.Command.Context.Restrictions
 			s.playerState.Suppressions = req.Command.Options.Suppressions
-
-			s.playerState.Timestamp = time.Now().UnixMilli()
-			s.playerState.PositionAsOfTimestamp = 0
 		})
 
-		// if we fail to seek, just fallback to the first track
-		tracks.TrySeek(func(track *connectpb.ContextTrack) bool {
-			if len(req.Command.Options.SkipTo.TrackUid) > 0 && req.Command.Options.SkipTo.TrackUid == track.Uid {
-				return true
-			} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
-				return true
-			} else {
-				return false
-			}
-		})
-
-		s.withState(func(s *State) {
-			s.tracks = tracks
-			s.playerState.Track = tracks.CurrentTrack()
-			s.playerState.PrevTracks = tracks.PrevTracks()
-			s.playerState.NextTracks = tracks.NextTracks()
-			s.playerState.Index = tracks.Index()
-		})
-
-		// load current track into stream
-		if err := s.loadCurrentTrack(); err != nil {
-			return fmt.Errorf("failed loading current track: %w", err)
-		}
-
-		// start playing if not initially paused
-		if !req.Command.Options.InitiallyPaused {
-			if err := s.play(); err != nil {
-				return fmt.Errorf("failed playing: %w", err)
-			}
-		}
-
-		return nil
+		return s.loadContext(
+			req.Command.Context,
+			func(track *connectpb.ContextTrack) bool {
+				if len(req.Command.Options.SkipTo.TrackUid) > 0 && req.Command.Options.SkipTo.TrackUid == track.Uid {
+					return true
+				} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
+					return true
+				} else {
+					return false
+				}
+			},
+			req.Command.Options.InitiallyPaused,
+		)
 	case "pause":
 		return s.pause()
 	case "resume":

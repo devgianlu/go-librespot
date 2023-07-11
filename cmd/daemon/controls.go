@@ -64,6 +64,49 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 	}
 }
 
+func (s *Session) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.ContextTrack) bool, paused bool) error {
+	tracks, err := NewTrackListFromContext(s.sp, ctx)
+	if err != nil {
+		return fmt.Errorf("failed creating track list: %w", err)
+	}
+
+	s.withState(func(s *State) {
+		s.playerState.IsPaused = paused
+
+		s.playerState.ContextUri = ctx.Uri
+		s.playerState.ContextUrl = ctx.Url
+		s.playerState.ContextRestrictions = ctx.Restrictions
+
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = 0
+	})
+
+	// if we fail to seek, just fallback to the first track
+	tracks.TrySeek(skipTo)
+
+	s.withState(func(s *State) {
+		s.tracks = tracks
+		s.playerState.Track = tracks.CurrentTrack()
+		s.playerState.PrevTracks = tracks.PrevTracks()
+		s.playerState.NextTracks = tracks.NextTracks()
+		s.playerState.Index = tracks.Index()
+	})
+
+	// load current track into stream
+	if err := s.loadCurrentTrack(); err != nil {
+		return fmt.Errorf("failed loading current track: %w", err)
+	}
+
+	// start playing if not initially paused
+	if !paused {
+		if err := s.play(); err != nil {
+			return fmt.Errorf("failed playing: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (s *Session) loadCurrentTrack() error {
 	if s.stream != nil {
 		s.stream.Stop()

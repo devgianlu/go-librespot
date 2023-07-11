@@ -34,6 +34,7 @@ const (
 	ApiRequestTypeSeek   ApiRequestType = "seek"
 	ApiRequestTypePrev   ApiRequestType = "prev"
 	ApiRequestTypeNext   ApiRequestType = "next"
+	ApiRequestTypePlay   ApiRequestType = "play"
 )
 
 type ApiRequest struct {
@@ -45,6 +46,12 @@ type ApiRequest struct {
 
 func (r *ApiRequest) Reply(data any, err error) {
 	r.resp <- apiResponse{data, err}
+}
+
+type ApiRequestDataPlay struct {
+	Uri       string `json:"uri"`
+	SkipToUri string `json:"skip_to_uri"`
+	Paused    bool   `json:"paused"`
 }
 
 type apiResponse struct {
@@ -130,6 +137,20 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
 	})
+	m.HandleFunc("/player/play", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var data ApiRequestDataPlay
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypePlay, Data: data}, w)
+	})
 	m.HandleFunc("/player/resume", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusBadRequest)
@@ -171,7 +192,11 @@ func (s *ApiServer) serve() {
 		var data struct {
 			Position int64 `json:"position"`
 		}
-		_ = json.NewDecoder(r.Body).Decode(&data)
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
