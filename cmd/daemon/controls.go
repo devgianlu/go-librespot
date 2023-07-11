@@ -32,9 +32,11 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			Type: "paused",
 		})
 	case player.EventTypeNotPlaying:
+		var hasNextTrack bool
 		s.withState(func(s *State) {
 			if s.tracks != nil {
-				s.tracks.GoNext()
+				hasNextTrack = s.tracks.GoNext()
+				s.playerState.IsPaused = !hasNextTrack
 
 				s.playerState.Track = s.tracks.CurrentTrack()
 				s.playerState.PrevTracks = s.tracks.PrevTracks()
@@ -52,10 +54,12 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			return
 		}
 
-		// start playing
-		if err := s.play(); err != nil {
-			log.WithError(err).Error("failed playing")
-			return
+		// start playing if there is something next
+		if hasNextTrack {
+			if err := s.play(); err != nil {
+				log.WithError(err).Error("failed playing")
+				return
+			}
 		}
 	case player.EventTypeStopped:
 		// do nothing
