@@ -43,6 +43,7 @@ type RequestPayload struct {
 	SentByDeviceId string `json:"sent_by_device_id"`
 	Command        struct {
 		Endpoint      string                `json:"endpoint"`
+		SessionId     string                `json:"session_id"`
 		Data          []byte                `json:"data"`
 		Position      int64                 `json:"position"`
 		Relative      string                `json:"relative"`

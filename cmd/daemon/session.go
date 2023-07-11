@@ -242,6 +242,22 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		return s.skipPrev()
 	case "skip_next":
 		return s.skipNext()
+	case "update_context":
+		s.withState(func(s *State) {
+			if req.Command.Context.Uri != s.playerState.ContextUri {
+				log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
+				return
+			}
+
+			s.playerState.ContextRestrictions = req.Command.Context.Restrictions
+			if s.playerState.ContextMetadata == nil {
+				s.playerState.ContextMetadata = map[string]string{}
+			}
+			for k, v := range req.Command.Context.Metadata {
+				s.playerState.ContextMetadata[k] = v
+			}
+		})
+		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)
 	}
