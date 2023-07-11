@@ -15,6 +15,10 @@
           "type": "string",
           "default": "go-librespot"
         },
+        "audio_device": {
+          "type": "string",
+          "default": ""
+        },
         "server_port": {
           "type": "integer",
           "default": 0
