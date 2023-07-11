@@ -274,7 +274,7 @@ func (s *Session) handleDealerRequest(req dealer.Request) error {
 	}
 }
 
-func (s *Session) Connect(creds_ SessionCredentials) (err error) {
+func (s *Session) Connect(creds SessionCredentials) (err error) {
 	s.stop = make(chan struct{}, 1)
 
 	// init login5
@@ -292,7 +292,11 @@ func (s *Session) Connect(creds_ SessionCredentials) (err error) {
 	}
 
 	// choose proper credentials
-	switch creds := creds_.(type) {
+	switch creds := creds.(type) {
+	case SessionStoredCredentials:
+		if err = s.ap.ConnectStored(creds.Username, creds.Data); err != nil {
+			return fmt.Errorf("failed authenticating accesspoint with username and password: %w", err)
+		}
 	case SessionUserPassCredentials:
 		if err = s.ap.ConnectUserPass(creds.Username, creds.Password); err != nil {
 			return fmt.Errorf("failed authenticating accesspoint with username and password: %w", err)

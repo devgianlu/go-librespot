@@ -8,6 +8,11 @@ type SessionUserPassCredentials struct {
 	Password string
 }
 
+type SessionStoredCredentials struct {
+	Username string
+	Data     []byte
+}
+
 type SessionBlobCredentials struct {
 	Username string
 	Blob     []byte

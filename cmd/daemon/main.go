@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
 	log "github.com/sirupsen/logrus"
@@ -11,6 +12,7 @@ import (
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/zeroconf"
+	"os"
 	"sync"
 )
 
@@ -169,10 +171,44 @@ func (app *App) Zeroconf() error {
 	})
 }
 
-func (app *App) UserPass(username, password string) error {
-	sess, err := app.newSession(SessionUserPassCredentials{username, password})
-	if err != nil {
-		return err
+type storedCredentialsFile struct {
+	Username string `json:"username"`
+	Data     []byte `json:"data"`
+}
+
+func (app *App) UserPass(username, password string) (err error) {
+	var storedCredentials []byte
+	if content, err := os.ReadFile("credentials.json"); err == nil {
+		var file storedCredentialsFile
+		if err := json.Unmarshal(content, &file); err != nil {
+			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
+		}
+
+		if file.Username == username {
+			storedCredentials = file.Data
+		}
+	}
+
+	var sess *Session
+	if len(storedCredentials) > 0 {
+		sess, err = app.newSession(SessionStoredCredentials{username, storedCredentials})
+		if err != nil {
+			return err
+		}
+	} else {
+		sess, err = app.newSession(SessionUserPassCredentials{username, password})
+		if err != nil {
+			return err
+		}
+
+		if content, err := json.Marshal(&storedCredentialsFile{
+			Username: sess.ap.Username(),
+			Data:     sess.ap.StoredCredentials(),
+		}); err != nil {
+			return fmt.Errorf("failed marshalling stored credentials: %w", err)
+		} else if err := os.WriteFile("credentials.json", content, 0); err != nil {
+			return fmt.Errorf("failed writing stored credentials file: %w", err)
+		}
 	}
 
 	go func() {

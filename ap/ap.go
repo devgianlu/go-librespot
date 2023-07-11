@@ -88,6 +88,14 @@ func (ap *Accesspoint) ConnectUserPass(username, password string) error {
 	})
 }
 
+func (ap *Accesspoint) ConnectStored(username string, data []byte) error {
+	return ap.Connect(&pb.LoginCredentials{
+		Typ:      pb.AuthenticationType_AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS.Enum(),
+		Username: proto.String(username),
+		AuthData: data,
+	})
+}
+
 func (ap *Accesspoint) ConnectBlob(username string, encryptedBlob64 []byte) error {
 	encryptedBlob := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBlob64)))
 	if written, err := base64.StdEncoding.Decode(encryptedBlob, encryptedBlob64); err != nil {
