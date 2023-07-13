@@ -195,8 +195,13 @@ func (p *Player) NewStream(tid librespot.TrackId) (*Stream, error) {
 	}
 
 	if len(trackMeta.File) == 0 {
-		// TODO: possibly pick alternative track
-		return nil, fmt.Errorf("no playable files found")
+		for _, alt := range trackMeta.Alternative {
+			if len(alt.File) == 0 {
+				continue
+			}
+
+			trackMeta.File = append(trackMeta.File, alt.File...)
+		}
 	}
 
 	// TODO: better audio quality customization
