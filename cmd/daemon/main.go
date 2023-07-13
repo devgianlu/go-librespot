@@ -235,6 +235,7 @@ type Config struct {
 	AuthMethod  string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
 	Username    string `yaml:"username" env:"USERNAME" env-default:""`
 	Password    string `yaml:"password" env:"PASSWORD" env-default:""`
+	Bitrate     int    `yaml:"bitrate" env:"BITRATE" env-default:"160"`
 }
 
 func main() {

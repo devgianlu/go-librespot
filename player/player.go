@@ -188,7 +188,7 @@ func (p *Player) newStream(pp oto.Player) int {
 	return (<-resp).(int)
 }
 
-func (p *Player) NewStream(tid librespot.TrackId) (*Stream, error) {
+func (p *Player) NewStream(tid librespot.TrackId, bitrate int) (*Stream, error) {
 	trackMeta, err := p.sp.MetadataForTrack(tid)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
@@ -204,13 +204,16 @@ func (p *Player) NewStream(tid librespot.TrackId) (*Stream, error) {
 		}
 	}
 
-	// TODO: better audio quality customization
 	var file *metadatapb.AudioFile
 	for _, ff := range trackMeta.File {
-		if *ff.Format == metadatapb.AudioFile_OGG_VORBIS_96 || *ff.Format == metadatapb.AudioFile_OGG_VORBIS_160 || *ff.Format == metadatapb.AudioFile_OGG_VORBIS_320 {
+		if formatBitrate(*ff.Format) == bitrate {
 			file = ff
 			break
 		}
+	}
+
+	if file == nil {
+		return nil, fmt.Errorf("failed fetching requested bitrate: %d", bitrate)
 	}
 
 	audioKey, err := p.audioKey.Request(tid, file.FileId)
@@ -270,8 +273,6 @@ func (p *Player) NewStream(tid librespot.TrackId) (*Stream, error) {
 	if idx == -1 {
 		return nil, fmt.Errorf("too many players")
 	}
-
-	// TODO: where do we close the response body?
 
 	return &Stream{p: p, idx: idx, Track: trackMeta, File: file}, nil
 }

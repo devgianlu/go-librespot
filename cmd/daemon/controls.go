@@ -139,7 +139,7 @@ func (s *Session) loadCurrentTrack() error {
 		s.playerState.IsBuffering = true
 	})
 
-	stream, err := s.player.NewStream(trackId)
+	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate)
 	if err != nil {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}

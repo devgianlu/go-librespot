@@ -35,6 +35,10 @@
         "password": {
           "type": "string",
           "default": ""
+        },
+        "bitrate": {
+          "type": "number",
+          "default": 160
         }
       },
       "required": [
