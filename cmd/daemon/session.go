@@ -107,6 +107,10 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 		}
 
 		// TODO: logout if using zeroconf (?)
+
+		s.app.server.Emit(&ApiEvent{
+			Type: "inactive",
+		})
 	}
 
 	return nil
@@ -195,6 +199,10 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 				return fmt.Errorf("failed playing: %w", err)
 			}
 		}
+
+		s.app.server.Emit(&ApiEvent{
+			Type: "active",
+		})
 
 		return nil
 	case "play":
