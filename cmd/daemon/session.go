@@ -109,7 +109,7 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 		// TODO: logout if using zeroconf (?)
 
 		s.app.server.Emit(&ApiEvent{
-			Type: "inactive",
+			Type: ApiEventTypeInactive,
 		})
 	}
 
@@ -201,7 +201,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		s.app.server.Emit(&ApiEvent{
-			Type: "active",
+			Type: ApiEventTypeActive,
 		})
 
 		return nil
@@ -239,7 +239,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		s.app.server.Emit(&ApiEvent{
-			Type: "seek",
+			Type: ApiEventTypeSeek,
 			Data: ApiEventDataSeek{
 				Position: int(req.Command.Position),
 				Duration: int(*s.stream.Track.Duration),

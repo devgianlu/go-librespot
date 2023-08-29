@@ -38,6 +38,18 @@ const (
 	ApiRequestTypeVolume ApiRequestType = "volume"
 )
 
+type ApiEventType string
+
+const (
+	ApiEventTypePlaying  ApiEventType = "playing"
+	ApiEventTypePaused   ApiEventType = "paused"
+	ApiEventTypeActive   ApiEventType = "active"
+	ApiEventTypeInactive ApiEventType = "inactive"
+	ApiEventTypeTrack    ApiEventType = "track"
+	ApiEventTypeVolume   ApiEventType = "volume"
+	ApiEventTypeSeek     ApiEventType = "seek"
+)
+
 type ApiRequest struct {
 	Type ApiRequestType
 	Data any
@@ -67,8 +79,8 @@ type ApiResponseStatus struct {
 }
 
 type ApiEvent struct {
-	Type string `json:"type"`
-	Data any    `json:"data"`
+	Type ApiEventType `json:"type"`
+	Data any          `json:"data"`
 }
 
 type ApiEventDataTrack struct {
@@ -79,8 +91,7 @@ type ApiEventDataTrack struct {
 }
 
 type ApiEventDataVolume struct {
-	Current int `json:"current"`
-	Max     int `json:"max"`
+	Value float64 `json:"value"`
 }
 
 type ApiEventDataSeek struct {

@@ -19,7 +19,7 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 		})
 
 		s.app.server.Emit(&ApiEvent{
-			Type: "playing",
+			Type: ApiEventTypePlaying,
 		})
 	case player.EventTypePaused:
 		s.updateState(func(s *State) {
@@ -29,7 +29,7 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 		})
 
 		s.app.server.Emit(&ApiEvent{
-			Type: "paused",
+			Type: ApiEventTypePaused,
 		})
 	case player.EventTypeNotPlaying:
 		var hasNextTrack bool
@@ -156,7 +156,7 @@ func (s *Session) loadCurrentTrack() error {
 	})
 
 	s.app.server.Emit(&ApiEvent{
-		Type: "track",
+		Type: ApiEventTypeTrack,
 		Data: ApiEventDataTrack{
 			Uri:      librespot.TrackId(stream.Track.Gid).Uri(),
 			Name:     *stream.Track.Name,
@@ -303,10 +303,9 @@ func (s *Session) updateVolume(newVal uint32) {
 	}
 
 	s.app.server.Emit(&ApiEvent{
-		Type: "volume",
+		Type: ApiEventTypeVolume,
 		Data: ApiEventDataVolume{
-			Current: int(newVal),
-			Max:     player.MaxVolume,
+			Value: float64(newVal) / player.MaxVolume,
 		},
 	})
 }

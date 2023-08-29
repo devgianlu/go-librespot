@@ -1,0 +1,118 @@
+openapi: 3.0.0
+info:
+  version: 0.0.1
+  title: go-librespot API
+  description: go-librespot daemon API
+paths:
+  /:
+    get:
+      description: Returns an empty object, used to very API is reachable
+      responses:
+        200:
+          description: API is ok
+          content:
+            application/json:
+              schema:
+                type: object
+  /status:
+    get:
+      description: Returns the player status
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    description: Currently active account's username
+                    type: string
+                  track_uri:
+                    description: Currently playing track URI
+                    type: string
+                  track_name:
+                    description: Currently playing track name
+                    type: string
+  /player/play:
+    post:
+      description: Starts playing new content
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uri:
+                  description: Spotify URI to start playing
+                  type: string
+                  required: true
+                skip_to_uri:
+                  description: Spotify URI to skip to (when playing playlists)
+                  type: string
+                  required: false
+                paused:
+                  description: Start playback as paused
+                  type: boolean
+                  required: false
+      responses:
+        200:
+          description: Successful response
+  /player/resume:
+    post:
+      description: Resume playback (from paused state)
+      responses:
+        200:
+          description: Successful response
+  /player/pause:
+    post:
+      description: Pause playback (from playing state)
+      responses:
+        200:
+          description: Successful response
+  /player/next:
+    post:
+      description: Skip to next track
+      responses:
+        200:
+          description: Successful response
+  /player/prev:
+    post:
+      description: Skip to previous track (or rewind current track)
+      responses:
+        200:
+          description: Successful response
+  /player/seek:
+    post:
+      description: Seek current track
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                position:
+                  description: Seek position in milliseconds
+                  type: integer
+                  required: true
+      responses:
+        200:
+          description: Successful response
+  /player/volume:
+    post:
+      description: Set player volume
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                volume:
+                  description: Volume from 0 to 1
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  required: true
+      responses:
+        200:
+          description: Successful response
