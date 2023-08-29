@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
+	metadatapb "go-librespot/proto/spotify/metadata"
 	"net"
 	"net/http"
 	"nhooyr.io/websocket"
@@ -72,10 +75,44 @@ type apiResponse struct {
 	err  error
 }
 
+type ApiResponseStatusTrack struct {
+	Uri           string   `json:"uri"`
+	Name          string   `json:"name"`
+	ArtistNames   []string `json:"artist_names"`
+	AlbumName     string   `json:"album_name"`
+	AlbumCoverUrl string   `json:"album_cover_url"`
+	Position      int      `json:"position"`
+	Duration      int      `json:"duration"`
+}
+
+func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, position int) *ApiResponseStatusTrack {
+	var artists []string
+	for _, a := range track.Artist {
+		artists = append(artists, *a.Name)
+	}
+
+	var albumCoverId string
+	if len(track.Album.Cover) > 0 {
+		albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
+	} else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
+		albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
+	}
+
+	return &ApiResponseStatusTrack{
+		Uri:           librespot.TrackId(track.Gid).Uri(),
+		Name:          *track.Name,
+		ArtistNames:   artists,
+		AlbumName:     *track.Album.Name,
+		AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+		Position:      position,
+		Duration:      int(*track.Duration),
+	}
+}
+
 type ApiResponseStatus struct {
-	Username  string `json:"username"`
-	TrackUri  string `json:"track_uri"`
-	TrackName string `json:"track_name"`
+	Username string                  `json:"username"`
+	Volume   float64                 `json:"volume"`
+	Track    *ApiResponseStatusTrack `json:"track"`
 }
 
 type ApiEvent struct {
@@ -83,12 +120,7 @@ type ApiEvent struct {
 	Data any          `json:"data"`
 }
 
-type ApiEventDataTrack struct {
-	Uri      string `json:"uri"`
-	Name     string `json:"name"`
-	Position int    `json:"position"`
-	Duration int    `json:"duration"`
-}
+type ApiEventDataTrack ApiResponseStatusTrack
 
 type ApiEventDataVolume struct {
 	Value float64 `json:"value"`

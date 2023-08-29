@@ -3,6 +3,34 @@ info:
   version: 0.0.1
   title: go-librespot API
   description: go-librespot daemon API
+
+components:
+  schemas:
+    track:
+      description: A track
+      type: object
+      properties:
+        uri:
+          description: URI
+          type: string
+        name:
+          description: Name
+          type: string
+        artist_names:
+          description: Artists name
+          type: array
+          items:
+            - description: Artist name
+              type: string
+        album_name:
+          description: Album name
+          type: string
+        album_cover_url:
+          description: Album cover URL
+          type: string
+        duration:
+          description: Duration in milliseconds
+          type: integer
 paths:
   /:
     get:
@@ -28,12 +56,13 @@ paths:
                   username:
                     description: Currently active account's username
                     type: string
-                  track_uri:
-                    description: Currently playing track URI
-                    type: string
-                  track_name:
-                    description: Currently playing track name
-                    type: string
+                  volume:
+                    description: The player current volume from 0 to 1
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                  track:
+                    $ref: '#/components/schemas/track'
   /player/play:
     post:
       description: Starts playing new content

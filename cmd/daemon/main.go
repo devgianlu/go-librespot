@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"go-librespot/apresolve"
 	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
@@ -79,9 +78,14 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 			Username: sess.ap.Username(),
 		}
 
-		if sess.stream != nil {
-			resp.TrackUri = librespot.TrackId(sess.stream.Track.Gid).Uri()
-			resp.TrackName = *sess.stream.Track.Name
+		var trackPosition int64
+		sess.withState(func(s *State) {
+			resp.Volume = float64(sess.state.deviceInfo.Volume) / player.MaxVolume
+			trackPosition = s.trackPosition()
+		})
+
+		if sess.stream != nil && sess.prodInfo != nil {
+			resp.Track = NewApiResponseStatusTrack(sess.stream.Track, sess.prodInfo, int(trackPosition))
 		}
 
 		return resp, nil

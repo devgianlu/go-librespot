@@ -152,12 +152,7 @@ func (s *Session) loadCurrentTrack() error {
 
 	s.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeTrack,
-		Data: ApiEventDataTrack{
-			Uri:      librespot.TrackId(stream.Track.Gid).Uri(),
-			Name:     *stream.Track.Name,
-			Position: int(trackPosition),
-			Duration: int(*stream.Track.Duration),
-		},
+		Data: ApiEventDataTrack(*NewApiResponseStatusTrack(stream.Track, s.prodInfo, int(trackPosition))),
 	})
 
 	s.stream = stream

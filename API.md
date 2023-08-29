@@ -16,6 +16,9 @@ The following events are emitted:
 - `track`: A new track was loaded, the following data is provided:
   - `uri`: Track URI
   - `name`: Track name
+  - `artist_names`: List of track artist names
+  - `album_name`: Track album name
+  - `album_cover_url`: Track album cover image URL
   - `position`: Track position in milliseconds
   - `duration`: Track duration in milliseconds
 - `playing`: The current track is playing
