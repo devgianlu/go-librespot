@@ -160,7 +160,7 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeResume}, w)
 	})
-	m.HandleFunc("/status/pause", func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("/player/pause", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -168,7 +168,7 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
 	})
-	m.HandleFunc("/status/next", func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("/player/next", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -176,7 +176,7 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeNext}, w)
 	})
-	m.HandleFunc("/status/prev", func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("/player/prev", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -184,7 +184,7 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePrev}, w)
 	})
-	m.HandleFunc("/status/seek", func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("/player/seek", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusBadRequest)
 			return

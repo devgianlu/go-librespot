@@ -84,9 +84,7 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 			resp.TrackName = *sess.stream.Track.Name
 		}
 
-		return &ApiResponseStatus{
-			Username: sess.ap.Username(),
-		}, nil
+		return resp, nil
 	case ApiRequestTypeResume:
 		_ = sess.play()
 		return nil, nil
