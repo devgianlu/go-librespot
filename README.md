@@ -27,3 +27,13 @@ The daemon offers an API to control and/or monitor playback.
 To enable this features add the `server_port` directive to `config.yml` with the port you'd like to use.
 
 For API documentation see [here](API.md).
+
+## Building
+
+The daemon can be easily built with:
+
+```shell
+go build -o go-librespot-daemon ./cmd/daemon
+```
+
+To crosscompile for different architectures the `GOOS` and `GOARCH` environment variables can be used.
