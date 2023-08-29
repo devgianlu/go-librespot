@@ -35,6 +35,7 @@ const (
 	ApiRequestTypePrev   ApiRequestType = "prev"
 	ApiRequestTypeNext   ApiRequestType = "next"
 	ApiRequestTypePlay   ApiRequestType = "play"
+	ApiRequestTypeVolume ApiRequestType = "volume"
 )
 
 type ApiRequest struct {
@@ -198,6 +199,22 @@ func (s *ApiServer) serve() {
 		}
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
+	})
+	m.HandleFunc("/player/volume", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var data struct {
+			Volume float64 `json:"volume"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeVolume, Data: data.Volume}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)

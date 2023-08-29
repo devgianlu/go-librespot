@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/apresolve"
+	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/zeroconf"
@@ -121,6 +122,10 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 			return nil, fmt.Errorf("failed loading context: %w", err)
 		}
 
+		return nil, nil
+	case ApiRequestTypeVolume:
+		vol := req.Data.(float64)
+		sess.updateVolume(uint32(vol * float64(player.MaxVolume)))
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
