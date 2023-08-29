@@ -111,6 +111,7 @@ func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, p
 
 type ApiResponseStatus struct {
 	Username       string                  `json:"username"`
+	PlayOrigin     string                  `json:"play_origin"`
 	Volume         float64                 `json:"volume"`
 	RepeatContext  bool                    `json:"repeat_context"`
 	RepeatTrack    bool                    `json:"repeat_track"`

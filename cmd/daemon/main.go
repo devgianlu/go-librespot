@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/ilyakaznacheev/cleanenv"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	"go-librespot/apresolve"
 	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
@@ -84,6 +85,7 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 			resp.RepeatContext = s.playerState.Options.RepeatingContext
 			resp.RepeatTrack = s.playerState.Options.RepeatingTrack
 			resp.ShuffleContext = s.playerState.Options.ShufflingContext
+			resp.PlayOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 
 			trackPosition = s.trackPosition()
 		})
@@ -119,7 +121,10 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 			s.isActive = true
 
 			s.playerState.Suppressions = &connectpb.Suppressions{}
-			s.playerState.PlayOrigin = &connectpb.PlayOrigin{}
+			s.playerState.PlayOrigin = &connectpb.PlayOrigin{
+				FeatureIdentifier: "go-librespot",
+				FeatureVersion:    librespot.VersionNumberString(),
+			}
 		})
 
 		if err := sess.loadContext(ctx, func(track *connectpb.ContextTrack) bool {

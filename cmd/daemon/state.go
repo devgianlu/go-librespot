@@ -23,6 +23,8 @@ func (s *State) reset() {
 	s.isActive = false
 	s.playerState = &connectpb.PlayerState{
 		IsSystemInitiated: true,
+		PlayOrigin:        &connectpb.PlayOrigin{},
+		Suppressions:      &connectpb.Suppressions{},
 		Options:           &connectpb.ContextPlayerOptions{},
 	}
 }
