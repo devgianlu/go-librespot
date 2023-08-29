@@ -76,7 +76,9 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 	switch req.Type {
 	case ApiRequestTypeStatus:
 		resp := &ApiResponseStatus{
-			Username: sess.ap.Username(),
+			Username:   sess.ap.Username(),
+			DeviceId:   sess.app.deviceId,
+			DeviceName: sess.app.cfg.DeviceName,
 		}
 
 		var trackPosition int64

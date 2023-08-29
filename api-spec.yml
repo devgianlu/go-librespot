@@ -56,6 +56,12 @@ paths:
                   username:
                     description: Currently active account's username
                     type: string
+                  device_id:
+                    description: The player device ID
+                    type: string
+                  device_name:
+                    description: The player device name
+                    type: string
                   play_origin:
                     description: Who started the playback, "go-librespot" identifies the API as the play origin, everything else is Spotify own stuff
                     type: string
