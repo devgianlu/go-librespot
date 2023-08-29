@@ -27,6 +27,14 @@ func (s *State) reset() {
 	}
 }
 
+func (s *State) trackPosition() int64 {
+	if s.playerState.IsPaused {
+		return s.playerState.PositionAsOfTimestamp
+	} else {
+		return time.Now().UnixMilli() - s.playerState.Timestamp + s.playerState.PositionAsOfTimestamp
+	}
+}
+
 func (s *Session) initState() {
 	s.state = &State{
 		lastCommand: nil,

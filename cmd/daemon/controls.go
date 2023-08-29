@@ -128,12 +128,7 @@ func (s *Session) loadCurrentTrack() error {
 	var trackId librespot.TrackId
 	s.updateState(func(s *State) {
 		trackId = librespot.TrackIdFromUri(s.playerState.Track.Uri)
-
-		if s.playerState.IsPaused {
-			trackPosition = s.playerState.PositionAsOfTimestamp
-		} else {
-			trackPosition = time.Now().UnixMilli() - s.playerState.Timestamp + s.playerState.PositionAsOfTimestamp
-		}
+		trackPosition = s.trackPosition()
 
 		s.playerState.IsPlaying = true
 		s.playerState.IsBuffering = true
