@@ -114,6 +114,8 @@ type ApiResponseStatus struct {
 	DeviceId       string                  `json:"device_id"`
 	DeviceName     string                  `json:"device_name"`
 	PlayOrigin     string                  `json:"play_origin"`
+	Paused         bool                    `json:"paused"`
+	Buffering      bool                    `json:"buffering"`
 	Volume         float64                 `json:"volume"`
 	RepeatContext  bool                    `json:"repeat_context"`
 	RepeatTrack    bool                    `json:"repeat_track"`

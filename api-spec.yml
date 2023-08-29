@@ -65,6 +65,12 @@ paths:
                   play_origin:
                     description: Who started the playback, "go-librespot" identifies the API as the play origin, everything else is Spotify own stuff
                     type: string
+                  paused:
+                    description: Whether the player is paused
+                    type: boolean
+                  buffering:
+                    description: Whether the player is buffering
+                    type: boolean
                   volume:
                     description: The player current volume from 0 to 1
                     type: number
