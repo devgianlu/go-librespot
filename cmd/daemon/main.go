@@ -208,7 +208,7 @@ func (app *App) UserPass(username, password string) (err error) {
 			Data:     sess.ap.StoredCredentials(),
 		}); err != nil {
 			return fmt.Errorf("failed marshalling stored credentials: %w", err)
-		} else if err := os.WriteFile("credentials.json", content, 0); err != nil {
+		} else if err := os.WriteFile("credentials.json", content, 0600); err != nil {
 			return fmt.Errorf("failed writing stored credentials file: %w", err)
 		}
 	}
