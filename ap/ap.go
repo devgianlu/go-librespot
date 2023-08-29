@@ -37,6 +37,7 @@ type Accesspoint struct {
 
 	stop          bool
 	recvLoopStop  chan struct{}
+	recvLoopOnce  sync.Once
 	recvChans     map[PacketType][]chan Packet
 	recvChansLock sync.RWMutex
 
@@ -196,7 +197,15 @@ func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
 		ap.recvChans[type_] = ll
 	}
 	ap.recvChansLock.Unlock()
+
+	// start the recv loop if necessary
+	ap.startReceiving()
+
 	return ch
+}
+
+func (ap *Accesspoint) startReceiving() {
+	ap.recvLoopOnce.Do(func() { go ap.recvLoop() })
 }
 
 func (ap *Accesspoint) recvLoop() {
@@ -413,9 +422,6 @@ func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
 
 		ap.welcome = &welcome
 		log.Debugf("authenticated as %s", *welcome.CanonicalUsername)
-
-		// start the recv loop
-		go ap.recvLoop()
 
 		return nil
 	} else if recvPkt == PacketTypeAuthFailure {

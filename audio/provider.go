@@ -8,10 +8,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/ap"
+	"sync"
 )
 
 type KeyProvider struct {
 	ap *ap.Accesspoint
+
+	recvLoopOnce sync.Once
 
 	reqChan  chan keyRequest
 	stopChan chan struct{}
@@ -32,8 +35,11 @@ func NewAudioKeyProvider(ap *ap.Accesspoint) *KeyProvider {
 	p := &KeyProvider{ap: ap}
 	p.reqChan = make(chan keyRequest)
 	p.stopChan = make(chan struct{}, 1)
-	go p.recvLoop()
 	return p
+}
+
+func (p *KeyProvider) startReceiving() {
+	p.recvLoopOnce.Do(func() { go p.recvLoop() })
 }
 
 func (p *KeyProvider) recvLoop() {
@@ -95,6 +101,8 @@ func (p *KeyProvider) recvLoop() {
 }
 
 func (p *KeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
+	p.startReceiving()
+
 	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse)}
 	p.reqChan <- req
 
