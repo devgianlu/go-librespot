@@ -1,6 +1,9 @@
 package main
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+	"strings"
+)
 
 type ProductInfo struct {
 	XMLName  xml.Name `xml:"products"`
@@ -10,4 +13,8 @@ type ProductInfo struct {
 		HeadFilesUrl string   `xml:"head-files-url"`
 		ImageUrl     string   `xml:"image-url"`
 	} `xml:"product"`
+}
+
+func (pi ProductInfo) ImageUrl(fileId string) string {
+	return strings.Replace(pi.Products[0].ImageUrl, "{file_id}", strings.ToLower(fileId), 1)
 }

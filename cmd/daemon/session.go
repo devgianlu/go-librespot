@@ -36,6 +36,9 @@ type Session struct {
 
 	spotConnId string
 
+	// TODO: can this be factored better?
+	prodInfo *ProductInfo
+
 	// TODO: consider not locking this if we are modifying it always from the same routine
 	state     *State
 	stateLock sync.Mutex
@@ -52,7 +55,11 @@ func (s *Session) handleAccesspointPacket(pktType ap.PacketType, payload []byte)
 			return fmt.Errorf("failed umarshalling ProductInfo: %w", err)
 		}
 
-		// TODO: we may need this
+		if len(prod.Products) != 1 {
+			return fmt.Errorf("invalid ProductInfo")
+		}
+
+		s.prodInfo = &prod
 		return nil
 	default:
 		return nil
