@@ -80,7 +80,11 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 
 		var trackPosition int64
 		sess.withState(func(s *State) {
-			resp.Volume = float64(sess.state.deviceInfo.Volume) / player.MaxVolume
+			resp.Volume = float64(s.deviceInfo.Volume) / player.MaxVolume
+			resp.RepeatContext = s.playerState.Options.RepeatingContext
+			resp.RepeatTrack = s.playerState.Options.RepeatingTrack
+			resp.ShuffleContext = s.playerState.Options.ShufflingContext
+
 			trackPosition = s.trackPosition()
 		})
 

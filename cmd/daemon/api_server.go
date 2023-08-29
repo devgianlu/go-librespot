@@ -110,9 +110,12 @@ func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, p
 }
 
 type ApiResponseStatus struct {
-	Username string                  `json:"username"`
-	Volume   float64                 `json:"volume"`
-	Track    *ApiResponseStatusTrack `json:"track"`
+	Username       string                  `json:"username"`
+	Volume         float64                 `json:"volume"`
+	RepeatContext  bool                    `json:"repeat_context"`
+	RepeatTrack    bool                    `json:"repeat_track"`
+	ShuffleContext bool                    `json:"shuffle_context"`
+	Track          *ApiResponseStatusTrack `json:"track"`
 }
 
 type ApiEvent struct {

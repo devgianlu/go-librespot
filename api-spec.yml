@@ -61,6 +61,15 @@ paths:
                     type: number
                     minimum: 0
                     maximum: 1
+                  repeat_context:
+                    description: Whether the repeat context feature is enabled
+                    type: boolean
+                  repeat_track:
+                    description: Whether the repeat track feature is enabled
+                    type: boolean
+                  shuffle_context:
+                    description: Whether the shuffle context feature is enabled
+                    type: boolean
                   track:
                     $ref: '#/components/schemas/track'
   /player/play:
