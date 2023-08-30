@@ -204,6 +204,14 @@ func (s *Session) seek(position int64) error {
 		s.playerState.PositionAsOfTimestamp = position
 	})
 
+	s.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeSeek,
+		Data: ApiEventDataSeek{
+			Position: int(position),
+			Duration: int(*s.stream.Track.Duration),
+		},
+	})
+
 	return nil
 }
 

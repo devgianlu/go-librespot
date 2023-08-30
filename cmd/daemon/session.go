@@ -243,13 +243,6 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed seeking stream: %w", err)
 		}
 
-		s.app.server.Emit(&ApiEvent{
-			Type: ApiEventTypeSeek,
-			Data: ApiEventDataSeek{
-				Position: int(req.Command.Position),
-				Duration: int(*s.stream.Track.Duration),
-			},
-		})
 		return nil
 	case "skip_prev":
 		// TODO: handle rewinding track if pos < 3000ms
