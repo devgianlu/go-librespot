@@ -12,10 +12,12 @@ import (
 )
 
 type sampleDecoder struct {
-	r    *oggvorbis.Reader
-	o    sync.Once
-	c    chan [Channels * 4]byte
-	stop bool
+	r      *oggvorbis.Reader
+	o      sync.Once
+	c      chan [Channels * 4]byte
+	seeked bool
+	done   bool
+	stop   bool
 }
 
 func newSampleDecoder(reader *oggvorbis.Reader, norm *audio.ReplayGain) *sampleDecoder {
@@ -41,9 +43,17 @@ func (s *sampleDecoder) decodeLoop() {
 			binary.LittleEndian.PutUint32(buf[i*4:(i+1)*4], math.Float32bits(samples[i]))
 		}
 
+		// if we seeked, throw away the channel and make a new one
+		if s.seeked {
+			close(s.c)
+			s.c = make(chan [Channels * 4]byte, 65536)
+			s.seeked = false
+		}
+
 		s.c <- buf
 	}
 
+	s.done = true
 	close(s.c)
 }
 
@@ -58,7 +68,12 @@ func (s *sampleDecoder) Read(p []byte) (n int, err error) {
 
 		frame, ok := <-s.c
 		if !ok {
-			return n, io.EOF
+			// return EOF only if we are done, otherwise we might just be seeking
+			if s.done {
+				return n, io.EOF
+			} else {
+				return n, nil
+			}
 		}
 
 		copy(p[n:], frame[:])
@@ -79,7 +94,8 @@ func (s *sampleDecoder) Seek(offset int64, whence int) (int64, error) {
 		panic("unsupported seek whence") // TODO
 	}
 
-	// TODO: clear the buffer?
+	// signal that the channel should be cleared
+	s.seeked = true
 
 	pos := offset * SampleRate / 1000
 	if err := s.r.SetPosition(pos); err != nil {
