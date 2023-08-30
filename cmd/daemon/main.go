@@ -225,26 +225,24 @@ type storedCredentialsFile struct {
 }
 
 func (app *App) SpotifyToken(username, token string) error {
-	sess, err := app.newSession(SessionSpotifyTokenCredentials{username, token})
-	if err != nil {
-		return err
-	}
-
-	go func() {
-		for {
-			select {
-			case req := <-app.server.Receive():
-				data, err := app.handleApiRequest(req, sess)
-				req.Reply(data, err)
-			}
-		}
-	}()
-
-	sess.Run()
-	return nil
+	return app.withReusableCredentials(SessionSpotifyTokenCredentials{username, token})
 }
 
-func (app *App) UserPass(username, password string) (err error) {
+func (app *App) UserPass(username, password string) error {
+	return app.withReusableCredentials(SessionUserPassCredentials{username, password})
+}
+
+func (app *App) withReusableCredentials(creds SessionCredentials) (err error) {
+	var username string
+	switch creds := creds.(type) {
+	case SessionSpotifyTokenCredentials:
+		username = creds.Username
+	case SessionUserPassCredentials:
+		username = creds.Username
+	default:
+		return fmt.Errorf("unsupported credentials for reuse")
+	}
+
 	var storedCredentials []byte
 	if content, err := os.ReadFile(app.cfg.CredentialsPath); err == nil {
 		var file storedCredentialsFile
@@ -264,7 +262,7 @@ func (app *App) UserPass(username, password string) (err error) {
 			return err
 		}
 	} else {
-		sess, err = app.newSession(SessionUserPassCredentials{username, password})
+		sess, err = app.newSession(creds)
 		if err != nil {
 			return err
 		}
@@ -311,9 +309,8 @@ type Config struct {
 			Password string `yaml:"password"`
 		} `yaml:"user_pass"`
 		SpotifyToken struct {
-			Username     string `yaml:"username"`
-			AccessToken  string `yaml:"access_token"`
-			RefreshToken string `yaml:"refresh_token"` // TODO: refresh access token when access_token expires
+			Username    string `yaml:"username"`
+			AccessToken string `yaml:"access_token"`
 		} `yaml:"spotify_token"`
 	} `yaml:"credentials"`
 }

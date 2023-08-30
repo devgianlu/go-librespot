@@ -90,10 +90,6 @@
                 "access_token": {
                   "type": "string",
                   "default": ""
-                },
-                "refresh_token": {
-                  "type": "string",
-                  "default": ""
                 }
               }
             }
