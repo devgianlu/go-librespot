@@ -3,6 +3,7 @@ package dealer
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -113,6 +114,9 @@ func handleTransferEncoding(headers map[string]string, data []byte) ([]byte, err
 }
 
 func (d *Dealer) handleMessage(rawMsg *RawMessage) {
+	//goland:noinspection GoImportUsedAsName
+	log := log.WithField("uri", rawMsg.Uri)
+
 	if len(rawMsg.Payloads) > 1 {
 		panic("unsupported number of payloads")
 	}
@@ -132,20 +136,33 @@ func (d *Dealer) handleMessage(rawMsg *RawMessage) {
 	d.messageReceiversLock.RUnlock()
 
 	if len(matchedReceivers) == 0 {
-		log.Debugf("skipping dealer message for %s", rawMsg.Uri)
+		log.Debug("skipping dealer message")
 		return
 	}
 
 	var payloadBytes []byte
 	if len(rawMsg.Payloads) > 0 {
-		var ok bool
-		payloadBytes, ok = rawMsg.Payloads[0].([]byte)
-		if !ok {
+		var err error
+		switch payload := rawMsg.Payloads[0].(type) {
+		case string:
+			payloadBytes, err = base64.StdEncoding.DecodeString(payload)
+			if err != nil {
+				log.WithError(err).Error("invalid base64 payload")
+				return
+			}
+		case []byte:
+			payloadBytes = payload
+		default:
 			log.Warnf("unsupported payload format: %s", reflect.TypeOf(rawMsg.Payloads[0]))
 			return
 		}
 
-		var err error
+		var ok bool
+		payloadBytes, ok = rawMsg.Payloads[0].([]byte)
+		if !ok {
+			return
+		}
+
 		payloadBytes, err = handleTransferEncoding(rawMsg.Headers, payloadBytes)
 		if err != nil {
 			log.WithError(err).Errorf("failed decoding message transfer encoding")
@@ -183,12 +200,15 @@ func (d *Dealer) ReceiveMessage(uriPrefixes ...string) <-chan Message {
 }
 
 func (d *Dealer) handleRequest(rawMsg *RawMessage) {
+	//goland:noinspection GoImportUsedAsName
+	log := log.WithField("uri", rawMsg.MessageIdent)
+
 	d.requestReceiversLock.RLock()
 	recv, ok := d.requestReceivers[rawMsg.MessageIdent]
 	d.requestReceiversLock.RUnlock()
 
 	if !ok {
-		log.Warnf("ignoring dealer request for %s", rawMsg.MessageIdent)
+		log.Warn("ignoring dealer request")
 		return
 	}
 
