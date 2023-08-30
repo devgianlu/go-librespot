@@ -4,8 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"github.com/ilyakaznacheev/cleanenv"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/apresolve"
@@ -13,6 +13,7 @@ import (
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/zeroconf"
+	"gopkg.in/yaml.v3"
 	"os"
 	"strings"
 	"sync"
@@ -245,7 +246,7 @@ func (app *App) SpotifyToken(username, token string) error {
 
 func (app *App) UserPass(username, password string) (err error) {
 	var storedCredentials []byte
-	if content, err := os.ReadFile("credentials.json"); err == nil {
+	if content, err := os.ReadFile(app.cfg.CredentialsPath); err == nil {
 		var file storedCredentialsFile
 		if err := json.Unmarshal(content, &file); err != nil {
 			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
@@ -273,7 +274,7 @@ func (app *App) UserPass(username, password string) (err error) {
 			Data:     sess.ap.StoredCredentials(),
 		}); err != nil {
 			return fmt.Errorf("failed marshalling stored credentials: %w", err)
-		} else if err := os.WriteFile("credentials.json", content, 0600); err != nil {
+		} else if err := os.WriteFile(app.cfg.CredentialsPath, content, 0600); err != nil {
 			return fmt.Errorf("failed writing stored credentials file: %w", err)
 		}
 	}
@@ -293,13 +294,16 @@ func (app *App) UserPass(username, password string) (err error) {
 }
 
 type Config struct {
-	LogLevel    string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
-	DeviceName  string `yaml:"device_name" env:"DEVICE_NAME" env-default:"go-librespot"`
-	DeviceType  string `yaml:"device_type" env:"DEVICE_TYPE" env-default:"computer"`
-	ServerPort  int    `yaml:"server_port" env:"SERVER_PORT" env-default:"0"`
-	AudioDevice string `yaml:"audio_device" env:"AUDIO_DEVICE" env-default:""`
-	Bitrate     int    `yaml:"bitrate" env:"BITRATE" env-default:"160"`
-	VolumeSteps uint32 `yaml:"volume_steps" env:"VOLUME_STEPS" env-default:"100"`
+	ConfigPath      string `yaml:"-"`
+	CredentialsPath string `yaml:"-"`
+
+	LogLevel    string `yaml:"log_level"`
+	DeviceName  string `yaml:"device_name"`
+	DeviceType  string `yaml:"device_type"`
+	ServerPort  int    `yaml:"server_port"`
+	AudioDevice string `yaml:"audio_device"`
+	Bitrate     int    `yaml:"bitrate"`
+	VolumeSteps uint32 `yaml:"volume_steps"`
 	Credentials struct {
 		Type     string `yaml:"type"`
 		UserPass struct {
@@ -314,10 +318,43 @@ type Config struct {
 	} `yaml:"credentials"`
 }
 
+func loadConfig(cfg *Config) error {
+	flag.StringVar(&cfg.ConfigPath, "config_path", "config.yml", "the configuration file path")
+	flag.StringVar(&cfg.CredentialsPath, "credentials_path", "credentials.json", "the credentials file path")
+	flag.Parse()
+
+	configBytes, err := os.ReadFile(cfg.ConfigPath)
+	if err != nil {
+		return fmt.Errorf("failde reading configuration file: %w", err)
+	}
+
+	if err := yaml.Unmarshal(configBytes, cfg); err != nil {
+		return fmt.Errorf("failed unmarshalling configuration file: %w", err)
+	}
+
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
+	}
+	if cfg.DeviceName == "" {
+		cfg.DeviceName = "go-librespot"
+	}
+	if cfg.DeviceType == "" {
+		cfg.DeviceType = "computer"
+	}
+	if cfg.Bitrate == 0 {
+		cfg.Bitrate = 160
+	}
+	if cfg.VolumeSteps == 0 {
+		cfg.VolumeSteps = 100
+	}
+
+	return nil
+}
+
 func main() {
 	var cfg Config
-	if err := cleanenv.ReadConfig("config.yml", &cfg); err != nil {
-		log.WithError(err).Fatal("failed reading configuration")
+	if err := loadConfig(&cfg); err != nil {
+		log.WithError(err).Fatal("failed loading config")
 	}
 
 	// parse and set log level
