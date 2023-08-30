@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"io"
+	"reflect"
 	"strings"
 )
 
@@ -137,8 +138,15 @@ func (d *Dealer) handleMessage(rawMsg *RawMessage) {
 
 	var payloadBytes []byte
 	if len(rawMsg.Payloads) > 0 {
+		var ok bool
+		payloadBytes, ok = rawMsg.Payloads[0].([]byte)
+		if !ok {
+			log.Warnf("unsupported payload format: %s", reflect.TypeOf(rawMsg.Payloads[0]))
+			return
+		}
+
 		var err error
-		payloadBytes, err = handleTransferEncoding(rawMsg.Headers, rawMsg.Payloads[0])
+		payloadBytes, err = handleTransferEncoding(rawMsg.Headers, payloadBytes)
 		if err != nil {
 			log.WithError(err).Errorf("failed decoding message transfer encoding")
 			return
