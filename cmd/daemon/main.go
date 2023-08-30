@@ -298,12 +298,20 @@ type Config struct {
 	DeviceType  string `yaml:"device_type" env:"DEVICE_TYPE" env-default:"computer"`
 	ServerPort  int    `yaml:"server_port" env:"SERVER_PORT" env-default:"0"`
 	AudioDevice string `yaml:"audio_device" env:"AUDIO_DEVICE" env-default:""`
-	AuthMethod  string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
-	Username    string `yaml:"username" env:"USERNAME" env-default:""`
-	Password    string `yaml:"password" env:"PASSWORD" env-default:""`
-	Token       string `yaml:"token" env:"TOKEN" env-default:""`
 	Bitrate     int    `yaml:"bitrate" env:"BITRATE" env-default:"160"`
 	VolumeSteps uint32 `yaml:"volume_steps" env:"VOLUME_STEPS" env-default:"100"`
+	Credentials struct {
+		Type     string `yaml:"type"`
+		UserPass struct {
+			Username string `yaml:"username"`
+			Password string `yaml:"password"`
+		} `yaml:"user_pass"`
+		SpotifyToken struct {
+			Username     string `yaml:"username"`
+			AccessToken  string `yaml:"access_token"`
+			RefreshToken string `yaml:"refresh_token"` // TODO: refresh access token when access_token expires
+		} `yaml:"spotify_token"`
+	} `yaml:"credentials"`
 }
 
 func main() {
@@ -336,20 +344,20 @@ func main() {
 		app.server, _ = NewStubApiServer()
 	}
 
-	switch cfg.AuthMethod {
+	switch cfg.Credentials.Type {
 	case "zeroconf":
 		if err := app.Zeroconf(); err != nil {
 			log.WithError(err).Fatal("failed running zeroconf")
 		}
-	case "password":
-		if err := app.UserPass(cfg.Username, cfg.Password); err != nil {
+	case "user_pass":
+		if err := app.UserPass(cfg.Credentials.UserPass.Username, cfg.Credentials.UserPass.Password); err != nil {
 			log.WithError(err).Fatal("failed running with username and password")
 		}
 	case "spotify_token":
-		if err := app.SpotifyToken(cfg.Username, cfg.Token); err != nil {
+		if err := app.SpotifyToken(cfg.Credentials.SpotifyToken.Username, cfg.Credentials.SpotifyToken.AccessToken); err != nil {
 			log.WithError(err).Fatal("failed running with username and spotify token")
 		}
 	default:
-		log.Fatalf("unknown auth method: %s", cfg.AuthMethod)
+		log.Fatalf("unknown credentials: %s", cfg.Credentials.Type)
 	}
 }

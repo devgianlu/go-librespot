@@ -55,26 +55,49 @@
           "type": "integer",
           "default": 0
         },
-        "auth_method": {
-          "type": "string",
-          "enum": [
-            "password",
-            "spotify_token",
-            "zeroconf"
-          ],
-          "default": "zeroconf"
-        },
-        "username": {
-          "type": "string",
-          "default": ""
-        },
-        "password": {
-          "type": "string",
-          "default": ""
-        },
-        "token": {
-          "type": "string",
-          "default": ""
+        "credentials": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": [
+                "user_pass",
+                "spotify_token",
+                "zeroconf"
+              ],
+              "default": "zeroconf"
+            },
+            "user_pass": {
+              "type": "object",
+              "properties": {
+                "username": {
+                  "type": "string",
+                  "default": ""
+                },
+                "password": {
+                  "type": "string",
+                  "default": ""
+                }
+              }
+            },
+            "spotify_token": {
+              "type": "object",
+              "properties": {
+                "username": {
+                  "type": "string",
+                  "default": ""
+                },
+                "access_token": {
+                  "type": "string",
+                  "default": ""
+                },
+                "refresh_token": {
+                  "type": "string",
+                  "default": ""
+                }
+              }
+            }
+          }
         },
         "bitrate": {
           "type": "number",
