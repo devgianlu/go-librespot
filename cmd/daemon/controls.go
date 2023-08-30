@@ -12,24 +12,34 @@ import (
 func (s *Session) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlaying:
+		var playOrigin string
 		s.updateState(func(s *State) {
 			s.playerState.IsPlaying = true
 			s.playerState.IsPaused = false
 			s.playerState.IsBuffering = false
+			playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 		})
 
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
+			Data: ApiEventDataPlaying{
+				PlayOrigin: playOrigin,
+			},
 		})
 	case player.EventTypePaused:
+		var playOrigin string
 		s.updateState(func(s *State) {
 			s.playerState.IsPlaying = true
 			s.playerState.IsPaused = true
 			s.playerState.IsBuffering = false
+			playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 		})
 
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
+			Data: ApiEventDataPaused{
+				PlayOrigin: playOrigin,
+			},
 		})
 	case player.EventTypeNotPlaying:
 		var hasNextTrack bool
@@ -199,16 +209,19 @@ func (s *Session) seek(position int64) error {
 		return err
 	}
 
+	var playOrigin string
 	s.updateState(func(s *State) {
 		s.playerState.Timestamp = time.Now().UnixMilli()
 		s.playerState.PositionAsOfTimestamp = position
+		playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 	})
 
 	s.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
 		Data: ApiEventDataSeek{
-			Position: int(position),
-			Duration: int(*s.stream.Track.Duration),
+			Position:   int(position),
+			Duration:   int(*s.stream.Track.Duration),
+			PlayOrigin: playOrigin,
 		},
 	})
 

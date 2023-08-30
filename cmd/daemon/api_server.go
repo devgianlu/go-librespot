@@ -140,9 +140,18 @@ type ApiEventDataTrack ApiResponseStatusTrack
 
 type ApiEventDataVolume ApiResponseVolume
 
+type ApiEventDataPlaying struct {
+	PlayOrigin string `json:"play_origin"`
+}
+
+type ApiEventDataPaused struct {
+	PlayOrigin string `json:"play_origin"`
+}
+
 type ApiEventDataSeek struct {
-	Position int `json:"position"`
-	Duration int `json:"duration"`
+	Position   int    `json:"position"`
+	Duration   int    `json:"duration"`
+	PlayOrigin string `json:"play_origin"`
 }
 
 func NewApiServer(port int) (_ *ApiServer, err error) {
