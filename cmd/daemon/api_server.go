@@ -113,6 +113,7 @@ func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, p
 type ApiResponseStatus struct {
 	Username       string                  `json:"username"`
 	DeviceId       string                  `json:"device_id"`
+	DeviceType     string                  `json:"device_type"`
 	DeviceName     string                  `json:"device_name"`
 	PlayOrigin     string                  `json:"play_origin"`
 	Paused         bool                    `json:"paused"`

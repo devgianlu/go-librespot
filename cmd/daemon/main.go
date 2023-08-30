@@ -14,6 +14,7 @@ import (
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/zeroconf"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -32,11 +33,23 @@ type App struct {
 	server *ApiServer
 }
 
+func parseDeviceType(val string) (devicespb.DeviceType, error) {
+	valEnum, ok := devicespb.DeviceType_value[strings.ToUpper(val)]
+	if !ok {
+		return 0, fmt.Errorf("invalid device type: %s", val)
+	}
+
+	return devicespb.DeviceType(valEnum), nil
+}
+
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg}
 	app.resolver = apresolve.NewApResolver()
 
-	app.deviceType = devicespb.DeviceType_COMPUTER
+	app.deviceType, err = parseDeviceType(cfg.DeviceType)
+	if err != nil {
+		return nil, err
+	}
 
 	// FIXME: make device id persistent
 	deviceIdBytes := make([]byte, 20)
@@ -78,6 +91,7 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 		resp := &ApiResponseStatus{
 			Username:    sess.ap.Username(),
 			DeviceId:    sess.app.deviceId,
+			DeviceType:  sess.app.deviceType.String(),
 			DeviceName:  sess.app.cfg.DeviceName,
 			VolumeSteps: sess.app.cfg.VolumeSteps,
 		}
@@ -281,6 +295,7 @@ func (app *App) UserPass(username, password string) (err error) {
 type Config struct {
 	LogLevel    string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
 	DeviceName  string `yaml:"device_name" env:"DEVICE_NAME" env-default:"go-librespot"`
+	DeviceType  string `yaml:"device_type" env:"DEVICE_TYPE" env-default:"computer"`
 	ServerPort  int    `yaml:"server_port" env:"SERVER_PORT" env-default:"0"`
 	AudioDevice string `yaml:"audio_device" env:"AUDIO_DEVICE" env-default:""`
 	AuthMethod  string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
