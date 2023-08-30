@@ -25,7 +25,7 @@
         },
         "auth_method": {
           "type": "string",
-          "enum": ["password", "zeroconf"],
+          "enum": ["password", "spotify_token","zeroconf"],
           "default": "zeroconf"
         },
         "username": {
@@ -33,6 +33,10 @@
           "default": ""
         },
         "password": {
+          "type": "string",
+          "default": ""
+        },
+        "token": {
           "type": "string",
           "default": ""
         },

@@ -310,11 +310,15 @@ func (s *Session) Connect(creds SessionCredentials) (err error) {
 	switch creds := creds.(type) {
 	case SessionStoredCredentials:
 		if err = s.ap.ConnectStored(creds.Username, creds.Data); err != nil {
-			return fmt.Errorf("failed authenticating accesspoint with username and password: %w", err)
+			return fmt.Errorf("failed authenticating accesspoint with stored credentials: %w", err)
 		}
 	case SessionUserPassCredentials:
 		if err = s.ap.ConnectUserPass(creds.Username, creds.Password); err != nil {
 			return fmt.Errorf("failed authenticating accesspoint with username and password: %w", err)
+		}
+	case SessionSpotifyTokenCredentials:
+		if err = s.ap.ConnectSpotifyToken(creds.Username, creds.Token); err != nil {
+			return fmt.Errorf("failed authenticating accesspoint with username and spotify token: %w", err)
 		}
 	case SessionBlobCredentials:
 		if err = s.ap.ConnectBlob(creds.Username, creds.Blob); err != nil {

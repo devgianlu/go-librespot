@@ -89,6 +89,14 @@ func (ap *Accesspoint) ConnectUserPass(username, password string) error {
 	})
 }
 
+func (ap *Accesspoint) ConnectSpotifyToken(username, token string) error {
+	return ap.Connect(&pb.LoginCredentials{
+		Typ:      pb.AuthenticationType_AUTHENTICATION_SPOTIFY_TOKEN.Enum(),
+		Username: proto.String(username),
+		AuthData: []byte(token),
+	})
+}
+
 func (ap *Accesspoint) ConnectStored(username string, data []byte) error {
 	return ap.Connect(&pb.LoginCredentials{
 		Typ:      pb.AuthenticationType_AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS.Enum(),

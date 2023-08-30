@@ -8,6 +8,11 @@ type SessionUserPassCredentials struct {
 	Password string
 }
 
+type SessionSpotifyTokenCredentials struct {
+	Username string
+	Token    string
+}
+
 type SessionStoredCredentials struct {
 	Username string
 	Data     []byte

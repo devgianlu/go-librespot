@@ -198,6 +198,26 @@ type storedCredentialsFile struct {
 	Data     []byte `json:"data"`
 }
 
+func (app *App) SpotifyToken(username, token string) error {
+	sess, err := app.newSession(SessionSpotifyTokenCredentials{username, token})
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for {
+			select {
+			case req := <-app.server.Receive():
+				data, err := app.handleApiRequest(req, sess)
+				req.Reply(data, err)
+			}
+		}
+	}()
+
+	sess.Run()
+	return nil
+}
+
 func (app *App) UserPass(username, password string) (err error) {
 	var storedCredentials []byte
 	if content, err := os.ReadFile("credentials.json"); err == nil {
@@ -255,6 +275,7 @@ type Config struct {
 	AuthMethod  string `yaml:"auth_method" env:"AUTH_METHOD" env-default:"zeroconf"`
 	Username    string `yaml:"username" env:"USERNAME" env-default:""`
 	Password    string `yaml:"password" env:"PASSWORD" env-default:""`
+	Token       string `yaml:"token" env:"TOKEN" env-default:""`
 	Bitrate     int    `yaml:"bitrate" env:"BITRATE" env-default:"160"`
 }
 
@@ -296,6 +317,10 @@ func main() {
 	case "password":
 		if err := app.UserPass(cfg.Username, cfg.Password); err != nil {
 			log.WithError(err).Fatal("failed running with username and password")
+		}
+	case "spotify_token":
+		if err := app.SpotifyToken(cfg.Username, cfg.Token); err != nil {
+			log.WithError(err).Fatal("failed running with username and spotify token")
 		}
 	default:
 		log.Fatalf("unknown auth method: %s", cfg.AuthMethod)
