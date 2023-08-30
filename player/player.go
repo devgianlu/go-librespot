@@ -17,7 +17,7 @@ const SampleRate = 44100
 const Channels = 2
 
 const MaxPlayers = 4
-const MaxVolume = 65535
+const MaxStateVolume = 65535
 
 type Player struct {
 	sp       *spclient.Spclient
@@ -26,6 +26,8 @@ type Player struct {
 	oto *oto.Context
 	cmd chan playerCmd
 	ev  chan Event
+
+	volumeSteps uint32
 
 	startedPlaying time.Time
 }
@@ -48,7 +50,7 @@ type playerCmd struct {
 	resp chan any
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, preferredDevice string) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, preferredDevice string, volumeSteps uint32) (*Player, error) {
 	otoCtx, readyChan, err := oto.NewContextWithOptions(&oto.NewContextOptions{
 		SampleRate:      SampleRate,
 		ChannelCount:    Channels,
@@ -63,11 +65,12 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, preferredDevi
 	<-readyChan
 
 	p := &Player{
-		sp:       sp,
-		audioKey: audioKey,
-		oto:      otoCtx,
-		cmd:      make(chan playerCmd),
-		ev:       make(chan Event, 1), // FIXME: is too messy?
+		sp:          sp,
+		audioKey:    audioKey,
+		oto:         otoCtx,
+		volumeSteps: volumeSteps,
+		cmd:         make(chan playerCmd),
+		ev:          make(chan Event, 1), // FIXME: is too messy?
 	}
 	go p.manageLoop()
 
@@ -178,7 +181,7 @@ func (p *Player) Close() {
 }
 
 func (p *Player) SetVolume(val uint32) {
-	vol := float64(val) / MaxVolume
+	vol := float64(val) / MaxStateVolume
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 

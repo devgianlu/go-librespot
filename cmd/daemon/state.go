@@ -42,7 +42,7 @@ func (s *Session) initState() {
 		lastCommand: nil,
 		deviceInfo: &connectpb.DeviceInfo{
 			CanPlay:               true,
-			Volume:                player.MaxVolume,
+			Volume:                player.MaxStateVolume,
 			Name:                  s.app.cfg.DeviceName,
 			DeviceId:              s.app.deviceId,
 			DeviceType:            s.app.deviceType,
@@ -55,7 +55,7 @@ func (s *Session) initState() {
 				GaiaEqConnectId:            true,
 				SupportsLogout:             true,
 				IsObservable:               true,
-				VolumeSteps:                VolumeSteps,
+				VolumeSteps:                int32(s.app.cfg.VolumeSteps),
 				SupportedTypes:             []string{"audio/track"}, // TODO: support episodes
 				CommandAcks:                true,
 				SupportsRename:             false,

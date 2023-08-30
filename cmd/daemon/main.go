@@ -76,14 +76,15 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 	switch req.Type {
 	case ApiRequestTypeStatus:
 		resp := &ApiResponseStatus{
-			Username:   sess.ap.Username(),
-			DeviceId:   sess.app.deviceId,
-			DeviceName: sess.app.cfg.DeviceName,
+			Username:    sess.ap.Username(),
+			DeviceId:    sess.app.deviceId,
+			DeviceName:  sess.app.cfg.DeviceName,
+			VolumeSteps: sess.app.cfg.VolumeSteps,
 		}
 
 		var trackPosition int64
 		sess.withState(func(s *State) {
-			resp.Volume = float64(s.deviceInfo.Volume) / player.MaxVolume
+			resp.Volume = s.deviceInfo.Volume
 			resp.RepeatContext = s.playerState.Options.RepeatingContext
 			resp.RepeatTrack = s.playerState.Options.RepeatingTrack
 			resp.ShuffleContext = s.playerState.Options.ShufflingContext
@@ -138,9 +139,19 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 		}
 
 		return nil, nil
-	case ApiRequestTypeVolume:
-		vol := req.Data.(float64)
-		sess.updateVolume(uint32(vol * float64(player.MaxVolume)))
+	case ApiRequestTypeGetVolume:
+		resp := &ApiResponseVolume{
+			Max: sess.app.cfg.VolumeSteps,
+		}
+
+		sess.withState(func(s *State) {
+			resp.Value = s.deviceInfo.Volume * sess.app.cfg.VolumeSteps / player.MaxStateVolume
+		})
+
+		return resp, nil
+	case ApiRequestTypeSetVolume:
+		vol := req.Data.(uint32)
+		sess.updateVolume(vol * player.MaxStateVolume / sess.app.cfg.VolumeSteps)
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
@@ -277,6 +288,7 @@ type Config struct {
 	Password    string `yaml:"password" env:"PASSWORD" env-default:""`
 	Token       string `yaml:"token" env:"TOKEN" env-default:""`
 	Bitrate     int    `yaml:"bitrate" env:"BITRATE" env-default:"160"`
+	VolumeSteps uint32 `yaml:"volume_steps" env:"VOLUME_STEPS" env-default:"100"`
 }
 
 func main() {

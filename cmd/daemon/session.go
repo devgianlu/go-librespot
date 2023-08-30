@@ -18,8 +18,6 @@ import (
 	"sync"
 )
 
-const VolumeSteps = 64
-
 type Session struct {
 	app *App
 
@@ -365,7 +363,7 @@ func (s *Session) Connect(creds SessionCredentials) (err error) {
 	s.audioKey = audio.NewAudioKeyProvider(s.ap)
 
 	// init player
-	s.player, err = player.NewPlayer(s.sp, s.audioKey, s.app.cfg.AudioDevice)
+	s.player, err = player.NewPlayer(s.sp, s.audioKey, s.app.cfg.AudioDevice, s.app.cfg.VolumeSteps)
 	if err != nil {
 		return fmt.Errorf("failed initializing player: %w", err)
 	}

@@ -72,10 +72,12 @@ paths:
                     description: Whether the player is buffering
                     type: boolean
                   volume:
-                    description: The player current volume from 0 to 1
+                    description: The player current volume from 0 to max
                     type: number
                     minimum: 0
-                    maximum: 1
+                  volume_steps:
+                    description: The player max volume value
+                    type: number
                   repeat_context:
                     description: Whether the repeat context feature is enabled
                     type: boolean
@@ -152,6 +154,22 @@ paths:
         200:
           description: Successful response
   /player/volume:
+    get:
+      description: Get player volume
+      responses:
+        200:
+          description: Returns the player volume settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  value:
+                    type: integer
+                    description: The current volume, ranging from 0 to max
+                  max:
+                    type: integer
+                    description: The max volume value
     post:
       description: Set player volume
       requestBody:
@@ -161,10 +179,9 @@ paths:
               type: object
               properties:
                 volume:
-                  description: Volume from 0 to 1
+                  description: Volume from 0 to max
                   type: number
                   minimum: 0
-                  maximum: 1
                   required: true
       responses:
         200:

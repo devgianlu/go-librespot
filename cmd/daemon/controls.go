@@ -276,13 +276,13 @@ func (s *Session) skipNext() error {
 }
 
 func (s *Session) updateVolume(newVal uint32) {
-	if newVal > player.MaxVolume {
-		newVal = player.MaxVolume
+	if newVal > player.MaxStateVolume {
+		newVal = player.MaxStateVolume
 	} else if newVal < 0 {
 		newVal = 0
 	}
 
-	log.Debugf("update volume to %d/%d", newVal, player.MaxVolume)
+	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
 	s.player.SetVolume(newVal)
 	s.withState(func(s *State) {
 		s.deviceInfo.Volume = newVal
@@ -295,7 +295,8 @@ func (s *Session) updateVolume(newVal uint32) {
 	s.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeVolume,
 		Data: ApiEventDataVolume{
-			Value: float64(newVal) / player.MaxVolume,
+			Value: newVal * s.app.cfg.VolumeSteps / player.MaxStateVolume,
+			Max:   s.app.cfg.VolumeSteps,
 		},
 	})
 }

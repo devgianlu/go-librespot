@@ -27,4 +27,5 @@ The following events are emitted:
   - `position`: Track position in milliseconds
   - `duration`: Track duration in milliseconds
 - `volume`: The player volume changed, the following data is provided:
-  - `value`: The volume as float from 0 to 1
+  - `value`: The volume, ranging from 0 to max
+  - `max`: The max volume value

@@ -31,14 +31,15 @@ var ErrNoSession = errors.New("no session")
 type ApiRequestType string
 
 const (
-	ApiRequestTypeStatus ApiRequestType = "status"
-	ApiRequestTypeResume ApiRequestType = "resume"
-	ApiRequestTypePause  ApiRequestType = "pause"
-	ApiRequestTypeSeek   ApiRequestType = "seek"
-	ApiRequestTypePrev   ApiRequestType = "prev"
-	ApiRequestTypeNext   ApiRequestType = "next"
-	ApiRequestTypePlay   ApiRequestType = "play"
-	ApiRequestTypeVolume ApiRequestType = "volume"
+	ApiRequestTypeStatus    ApiRequestType = "status"
+	ApiRequestTypeResume    ApiRequestType = "resume"
+	ApiRequestTypePause     ApiRequestType = "pause"
+	ApiRequestTypeSeek      ApiRequestType = "seek"
+	ApiRequestTypePrev      ApiRequestType = "prev"
+	ApiRequestTypeNext      ApiRequestType = "next"
+	ApiRequestTypePlay      ApiRequestType = "play"
+	ApiRequestTypeGetVolume ApiRequestType = "get_volume"
+	ApiRequestTypeSetVolume ApiRequestType = "set_volume"
 )
 
 type ApiEventType string
@@ -116,11 +117,17 @@ type ApiResponseStatus struct {
 	PlayOrigin     string                  `json:"play_origin"`
 	Paused         bool                    `json:"paused"`
 	Buffering      bool                    `json:"buffering"`
-	Volume         float64                 `json:"volume"`
+	Volume         uint32                  `json:"volume"`
+	VolumeSteps    uint32                  `json:"volume_steps"`
 	RepeatContext  bool                    `json:"repeat_context"`
 	RepeatTrack    bool                    `json:"repeat_track"`
 	ShuffleContext bool                    `json:"shuffle_context"`
 	Track          *ApiResponseStatusTrack `json:"track"`
+}
+
+type ApiResponseVolume struct {
+	Value uint32 `json:"value"`
+	Max   uint32 `json:"max"`
 }
 
 type ApiEvent struct {
@@ -130,9 +137,7 @@ type ApiEvent struct {
 
 type ApiEventDataTrack ApiResponseStatusTrack
 
-type ApiEventDataVolume struct {
-	Value float64 `json:"value"`
-}
+type ApiEventDataVolume ApiResponseVolume
 
 type ApiEventDataSeek struct {
 	Position int `json:"position"`
@@ -252,20 +257,21 @@ func (s *ApiServer) serve() {
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
 	})
 	m.HandleFunc("/player/volume", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
+		if r.Method == "GET" {
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeGetVolume}, w)
+		} else if r.Method == "POST" {
+			var data struct {
+				Volume uint32 `json:"volume"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data.Volume}, w)
+		} else {
 			w.WriteHeader(http.StatusBadRequest)
-			return
 		}
-
-		var data struct {
-			Volume float64 `json:"volume"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeVolume, Data: data.Volume}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
