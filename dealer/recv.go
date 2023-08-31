@@ -157,12 +157,6 @@ func (d *Dealer) handleMessage(rawMsg *RawMessage) {
 			return
 		}
 
-		var ok bool
-		payloadBytes, ok = rawMsg.Payloads[0].([]byte)
-		if !ok {
-			return
-		}
-
 		payloadBytes, err = handleTransferEncoding(rawMsg.Headers, payloadBytes)
 		if err != nil {
 			log.WithError(err).Errorf("failed decoding message transfer encoding")

@@ -331,6 +331,8 @@ func (s *ApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
 	defer s.clientsLock.RUnlock()
 
+	log.Tracef("emitting websocket event: %s", ev.Type)
+
 	for _, client := range s.clients {
 		if err := wsjson.Write(context.TODO(), client, ev); err != nil {
 			// purposely do not propagate this to the caller
