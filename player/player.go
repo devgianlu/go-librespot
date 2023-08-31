@@ -160,6 +160,8 @@ loop:
 	for _, pp := range players {
 		_ = pp.Close()
 	}
+
+	_ = p.oto.Close()
 }
 
 func (p *Player) StartedPlayingAt() time.Time {

@@ -5,8 +5,8 @@ github.com/cenkalti/backoff/v4 v4.2.1/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyY
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/devgianlu/oto/v2 v2.0.0-20230712124451-ee55af194ebb h1:Hm9aNYNC6ZmFavw44Hca/FlZ7YYPiX8wINPmB+1UZso=
-github.com/devgianlu/oto/v2 v2.0.0-20230712124451-ee55af194ebb/go.mod h1:XoAqcfGced8SVzCvx7DO2YA69Zpr1NiHNhnxJawxaZ0=
+github.com/devgianlu/oto/v2 v2.0.0-20230831155254-02b2570e2526 h1:GsEwgs7QWTm919tDrQ6t1YvwGg7ly2Hxkj79jAWBlzQ=
+github.com/devgianlu/oto/v2 v2.0.0-20230831155254-02b2570e2526/go.mod h1:XoAqcfGced8SVzCvx7DO2YA69Zpr1NiHNhnxJawxaZ0=
 github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e h1:OoETp+L//8ZDtd5BWKaogHQjgA104yF4a2yqjfaG3mE=
 github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e/go.mod h1:m5DMFz6BcaKJwxxPaSh9MxwPzK2GPSt1KRFC8Imf0ik=
 github.com/ebitengine/purego v0.4.0-alpha.5 h1:1jd+ClW6gD2x2F/+j4lCGc3TQMWL3hNYgLu/xF9Jz0g=

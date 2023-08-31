@@ -28,4 +28,4 @@ require (
 	golang.org/x/tools v0.10.0 // indirect
 )
 
-replace github.com/hajimehoshi/oto/v2 v2.4.0 => github.com/devgianlu/oto/v2 v2.0.0-20230712124451-ee55af194ebb
+replace github.com/hajimehoshi/oto/v2 v2.4.0 => github.com/devgianlu/oto/v2 v2.0.0-20230831155254-02b2570e2526
