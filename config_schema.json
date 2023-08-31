@@ -8,6 +8,7 @@
       "properties": {
         "log_level": {
           "type": "string",
+          "description": "Logging level for the application",
           "enum": [
             "panic",
             "fatal",
@@ -22,10 +23,12 @@
         },
         "device_name": {
           "type": "string",
+          "description": "The device name showed in the Spotify UI",
           "default": "go-librespot"
         },
         "device_type": {
           "type": "string",
+          "description": "The device type showed in the Spotify UI",
           "enum": [
             "computer",
             "tablet",
@@ -49,10 +52,12 @@
         },
         "audio_device": {
           "type": "string",
+          "description": "Which audio device should be used for playback, leave empty for default",
           "default": ""
         },
         "server_port": {
           "type": "integer",
+          "description": "Which port to use for the API server, leave empty to disable",
           "default": 0
         },
         "credentials": {
@@ -60,6 +65,7 @@
           "properties": {
             "type": {
               "type": "string",
+              "description": "The authentication method",
               "enum": [
                 "user_pass",
                 "spotify_token",
@@ -69,6 +75,7 @@
             },
             "user_pass": {
               "type": "object",
+              "description": "Authentication with username and password",
               "properties": {
                 "username": {
                   "type": "string",
@@ -82,6 +89,7 @@
             },
             "spotify_token": {
               "type": "object",
+              "description": "Authentication with username and access token",
               "properties": {
                 "username": {
                   "type": "string",
@@ -97,6 +105,8 @@
         },
         "bitrate": {
           "type": "number",
+          "description": "The preferred bitrate for audio playback, default is 160kbps",
+          "enum": [96, 160, 320],
           "default": 160
         }
       },
