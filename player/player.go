@@ -101,12 +101,14 @@ loop:
 			case playerCmdPlay:
 				pp := players[cmd.data.(int)]
 				pp.Play()
+				_ = p.oto.Resume()
 				started[cmd.data.(int)] = true
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypePlaying}
 			case playerCmdPause:
 				pp := players[cmd.data.(int)]
 				pp.Pause()
+				_ = p.oto.Suspend()
 				started[cmd.data.(int)] = false
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypePaused}
