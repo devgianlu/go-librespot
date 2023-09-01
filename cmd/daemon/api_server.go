@@ -47,6 +47,7 @@ type ApiEventType string
 const (
 	ApiEventTypePlaying    ApiEventType = "playing"
 	ApiEventTypeNotPlaying ApiEventType = "not_playing"
+	ApiEventTypeWillPlay   ApiEventType = "will_play"
 	ApiEventTypePaused     ApiEventType = "paused"
 	ApiEventTypeActive     ApiEventType = "active"
 	ApiEventTypeInactive   ApiEventType = "inactive"
@@ -144,6 +145,11 @@ type ApiEventDataMetadata ApiResponseStatusTrack
 type ApiEventDataVolume ApiResponseVolume
 
 type ApiEventDataPlaying struct {
+	Uri        string `json:"uri"`
+	PlayOrigin string `json:"play_origin"`
+}
+
+type ApiEventDataWillPlay struct {
 	Uri        string `json:"uri"`
 	PlayOrigin string `json:"play_origin"`
 }

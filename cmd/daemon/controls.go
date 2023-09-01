@@ -166,14 +166,24 @@ func (s *Session) loadCurrentTrack() error {
 		s.stream = nil
 	}
 
+	var playOrigin string
 	var trackPosition int64
 	var trackId librespot.TrackId
 	s.updateState(func(s *State) {
+		playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 		trackId = librespot.TrackIdFromUri(s.playerState.Track.Uri)
 		trackPosition = s.trackPosition()
 
 		s.playerState.IsPlaying = true
 		s.playerState.IsBuffering = true
+	})
+
+	s.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeWillPlay,
+		Data: ApiEventDataWillPlay{
+			Uri:        trackId.Uri(),
+			PlayOrigin: playOrigin,
+		},
 	})
 
 	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate)

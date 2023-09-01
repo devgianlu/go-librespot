@@ -21,6 +21,9 @@ The following events are emitted:
   - `album_cover_url`: Track album cover image URL
   - `position`: Track position in milliseconds
   - `duration`: Track duration in milliseconds
+- `will_play`: The player is about to play the specified track
+  - `uri`: The track URI
+  - `play_origin`: Who started the playback
 - `playing`: The current track is playing
   - `uri`: The track URI
   - `play_origin`: Who started the playback
