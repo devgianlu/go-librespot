@@ -50,7 +50,7 @@ const (
 	ApiEventTypePaused     ApiEventType = "paused"
 	ApiEventTypeActive     ApiEventType = "active"
 	ApiEventTypeInactive   ApiEventType = "inactive"
-	ApiEventTypeTrack      ApiEventType = "track"
+	ApiEventTypeMetadata   ApiEventType = "metadata"
 	ApiEventTypeVolume     ApiEventType = "volume"
 	ApiEventTypeSeek       ApiEventType = "seek"
 	ApiEventTypeStopped    ApiEventType = "stopped"
@@ -139,7 +139,7 @@ type ApiEvent struct {
 	Data any          `json:"data"`
 }
 
-type ApiEventDataTrack ApiResponseStatusTrack
+type ApiEventDataMetadata ApiResponseStatusTrack
 
 type ApiEventDataVolume ApiResponseVolume
 

@@ -13,7 +13,7 @@ The following events are emitted:
 
 - `active`: The device has become active
 - `inactive`: The device has become inactive
-- `track`: A new track was loaded, the following data is provided:
+- `metadata`: A new track was loaded, the following metadata is available:
   - `uri`: Track URI
   - `name`: Track name
   - `artist_names`: List of track artist names

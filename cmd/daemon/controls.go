@@ -184,8 +184,8 @@ func (s *Session) loadCurrentTrack() error {
 	})
 
 	s.app.server.Emit(&ApiEvent{
-		Type: ApiEventTypeTrack,
-		Data: ApiEventDataTrack(*NewApiResponseStatusTrack(stream.Track, s.prodInfo, int(trackPosition))),
+		Type: ApiEventTypeMetadata,
+		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(stream.Track, s.prodInfo, int(trackPosition))),
 	})
 
 	s.stream = stream
