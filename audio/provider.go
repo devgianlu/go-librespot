@@ -90,7 +90,7 @@ func (p *KeyProvider) recvLoop() {
 			reqs[reqSeq] = req
 
 			if err := p.ap.Send(ap.PacketTypeRequestKey, buf.Bytes()); err != nil {
-				delete(reqs, seq)
+				delete(reqs, reqSeq)
 				req.resp <- keyResponse{err: fmt.Errorf("failed sending key request for file %s, track: %s: %w",
 					hex.EncodeToString(req.fileId), librespot.TrackId(req.gid).Uri(), err)}
 			}
