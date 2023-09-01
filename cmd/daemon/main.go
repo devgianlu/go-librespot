@@ -103,6 +103,7 @@ func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
 			resp.RepeatContext = s.playerState.Options.RepeatingContext
 			resp.RepeatTrack = s.playerState.Options.RepeatingTrack
 			resp.ShuffleContext = s.playerState.Options.ShufflingContext
+			resp.Stopped = !s.playerState.IsPlaying
 			resp.Paused = s.playerState.IsPaused
 			resp.Buffering = s.playerState.IsBuffering
 			resp.PlayOrigin = s.playerState.PlayOrigin.FeatureIdentifier
