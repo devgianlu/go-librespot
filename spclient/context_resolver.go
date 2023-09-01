@@ -23,7 +23,7 @@ func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver,
 	} else {
 		newCtx, err := sp.ContextResolve(ctx.Uri)
 		if err != nil {
-			return nil, fmt.Errorf("failed resolving context %s: %w", newCtx.Uri, err)
+			return nil, fmt.Errorf("failed resolving context %s: %w", ctx.Uri, err)
 		} else if newCtx.Loading {
 			return nil, fmt.Errorf("context %s is loading", newCtx.Uri)
 		}
