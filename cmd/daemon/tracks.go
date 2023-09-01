@@ -87,6 +87,8 @@ func (tl *TracksList) PrevTracks() []*connectpb.ProvidedTrack {
 			} else if err != nil {
 				log.WithError(err).Errorf("failed loading page at %d", pageIdx)
 				break
+			} else if len(page) == 0 {
+				return tracks
 			}
 
 			trackIdx = len(page) - 1
@@ -123,6 +125,8 @@ func (tl *TracksList) NextTracks() []*connectpb.ProvidedTrack {
 			} else if err != nil {
 				log.WithError(err).Errorf("failed loading page at %d", pageIdx)
 				break
+			} else if len(page) == 0 {
+				return tracks
 			}
 
 			trackIdx = 0
@@ -174,6 +178,8 @@ func (tl *TracksList) GoNext() bool {
 	} else if err != nil {
 		log.WithError(err).Errorf("failed loading page at %d", tl.pageIdx+1)
 		return false
+	} else if len(page) == 0 {
+		return false
 	}
 
 	tl.pageIdx, tl.trackIdx = tl.pageIdx+1, 0
@@ -198,6 +204,8 @@ func (tl *TracksList) GoPrev() bool {
 		return false
 	} else if err != nil {
 		log.WithError(err).Errorf("failed loading page at %d", tl.pageIdx-1)
+		return false
+	} else if len(page) == 0 {
 		return false
 	}
 

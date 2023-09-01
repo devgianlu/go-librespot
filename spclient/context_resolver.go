@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"io"
 	"strings"
@@ -109,6 +110,10 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, map[string]s
 
 		// TODO: do we need to preserve any field?
 		r.ctx.Pages[idx] = newPage
+	}
+
+	if len(page.Tracks) == 0 {
+		log.Warnf("returning empty context page (%s) for %s", page.PageUrl, r.ctx.Uri)
 	}
 
 	return page.Tracks, page.Metadata, nil
