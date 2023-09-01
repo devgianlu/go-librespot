@@ -122,7 +122,10 @@ loop:
 			case playerCmdSeek:
 				// seek directly with milliseconds
 				pp := players[cmd.data.(playerCmdSeekData).idx]
+				vol := pp.Volume()
+				pp.SetVolume(0)
 				_, err := pp.(io.Seeker).Seek(cmd.data.(playerCmdSeekData).pos, io.SeekStart)
+				time.AfterFunc(time.Second, func() { pp.SetVolume(vol) }) // FIXME: terrible hack, but works
 				cmd.resp <- err
 			case playerCmdVolume:
 				vol := cmd.data.(float64)
