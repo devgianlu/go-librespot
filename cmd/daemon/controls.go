@@ -42,6 +42,7 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			},
 		})
 	case player.EventTypeNotPlaying:
+		var playOrigin string
 		var hasNextTrack bool
 		s.withState(func(s *State) {
 			if s.tracks != nil {
@@ -56,6 +57,21 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 
 			s.playerState.Timestamp = time.Now().UnixMilli()
 			s.playerState.PositionAsOfTimestamp = 0
+
+			playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
+
+			if !hasNextTrack {
+				s.playerState.IsPlaying = false
+				s.playerState.IsPaused = false
+				s.playerState.IsBuffering = false
+			}
+		})
+
+		s.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeNotPlaying,
+			Data: ApiEventDataNotPlaying{
+				PlayOrigin: playOrigin,
+			},
 		})
 
 		// load current track into stream
@@ -64,12 +80,19 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			return
 		}
 
-		// start playing if there is something next
+		// start playing if there is something next or become stopped
 		if hasNextTrack {
 			if err := s.play(); err != nil {
 				log.WithError(err).Error("failed playing")
 				return
 			}
+		} else {
+			s.app.server.Emit(&ApiEvent{
+				Type: ApiEventTypeStopped,
+				Data: ApiEventDataStopped{
+					PlayOrigin: playOrigin,
+				},
+			})
 		}
 	case player.EventTypeStopped:
 		// do nothing

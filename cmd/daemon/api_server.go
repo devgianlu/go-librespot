@@ -45,13 +45,15 @@ const (
 type ApiEventType string
 
 const (
-	ApiEventTypePlaying  ApiEventType = "playing"
-	ApiEventTypePaused   ApiEventType = "paused"
-	ApiEventTypeActive   ApiEventType = "active"
-	ApiEventTypeInactive ApiEventType = "inactive"
-	ApiEventTypeTrack    ApiEventType = "track"
-	ApiEventTypeVolume   ApiEventType = "volume"
-	ApiEventTypeSeek     ApiEventType = "seek"
+	ApiEventTypePlaying    ApiEventType = "playing"
+	ApiEventTypeNotPlaying ApiEventType = "not_playing"
+	ApiEventTypePaused     ApiEventType = "paused"
+	ApiEventTypeActive     ApiEventType = "active"
+	ApiEventTypeInactive   ApiEventType = "inactive"
+	ApiEventTypeTrack      ApiEventType = "track"
+	ApiEventTypeVolume     ApiEventType = "volume"
+	ApiEventTypeSeek       ApiEventType = "seek"
+	ApiEventTypeStopped    ApiEventType = "stopped"
 )
 
 type ApiRequest struct {
@@ -145,7 +147,15 @@ type ApiEventDataPlaying struct {
 	PlayOrigin string `json:"play_origin"`
 }
 
+type ApiEventDataNotPlaying struct {
+	PlayOrigin string `json:"play_origin"`
+}
+
 type ApiEventDataPaused struct {
+	PlayOrigin string `json:"play_origin"`
+}
+
+type ApiEventDataStopped struct {
 	PlayOrigin string `json:"play_origin"`
 }
 
