@@ -22,14 +22,18 @@ The following events are emitted:
   - `position`: Track position in milliseconds
   - `duration`: Track duration in milliseconds
 - `playing`: The current track is playing
+  - `uri`: The track URI
   - `play_origin`: Who started the playback
 - `not_playing`: The current track has finished playing
+  - `uri`: The track URI
   - `play_origin`: Who started the playback
 - `paused`: The current track is paused
+  - `uri`: The track URI
   - `play_origin`: Who started the playback
 - `stopped`: The current context is empty, nothing more to play
   - `play_origin`: Who started the playback
 - `seek`: The current track was seeked, the following data is provided:
+  - `uri`: The track URI
   - `position`: Track position in milliseconds
   - `duration`: Track duration in milliseconds
   - `play_origin`: Who started the playback

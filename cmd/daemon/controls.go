@@ -12,39 +12,47 @@ import (
 func (s *Session) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlaying:
-		var playOrigin string
+		var uri, playOrigin string
 		s.updateState(func(s *State) {
 			s.playerState.IsPlaying = true
 			s.playerState.IsPaused = false
 			s.playerState.IsBuffering = false
+
+			uri = s.playerState.Track.Uri
 			playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 		})
 
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
+				Uri:        uri,
 				PlayOrigin: playOrigin,
 			},
 		})
 	case player.EventTypePaused:
-		var playOrigin string
+		var uri, playOrigin string
 		s.updateState(func(s *State) {
 			s.playerState.IsPlaying = true
 			s.playerState.IsPaused = true
 			s.playerState.IsBuffering = false
+
+			uri = s.playerState.Track.Uri
 			playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 		})
 
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
 			Data: ApiEventDataPaused{
+				Uri:        uri,
 				PlayOrigin: playOrigin,
 			},
 		})
 	case player.EventTypeNotPlaying:
-		var playOrigin string
+		var prevUri, playOrigin string
 		var hasNextTrack bool
 		s.withState(func(s *State) {
+			prevUri = s.playerState.Track.Uri
+
 			if s.tracks != nil {
 				hasNextTrack = s.tracks.GoNext()
 				s.playerState.IsPaused = !hasNextTrack
@@ -70,6 +78,7 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
+				Uri:        prevUri,
 				PlayOrigin: playOrigin,
 			},
 		})
@@ -232,16 +241,19 @@ func (s *Session) seek(position int64) error {
 		return err
 	}
 
-	var playOrigin string
+	var uri, playOrigin string
 	s.updateState(func(s *State) {
 		s.playerState.Timestamp = time.Now().UnixMilli()
 		s.playerState.PositionAsOfTimestamp = position
+
+		uri = s.playerState.Track.Uri
 		playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
 	})
 
 	s.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
 		Data: ApiEventDataSeek{
+			Uri:        uri,
 			Position:   int(position),
 			Duration:   int(*s.stream.Track.Duration),
 			PlayOrigin: playOrigin,
