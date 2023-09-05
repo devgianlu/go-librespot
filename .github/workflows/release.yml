@@ -29,26 +29,26 @@ jobs:
 
       - name: Cross-compile alsa-lib for armhf
         run: |
-          apt-get install -y gcc-arm-linux-gnueabihf
+          sudo apt-get install -y gcc-arm-linux-gnueabihf
           cd alsa-lib-1.2.10
           ./configure --enable-shared=yes --enable-static=no --with-pic \
             --host=arm-linux-gnueabihf --prefix=/usr/arm-linux-gnueabihf
           make
-          make install
+          sudo make install
           make clean
 
       - name: Cross-compile alsa-lib for arm64
         run: |
-          apt-get install -y gcc-aarch64-linux-gnu
+          sudo apt-get install -y gcc-aarch64-linux-gnu
           cd alsa-lib-1.2.10
           ./configure --enable-shared=yes --enable-static=no --with-pic \
             --host=aarch64-linux-gnu --prefix=/usr/aarch64-linux-gnu
           make
-          make install
+          sudo make install
           make clean
 
       - name: Install dependencies for amd64
-        run: apt-get install -y gcc libasound2-dev
+        run: sudo apt-get install -y gcc libasound2-dev
 
       - uses: goreleaser/goreleaser-action@v4
         if: success() && startsWith(github.ref, 'refs/tags/')
