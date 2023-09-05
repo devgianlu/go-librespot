@@ -5,9 +5,19 @@ import (
 	"runtime"
 )
 
+var (
+	commit  = ""
+	version = ""
+)
+
 func VersionNumberString() string {
-	// TODO: we probably want a commit hash for non-debug binaries
-	return "dev"
+	if len(version) > 0 {
+		return version
+	} else if len(commit) > 0 {
+		return commit
+	} else {
+		return "dev"
+	}
 }
 
 func VersionString() string {

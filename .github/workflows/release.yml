@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -17,15 +17,38 @@ jobs:
 
       - run: git fetch --force --tags
 
-      - name: Set up Go
+      - name: Set up Golang
         uses: actions/setup-go@v4
         with:
           go-version: '1.20'
 
-      - name: Install dependencies
-        run: sudo apt-get install -y libasound2-dev
+      - name: Download alsa-lib sources
+        run: |
+          wget http://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.10.tar.bz2
+          tar -xvf alsa-lib-1.2.10.tar.bz2
 
-      - run: go mod tidy
+      - name: Cross-compile alsa-lib for armhf
+        run: |
+          apt-get install -y gcc-arm-linux-gnueabihf
+          cd alsa-lib-1.2.10
+          ./configure --enable-shared=yes --enable-static=no --with-pic \
+            --host=arm-linux-gnueabihf --prefix=/usr/arm-linux-gnueabihf
+          make
+          make install
+          make clean
+
+      - name: Cross-compile alsa-lib for arm64
+        run: |
+          apt-get install -y gcc-aarch64-linux-gnu
+          cd alsa-lib-1.2.10
+          ./configure --enable-shared=yes --enable-static=no --with-pic \
+            --host=aarch64-linux-gnu --prefix=/usr/aarch64-linux-gnu
+          make
+          make install
+          make clean
+
+      - name: Install dependencies for amd64
+        run: apt-get install -y gcc libasound2-dev
 
       - uses: goreleaser/goreleaser-action@v4
         if: success() && startsWith(github.ref, 'refs/tags/')
