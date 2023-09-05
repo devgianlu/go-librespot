@@ -26,11 +26,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y gcc libasound2-dev
 
       - name: Download alsa-lib sources
+        working-directory: /tmp
         run: |
           wget http://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.10.tar.bz2
           tar -xvf alsa-lib-1.2.10.tar.bz2
 
       - name: Cross-compile alsa-lib for armhf
+        working-directory: /tmp
         run: |
           sudo apt-get install -y gcc-arm-linux-gnueabihf
           cd alsa-lib-1.2.10
@@ -41,6 +43,7 @@ jobs:
           make clean
 
       - name: Cross-compile alsa-lib for arm64
+        working-directory: /tmp
         run: |
           sudo apt-get install -y gcc-aarch64-linux-gnu
           cd alsa-lib-1.2.10
