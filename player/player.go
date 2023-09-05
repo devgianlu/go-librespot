@@ -71,7 +71,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, preferredDevi
 		oto:         otoCtx,
 		volumeSteps: volumeSteps,
 		cmd:         make(chan playerCmd),
-		ev:          make(chan Event, 1), // FIXME: is too messy?
+		ev:          make(chan Event, 128), // FIXME: is too messy?
 	}
 	go p.manageLoop()
 
