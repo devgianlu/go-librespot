@@ -8,9 +8,11 @@ Create a `config.yml` file containing:
 
 ```yaml
 device_name: go-librespot
-auth_method: password
-username: "<username>"
-password: "<password>"
+credentials:
+  type: user_pass
+  user_pass:
+    username: "<username>"
+    password: "<password>"
 ```
 
 Then, run:
