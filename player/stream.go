@@ -42,3 +42,10 @@ func (s *Stream) SeekMs(pos int64) error {
 
 	return nil
 }
+
+func (s *Stream) PositionMs() int64 {
+	resp := make(chan any, 1)
+	s.p.cmd <- playerCmd{typ: playerCmdPosition, data: s.idx, resp: resp}
+	pos := <-resp
+	return pos.(int64)
+}

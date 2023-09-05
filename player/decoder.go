@@ -21,11 +21,13 @@ type sampleDecoder struct {
 	stop   bool
 }
 
+const bufferSizeSamples = 65536
+
 func newSampleDecoder(reader *oggvorbis.Reader, norm *audio.ReplayGain) *sampleDecoder {
 	return &sampleDecoder{
 		reader: reader,
 		norm:   norm.GetTrackFactor(1),
-		ch:     make(chan [Channels * 4]byte, 65536),
+		ch:     make(chan [Channels * 4]byte, bufferSizeSamples),
 	}
 }
 
@@ -52,7 +54,7 @@ func (s *sampleDecoder) decodeLoop() {
 		// if we seeked, throw away the channel and make a new one
 		if s.seeked {
 			close(s.ch)
-			s.ch = make(chan [Channels * 4]byte, 65536)
+			s.ch = make(chan [Channels * 4]byte, bufferSizeSamples)
 			s.seeked = false
 		}
 
@@ -112,5 +114,5 @@ func (s *sampleDecoder) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (s *sampleDecoder) Position() int64 {
-	return s.reader.Position() * 1000 / SampleRate
+	return (s.reader.Position() - int64(bufferSizeSamples*Channels)) * 1000 / SampleRate
 }

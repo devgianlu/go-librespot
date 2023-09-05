@@ -219,9 +219,12 @@ func (s *Session) play() error {
 	log.Debug("resume track")
 	s.stream.Play()
 
+	streamPos := s.stream.PositionMs()
+
 	s.updateState(func(s *State) {
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = streamPos
 		s.playerState.IsPaused = false
-		// TODO: update player position
 	})
 	return nil
 }
@@ -234,9 +237,12 @@ func (s *Session) pause() error {
 	log.Debug("pause track")
 	s.stream.Pause()
 
+	streamPos := s.stream.PositionMs()
+
 	s.updateState(func(s *State) {
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = streamPos
 		s.playerState.IsPaused = true
-		// TODO: update player position
 	})
 	return nil
 }

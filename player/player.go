@@ -40,6 +40,7 @@ const (
 	playerCmdPause
 	playerCmdStop
 	playerCmdSeek
+	playerCmdPosition
 	playerCmdVolume
 	playerCmdClose
 )
@@ -127,6 +128,10 @@ loop:
 				_, err := pp.(io.Seeker).Seek(cmd.data.(playerCmdSeekData).pos, io.SeekStart)
 				time.AfterFunc(time.Second, func() { pp.SetVolume(vol) }) // FIXME: terrible hack, but works
 				cmd.resp <- err
+			case playerCmdPosition:
+				pp := players[cmd.data.(int)]
+				pos := pp.(oto.ReaderGetter).Reader().(*sampleDecoder).Position()
+				cmd.resp <- pos
 			case playerCmdVolume:
 				vol := cmd.data.(float64)
 				for _, pp := range players {
