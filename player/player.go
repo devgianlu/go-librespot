@@ -2,13 +2,14 @@ package player
 
 import (
 	"fmt"
-	"github.com/hajimehoshi/oto/v2"
-	"github.com/jfreymuth/oggvorbis"
+	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/audio"
+	"go-librespot/output"
 	downloadpb "go-librespot/proto/spotify/download"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"go-librespot/spclient"
+	"go-librespot/vorbis"
 	"io"
 	"time"
 )
@@ -16,14 +17,14 @@ import (
 const SampleRate = 44100
 const Channels = 2
 
-const MaxPlayers = 4
 const MaxStateVolume = 65535
 
 type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 
-	oto *oto.Context
+	newOutput func(source librespot.Float32Reader) (*output.Output, error)
+
 	cmd chan playerCmd
 	ev  chan Event
 
@@ -35,7 +36,7 @@ type Player struct {
 type playerCmdType int
 
 const (
-	playerCmdNew playerCmdType = iota
+	playerCmdSet playerCmdType = iota
 	playerCmdPlay
 	playerCmdPause
 	playerCmdStop
@@ -51,125 +52,127 @@ type playerCmd struct {
 	resp chan any
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, preferredDevice string, volumeSteps uint32) (*Player, error) {
-	otoCtx, readyChan, err := oto.NewContextWithOptions(&oto.NewContextOptions{
-		SampleRate:      SampleRate,
-		ChannelCount:    Channels,
-		Format:          oto.FormatFloat32LE,
-		BufferSize:      100 * time.Millisecond,
-		PreferredDevice: preferredDevice,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed initializing oto context: %w", err)
-	}
-
-	<-readyChan
-
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, device string, volumeSteps uint32) (*Player, error) {
 	p := &Player{
-		sp:          sp,
-		audioKey:    audioKey,
-		oto:         otoCtx,
+		sp:       sp,
+		audioKey: audioKey,
+		newOutput: func(reader librespot.Float32Reader) (*output.Output, error) {
+			return output.NewOutput(&output.NewOutputOptions{
+				Reader:       reader,
+				SampleRate:   SampleRate,
+				ChannelCount: Channels,
+				Device:       device,
+			})
+		},
 		volumeSteps: volumeSteps,
 		cmd:         make(chan playerCmd),
 		ev:          make(chan Event, 128), // FIXME: is too messy?
 	}
+
 	go p.manageLoop()
 
 	return p, nil
 }
 
 func (p *Player) manageLoop() {
-	players := [MaxPlayers]oto.Player{}
-	started := [MaxPlayers]bool{}
+	var out *output.Output
+	var source librespot.AudioSource
+	var done <-chan error
 
 loop:
 	for {
 		select {
 		case cmd := <-p.cmd:
 			switch cmd.typ {
-			case playerCmdNew:
-				for i := 0; i < MaxPlayers; i++ {
-					if players[i] == nil {
-						players[i] = cmd.data.(oto.Player)
+			case playerCmdSet:
+				if out != nil {
+					_ = out.Close()
+				}
 
-						if p.startedPlaying.IsZero() {
-							p.startedPlaying = time.Now()
-						}
-						cmd.resp <- i
-						break
+				source = cmd.data.(librespot.AudioSource)
+
+				var err error
+				out, err = p.newOutput(source)
+				if err != nil {
+					source = nil
+					cmd.resp <- err
+				} else {
+					done = out.WaitDone()
+
+					if p.startedPlaying.IsZero() {
+						p.startedPlaying = time.Now()
 					}
+
+					cmd.resp <- nil
 				}
 			case playerCmdPlay:
-				pp := players[cmd.data.(int)]
-				pp.Play()
-				_ = p.oto.Resume()
-				started[cmd.data.(int)] = true
+				if out != nil {
+					if err := out.Resume(); err != nil {
+						log.WithError(err).Errorf("failed resuming playback")
+					}
+				}
+
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypePlaying}
 			case playerCmdPause:
-				pp := players[cmd.data.(int)]
-				pp.Pause()
-				_ = p.oto.Suspend()
-				started[cmd.data.(int)] = false
+				if out != nil {
+					if err := out.Pause(); err != nil {
+						log.WithError(err).Errorf("failed pausing playback")
+					}
+				}
+
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypePaused}
 			case playerCmdStop:
-				pp := players[cmd.data.(int)]
-				_ = pp.Close()
-				started[cmd.data.(int)] = false
-				players[cmd.data.(int)] = nil
+				if out != nil {
+					_ = out.Close()
+				}
+
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypeStopped}
 			case playerCmdSeek:
-				// seek directly with milliseconds
-				pp := players[cmd.data.(playerCmdSeekData).idx]
-				vol := pp.Volume()
-				pp.SetVolume(0)
-				_, err := pp.(io.Seeker).Seek(cmd.data.(playerCmdSeekData).pos, io.SeekStart)
-				time.AfterFunc(time.Second, func() { pp.SetVolume(vol) }) // FIXME: terrible hack, but works
-				cmd.resp <- err
+				if source != nil {
+					err := source.SetPositionMs(cmd.data.(int64))
+					cmd.resp <- err
+				} else {
+					cmd.resp <- nil
+				}
 			case playerCmdPosition:
-				pp := players[cmd.data.(int)]
-				pos := pp.(oto.ReaderGetter).Reader().(*sampleDecoder).Position()
-				cmd.resp <- pos
+				if source != nil {
+					cmd.resp <- source.PositionMs()
+				} else {
+					cmd.resp <- int64(0)
+				}
 			case playerCmdVolume:
-				vol := cmd.data.(float64)
-				for _, pp := range players {
-					if pp == nil {
-						continue
-					}
-
-					pp.SetVolume(vol)
+				if source != nil {
+					vol := cmd.data.(float32)
+					out.SetVolume(vol)
 				}
 			case playerCmdClose:
 				break loop
 			default:
 				panic("unknown player command")
 			}
-		default:
-			// FIXME: this is all awful
-			for i, pp := range players {
-				if pp == nil || !started[i] {
-					continue
-				}
-
-				if !pp.IsPlaying() {
-					p.ev <- Event{Type: EventTypeNotPlaying}
-				}
+		case err := <-done:
+			if err != nil {
+				log.WithError(err).Errorf("playback failed")
 			}
 
-			time.Sleep(10 * time.Millisecond)
+			done = nil
+			if err != nil || out.IsEOF() {
+				p.ev <- Event{Type: EventTypeNotPlaying}
+			}
 		}
 	}
 
 	close(p.cmd)
 
 	// teardown
-	for _, pp := range players {
-		_ = pp.Close()
+	if s, ok := source.(io.Closer); ok {
+		_ = s.Close()
 	}
 
-	_ = p.oto.Close()
+	_ = out.Close()
 }
 
 func (p *Player) StartedPlayingAt() time.Time {
@@ -193,14 +196,8 @@ func (p *Player) Close() {
 }
 
 func (p *Player) SetVolume(val uint32) {
-	vol := float64(val) / MaxStateVolume
+	vol := float32(val) / MaxStateVolume
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
-}
-
-func (p *Player) newStream(pp oto.Player) int {
-	resp := make(chan any, 1)
-	p.cmd <- playerCmd{typ: playerCmdNew, data: pp, resp: resp}
-	return (<-resp).(int)
 }
 
 func (p *Player) NewStream(tid librespot.TrackId, bitrate int) (*Stream, error) {
@@ -273,21 +270,20 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int) (*Stream, error) 
 		return nil, fmt.Errorf("failed reading ReplayGain metadata: %w", err)
 	}
 
-	stream, err := oggvorbis.NewReader(audioStream)
+	stream, err := vorbis.New(audioStream, *trackMeta.Duration, rawStream.Size(), norm.GetTrackFactor(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}
 
-	if stream.SampleRate() != SampleRate {
-		return nil, fmt.Errorf("unsupported sample rate: %d", stream.SampleRate())
-	} else if stream.Channels() != Channels {
-		return nil, fmt.Errorf("unsupported channels: %d", stream.Channels())
+	if stream.Info().SampleRate != SampleRate {
+		return nil, fmt.Errorf("unsupported sample rate: %d", stream.Info().SampleRate)
+	} else if stream.Info().Channels != Channels {
+		return nil, fmt.Errorf("unsupported channels: %d", stream.Info().Channels)
 	}
 
-	idx := p.newStream(p.oto.NewPlayer(newSampleDecoder(stream, norm)))
-	if idx == -1 {
-		return nil, fmt.Errorf("too many players")
-	}
+	resp := make(chan any)
+	p.cmd <- playerCmd{typ: playerCmdSet, data: stream, resp: resp}
+	<-resp
 
-	return &Stream{p: p, idx: idx, Track: trackMeta, File: file}, nil
+	return &Stream{p: p, Track: trackMeta, File: file}, nil
 }
