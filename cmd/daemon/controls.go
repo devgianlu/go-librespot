@@ -216,10 +216,10 @@ func (s *Session) play() error {
 		return fmt.Errorf("no stream")
 	}
 
-	log.Debug("resume track")
 	s.stream.Play()
 
 	streamPos := s.stream.PositionMs()
+	log.Debugf("resume track at %dms", streamPos)
 
 	s.updateState(func(s *State) {
 		s.playerState.Timestamp = time.Now().UnixMilli()
@@ -234,10 +234,10 @@ func (s *Session) pause() error {
 		return fmt.Errorf("no stream")
 	}
 
-	log.Debug("pause track")
 	s.stream.Pause()
 
 	streamPos := s.stream.PositionMs()
+	log.Debugf("pause track at %dms", streamPos)
 
 	s.updateState(func(s *State) {
 		s.playerState.Timestamp = time.Now().UnixMilli()
