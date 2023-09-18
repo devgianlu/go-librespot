@@ -245,7 +245,6 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "skip_prev":
-		// TODO: handle rewinding track if pos < 3000ms
 		return s.skipPrev()
 	case "skip_next":
 		return s.skipNext()

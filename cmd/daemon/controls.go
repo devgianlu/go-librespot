@@ -280,6 +280,10 @@ func (s *Session) seek(position int64) error {
 }
 
 func (s *Session) skipPrev() error {
+	if s.stream.PositionMs() > 3000 {
+		return s.seek(0)
+	}
+
 	var paused bool
 	s.withState(func(s *State) {
 		paused = s.playerState.IsPaused
