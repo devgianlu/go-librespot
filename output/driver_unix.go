@@ -124,6 +124,12 @@ func (out *output) loop() error {
 		n, err := out.reader.Read(floats)
 		if errors.Is(err, io.EOF) {
 			out.eof = true
+
+			// drain pcm ignoring errors
+			out.cond.L.Lock()
+			C.snd_pcm_drain(out.handle)
+			out.cond.L.Unlock()
+
 			return nil
 		} else if err != nil {
 			return fmt.Errorf("failed reading source: %w", err)
