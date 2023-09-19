@@ -200,7 +200,7 @@ func (p *Player) SetVolume(val uint32) {
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 
-func (p *Player) NewStream(tid librespot.TrackId, bitrate int) (*Stream, error) {
+func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int64) (*Stream, error) {
 	trackMeta, err := p.sp.MetadataForTrack(tid)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
@@ -279,6 +279,10 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int) (*Stream, error) 
 		return nil, fmt.Errorf("unsupported sample rate: %d", stream.Info().SampleRate)
 	} else if stream.Info().Channels != Channels {
 		return nil, fmt.Errorf("unsupported channels: %d", stream.Info().Channels)
+	}
+
+	if err := stream.SetPositionMs(trackPosition); err != nil {
+		return nil, fmt.Errorf("failed seeking stream: %w", err)
 	}
 
 	resp := make(chan any)
