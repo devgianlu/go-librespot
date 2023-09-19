@@ -186,15 +186,12 @@ func (s *Session) loadCurrentTrack() error {
 		},
 	})
 
-	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate)
+	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate, trackPosition)
 	if err != nil {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
 
-	log.Debugf("seek track to %dms", trackPosition)
-	if err := stream.SeekMs(trackPosition); err != nil {
-		return fmt.Errorf("failed seeking track: %w", err)
-	}
+	log.Infof("loaded track \"%s\" (position: %dms, duration: %dms)", *stream.Track.Name, trackPosition, *stream.Track.Duration)
 
 	s.updateState(func(s *State) {
 		s.playerState.Duration = int64(*stream.Track.Duration)
