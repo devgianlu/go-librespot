@@ -15,22 +15,28 @@ import (
 	"unsafe"
 )
 
-const DisableHardwarePause = true // FIXME: should we fix this?
+const (
+	DisableHardwarePause = true // FIXME: should we fix this?
+	ReleasePcmOnPause    = true
+)
 
 type output struct {
-	channels int
-	reader   librespot.Float32Reader
-	done     chan error
+	channels   int
+	sampleRate int
+	device     string
+	reader     librespot.Float32Reader
+	done       chan error
 
 	cond *sync.Cond
 
 	handle   *C.snd_pcm_t
 	canPause bool
 
-	volume float32
-	paused bool
-	closed bool
-	eof    bool
+	volume   float32
+	paused   bool
+	closed   bool
+	eof      bool
+	released bool
 }
 
 func alsaError(name string, err C.int) error {
@@ -39,20 +45,16 @@ func alsaError(name string, err C.int) error {
 
 func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string) (*output, error) {
 	out := &output{
-		reader:   reader,
-		channels: channels,
-		volume:   1,
-		cond:     sync.NewCond(&sync.Mutex{}),
-		done:     make(chan error, 1),
+		reader:     reader,
+		channels:   channels,
+		sampleRate: sampleRate,
+		device:     device,
+		volume:     1,
+		cond:       sync.NewCond(&sync.Mutex{}),
+		done:       make(chan error, 1),
 	}
 
-	cdevice := C.CString(device)
-	defer C.free(unsafe.Pointer(cdevice))
-	if err := C.snd_pcm_open(&out.handle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
-		return nil, alsaError("snd_pcm_open", err)
-	}
-
-	if err := out.alsaPcmHwParams(sampleRate, channels); err != nil {
+	if err := out.openAndSetup(); err != nil {
 		return nil, err
 	}
 
@@ -70,7 +72,13 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	return out, nil
 }
 
-func (out *output) alsaPcmHwParams(sampleRate, channelCount int) error {
+func (out *output) openAndSetup() error {
+	cdevice := C.CString(out.device)
+	defer C.free(unsafe.Pointer(cdevice))
+	if err := C.snd_pcm_open(&out.handle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
+		return alsaError("snd_pcm_open", err)
+	}
+
 	var params *C.snd_pcm_hw_params_t
 	C.snd_pcm_hw_params_malloc(&params)
 	defer C.free(unsafe.Pointer(params))
@@ -87,7 +95,7 @@ func (out *output) alsaPcmHwParams(sampleRate, channelCount int) error {
 		return alsaError("snd_pcm_hw_params_set_format", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_channels(out.handle, params, C.unsigned(channelCount)); err < 0 {
+	if err := C.snd_pcm_hw_params_set_channels(out.handle, params, C.unsigned(out.channels)); err < 0 {
 		return alsaError("snd_pcm_hw_params_set_channels", err)
 	}
 
@@ -95,7 +103,7 @@ func (out *output) alsaPcmHwParams(sampleRate, channelCount int) error {
 		return alsaError("snd_pcm_hw_params_set_rate_resample", err)
 	}
 
-	sr := C.unsigned(sampleRate)
+	sr := C.unsigned(out.sampleRate)
 	if err := C.snd_pcm_hw_params_set_rate_near(out.handle, params, &sr, nil); err < 0 {
 		return alsaError("snd_pcm_hw_params_set_rate_near", err)
 	}
@@ -144,7 +152,7 @@ func (out *output) loop() error {
 		}
 
 		out.cond.L.Lock()
-		for out.paused && !out.closed {
+		for !(!out.paused || out.closed || !out.released) {
 			out.cond.Wait()
 		}
 
@@ -175,7 +183,15 @@ func (out *output) Pause() error {
 		return nil
 	}
 
-	if out.canPause {
+	if ReleasePcmOnPause {
+		if !out.released {
+			if err := C.snd_pcm_close(out.handle); err < 0 {
+				return alsaError("snd_pcm_close", err)
+			}
+		}
+
+		out.released = true
+	} else if out.canPause {
 		if C.snd_pcm_state(out.handle) != C.SND_PCM_STATE_RUNNING {
 			return nil
 		}
@@ -198,7 +214,15 @@ func (out *output) Resume() error {
 		return nil
 	}
 
-	if out.canPause {
+	if ReleasePcmOnPause {
+		if out.released {
+			if err := out.openAndSetup(); err != nil {
+				return err
+			}
+		}
+
+		out.released = false
+	} else if out.canPause {
 		if C.snd_pcm_state(out.handle) != C.SND_PCM_STATE_PAUSED {
 			return nil
 		}
@@ -244,7 +268,8 @@ func (out *output) Close() error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
-	if out.closed {
+	if out.closed || out.released {
+		out.closed = true
 		return nil
 	}
 
