@@ -9,9 +9,13 @@ import (
 	"net/url"
 	"regexp"
 	"strconv"
+	"sync"
 )
 
-const DefaultChunkSize = 512 * 1024
+const (
+	DefaultChunkSize = 512 * 1024
+	PrefetchCount    = 3
+)
 
 var contentRangeRegexp = regexp.MustCompile("^bytes (\\d+)-(\\d+)/(\\d+)$")
 
@@ -35,18 +39,28 @@ func parseContentRange(resp *http.Response) (start int64, end int64, size int64,
 	return start, end, size, nil
 }
 
+type chunkItem struct {
+	*sync.Cond
+
+	data     []byte
+	fetching bool
+	err      error
+}
+
 type HttpChunkedReader struct {
+	client *http.Client
+
 	// TODO: this url will expire at some point
 	url *url.URL
 
-	chunks [][]byte
+	chunks []*chunkItem
 
 	len int64
 	pos int64
 }
 
 func NewHttpChunkedReader(audioUrl string) (_ *HttpChunkedReader, err error) {
-	r := &HttpChunkedReader{}
+	r := &HttpChunkedReader{client: &http.Client{}}
 
 	r.url, err = url.Parse(audioUrl)
 	if err != nil {
@@ -54,7 +68,7 @@ func NewHttpChunkedReader(audioUrl string) (_ *HttpChunkedReader, err error) {
 	}
 
 	// request the first chunk, needed for the complete content length
-	resp, err := r.requestChunk(0)
+	resp, err := r.downloadChunk(0)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting first chunk: %w", err)
 	}
@@ -71,13 +85,19 @@ func NewHttpChunkedReader(audioUrl string) (_ *HttpChunkedReader, err error) {
 	}
 
 	// create the necessary amount of chunks
+	var totalChunks int64
 	if r.len%DefaultChunkSize == 0 {
-		r.chunks = make([][]byte, r.len/DefaultChunkSize)
+		totalChunks = r.len / DefaultChunkSize
 	} else {
-		r.chunks = make([][]byte, r.len/DefaultChunkSize+1)
+		totalChunks = r.len/DefaultChunkSize + 1
 	}
 
-	r.chunks[0], err = io.ReadAll(resp.Body)
+	r.chunks = make([]*chunkItem, totalChunks)
+	for i := int64(0); i < totalChunks; i++ {
+		r.chunks[i] = &chunkItem{Cond: sync.NewCond(&sync.Mutex{}), data: nil, err: nil}
+	}
+
+	r.chunks[0].data, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed reading first chunk: %w", err)
 	}
@@ -86,8 +106,8 @@ func NewHttpChunkedReader(audioUrl string) (_ *HttpChunkedReader, err error) {
 	return r, nil
 }
 
-func (r *HttpChunkedReader) requestChunk(idx int) (*http.Response, error) {
-	return http.DefaultClient.Do(&http.Request{
+func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
+	return r.client.Do(&http.Request{
 		Method: "GET",
 		URL:    r.url,
 		Header: http.Header{
@@ -97,24 +117,74 @@ func (r *HttpChunkedReader) requestChunk(idx int) (*http.Response, error) {
 	})
 }
 
-func (r *HttpChunkedReader) fetchChunk(idx int) error {
-	if r.chunks[idx] != nil {
-		return nil
+func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
+	chunk := r.chunks[idx]
+	chunk.L.Lock()
+
+	// if the chunk is already being fetched, wait until it is done
+	for chunk.fetching {
+		for !(chunk.data != nil || chunk.err != nil) {
+			chunk.Wait()
+		}
 	}
 
-	resp, err := r.requestChunk(idx)
+	// chunk fetched, just return its data
+	if chunk.data != nil {
+		chunk.L.Unlock()
+		return chunk.data, nil
+	}
+
+	chunk.fetching = true
+	chunk.L.Unlock()
+
+	// download chunk
+	resp, err := r.downloadChunk(idx)
 	if err != nil {
-		return fmt.Errorf("failed requesting chunk %d: %w", idx, err)
+		// update chunk and signal not fetching
+		chunk.L.Lock()
+		chunk.err = err
+		chunk.fetching = false
+		chunk.Broadcast()
+		chunk.L.Unlock()
+
+		return nil, fmt.Errorf("failed downloading chunk %d: %w", idx, chunk.err)
 	}
 
+	// ensure body gets closed
 	defer func() { _ = resp.Body.Close() }()
-	r.chunks[idx], err = io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed reading chunk %d: %w", idx, err)
+
+	// read the chunk data
+	data, err := io.ReadAll(resp.Body)
+	if chunk.err != nil {
+		// update chunk and signal not fetching
+		chunk.L.Lock()
+		chunk.err = err
+		chunk.fetching = false
+		chunk.Broadcast()
+		chunk.L.Unlock()
+
+		return nil, fmt.Errorf("failed reading chunk %d: %w", idx, chunk.err)
 	}
 
-	log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(r.chunks[idx]))
-	return nil
+	// update chunk and signal not fetching
+	chunk.L.Lock()
+	chunk.data = data
+	chunk.fetching = false
+	chunk.Broadcast()
+	chunk.L.Unlock()
+
+	log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(chunk.data))
+	return data, nil
+}
+
+func (r *HttpChunkedReader) prefetchChunks(curr int) {
+	for i := curr + 1; i < curr+1+PrefetchCount; i++ {
+		if i >= len(r.chunks) {
+			break
+		}
+
+		go func(i int) { _, _ = r.fetchChunk(i) }(i)
+	}
 }
 
 func (r *HttpChunkedReader) Read(p []byte) (n int, err error) {
@@ -123,21 +193,26 @@ func (r *HttpChunkedReader) Read(p []byte) (n int, err error) {
 	return n, err
 }
 
-func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, err error) {
-	chunk, off := int(pos/DefaultChunkSize), int(pos%DefaultChunkSize)
+func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
+	chunkIdx, off := int(pos/DefaultChunkSize), int(pos%DefaultChunkSize)
+
+	// start prefetching next chunks
+	r.prefetchChunks(chunkIdx)
 
 	n = 0
 	for len(p) > 0 {
-		if chunk >= len(r.chunks) {
+		if chunkIdx >= len(r.chunks) {
 			return n, io.EOF
 		}
 
-		// fetch the chunk in case we don't have it yet
-		if err = r.fetchChunk(chunk); err != nil {
-			return n, err
+		// get the chunk data
+		chunk, err := r.fetchChunk(chunkIdx)
+		if err != nil {
+			return n, fmt.Errorf("failed reading chunk %d: %w", chunkIdx, err)
 		}
 
-		c := r.chunks[chunk][off:]
+		// read the chunk data
+		c := chunk[off:]
 		if len(c) > len(p) {
 			// the chunk is bigger than our output buffer, just copy everything and return
 			n += copy(p, c[:len(p)])
@@ -149,7 +224,7 @@ func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, err error) {
 		p = p[len(c):]
 
 		// try to advance to next chunk
-		chunk++
+		chunkIdx++
 		off = 0
 	}
 
