@@ -155,6 +155,16 @@ func (tl *TracksList) CurrentTrack() *connectpb.ProvidedTrack {
 	return librespot.ContextTrackToProvidedTrack(page[tl.trackIdx])
 }
 
+func (tl *TracksList) GoStart() bool {
+	tracks, _, err := tl.ctx.Page(0)
+	if err != nil || len(tracks) == 0 {
+		return false
+	}
+
+	tl.pageIdx, tl.trackIdx = 0, 0
+	return true
+}
+
 func (tl *TracksList) GoNext() bool {
 	// Get the current page
 	page, _, err := tl.ctx.Page(tl.pageIdx)

@@ -257,6 +257,11 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			}
 		})
 		return nil
+	case "set_repeating_context":
+		s.updateState(func(s *State) {
+			s.playerState.Options.RepeatingContext = req.Command.Value.(bool)
+		})
+		return nil
 	case "set_repeating_track":
 		s.updateState(func(s *State) {
 			s.playerState.Options.RepeatingTrack = req.Command.Value.(bool)

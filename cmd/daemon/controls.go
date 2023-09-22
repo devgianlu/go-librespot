@@ -58,14 +58,21 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 					hasNextTrack = true
 					s.playerState.IsPaused = false
 				} else {
+					// try to get the next track
 					hasNextTrack = s.tracks.GoNext()
-					s.playerState.IsPaused = !hasNextTrack
 
-					s.playerState.Track = s.tracks.CurrentTrack()
-					s.playerState.PrevTracks = s.tracks.PrevTracks()
-					s.playerState.NextTracks = s.tracks.NextTracks()
-					s.playerState.Index = s.tracks.Index()
+					// if we could not get the next track we probably ended the context
+					if !hasNextTrack && s.playerState.Options.RepeatingContext {
+						hasNextTrack = s.tracks.GoStart()
+					}
+
+					s.playerState.IsPaused = !hasNextTrack
 				}
+
+				s.playerState.Track = s.tracks.CurrentTrack()
+				s.playerState.PrevTracks = s.tracks.PrevTracks()
+				s.playerState.NextTracks = s.tracks.NextTracks()
+				s.playerState.Index = s.tracks.Index()
 			}
 
 			s.playerState.Timestamp = time.Now().UnixMilli()
