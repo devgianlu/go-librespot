@@ -47,6 +47,7 @@ type RequestPayload struct {
 		Endpoint      string                `json:"endpoint"`
 		SessionId     string                `json:"session_id"`
 		Data          []byte                `json:"data"`
+		Value         interface{}           `json:"value"`
 		Position      int64                 `json:"position"`
 		Relative      string                `json:"relative"`
 		Context       *connectpb.Context    `json:"context"`

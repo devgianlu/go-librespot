@@ -264,6 +264,11 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			}
 		})
 		return nil
+	case "set_repeating_track":
+		s.updateState(func(s *State) {
+			s.playerState.Options.RepeatingTrack = req.Command.Value.(bool)
+		})
+		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)
 	}

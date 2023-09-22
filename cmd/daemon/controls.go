@@ -54,13 +54,18 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			prevUri = s.playerState.Track.Uri
 
 			if s.tracks != nil {
-				hasNextTrack = s.tracks.GoNext()
-				s.playerState.IsPaused = !hasNextTrack
+				if s.playerState.Options.RepeatingTrack {
+					hasNextTrack = true
+					s.playerState.IsPaused = false
+				} else {
+					hasNextTrack = s.tracks.GoNext()
+					s.playerState.IsPaused = !hasNextTrack
 
-				s.playerState.Track = s.tracks.CurrentTrack()
-				s.playerState.PrevTracks = s.tracks.PrevTracks()
-				s.playerState.NextTracks = s.tracks.NextTracks()
-				s.playerState.Index = s.tracks.Index()
+					s.playerState.Track = s.tracks.CurrentTrack()
+					s.playerState.PrevTracks = s.tracks.PrevTracks()
+					s.playerState.NextTracks = s.tracks.NextTracks()
+					s.playerState.Index = s.tracks.Index()
+				}
 			}
 
 			s.playerState.Timestamp = time.Now().UnixMilli()
