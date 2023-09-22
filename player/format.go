@@ -16,3 +16,27 @@ func formatBitrate(format metadatapb.AudioFile_Format) int {
 		return 0
 	}
 }
+
+func selectBestFormat(files []*metadatapb.AudioFile, preferredBitrate int) *metadatapb.AudioFile {
+	absDist := func(a, b int) int {
+		if a > b {
+			return a - b
+		} else {
+			return b - a
+		}
+	}
+
+	// pick the best format by selecting which has the smallest distance from the preferred bitrate
+	var best *metadatapb.AudioFile
+	var bestDist int
+	for _, ff := range files {
+		bitrate := formatBitrate(*ff.Format)
+		dist := absDist(bitrate, preferredBitrate)
+		if best == nil || dist < bestDist {
+			best = ff
+			bestDist = dist
+		}
+	}
+
+	return best
+}

@@ -222,16 +222,9 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 		}
 	}
 
-	var file *metadatapb.AudioFile
-	for _, ff := range trackMeta.File {
-		if formatBitrate(*ff.Format) == bitrate {
-			file = ff
-			break
-		}
-	}
-
+	file := selectBestFormat(trackMeta.File, bitrate)
 	if file == nil {
-		return nil, fmt.Errorf("failed fetching requested bitrate: %d", bitrate)
+		return nil, fmt.Errorf("no playable formats for %s", tid.Uri())
 	}
 
 	log.Debugf("selected format %s for %s", file.Format.String(), tid.Uri())
