@@ -43,7 +43,7 @@ func alsaError(name string, err C.int) error {
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initiallyPaused bool) (*output, error) {
 	out := &output{
 		reader:     reader,
 		channels:   channels,
@@ -56,6 +56,10 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 
 	if err := out.openAndSetup(); err != nil {
 		return nil, err
+	}
+
+	if initiallyPaused {
+		_ = out.Pause()
 	}
 
 	go func() {

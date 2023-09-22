@@ -33,10 +33,13 @@ type NewOutputOptions struct {
 	//
 	// This feature is support only for the unix driver.
 	Device string
+
+	// InitiallyPaused specifies whether the output device should be paused from the start.
+	InitiallyPaused bool
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device)
+	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.InitiallyPaused)
 	if err != nil {
 		return nil, err
 	}

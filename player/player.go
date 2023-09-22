@@ -23,7 +23,7 @@ type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 
-	newOutput func(source librespot.Float32Reader) (*output.Output, error)
+	newOutput func(source librespot.Float32Reader, paused bool) (*output.Output, error)
 
 	cmd chan playerCmd
 	ev  chan Event
@@ -52,16 +52,22 @@ type playerCmd struct {
 	resp chan any
 }
 
+type playerCmdDataSet struct {
+	source librespot.AudioSource
+	paused bool
+}
+
 func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, device string, volumeSteps uint32) (*Player, error) {
 	p := &Player{
 		sp:       sp,
 		audioKey: audioKey,
-		newOutput: func(reader librespot.Float32Reader) (*output.Output, error) {
+		newOutput: func(reader librespot.Float32Reader, paused bool) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Reader:       reader,
-				SampleRate:   SampleRate,
-				ChannelCount: Channels,
-				Device:       device,
+				Reader:          reader,
+				SampleRate:      SampleRate,
+				ChannelCount:    Channels,
+				Device:          device,
+				InitiallyPaused: paused,
 			})
 		},
 		volumeSteps: volumeSteps,
@@ -89,10 +95,11 @@ loop:
 					_ = out.Close()
 				}
 
-				source = cmd.data.(librespot.AudioSource)
+				data := cmd.data.(playerCmdDataSet)
+				source = data.source
 
 				var err error
-				out, err = p.newOutput(source)
+				out, err = p.newOutput(source, data.paused)
 				if err != nil {
 					source = nil
 					cmd.resp <- err
@@ -200,7 +207,7 @@ func (p *Player) SetVolume(val uint32) {
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 
-func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int64) (*Stream, error) {
+func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int64, paused bool) (*Stream, error) {
 	trackMeta, err := p.sp.MetadataForTrack(tid)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
@@ -286,7 +293,7 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 	}
 
 	resp := make(chan any)
-	p.cmd <- playerCmd{typ: playerCmdSet, data: stream, resp: resp}
+	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: stream, paused: paused}, resp: resp}
 	<-resp
 
 	return &Stream{p: p, Track: trackMeta, File: file}, nil

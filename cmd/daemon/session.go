@@ -194,15 +194,8 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		})
 
 		// load current track into stream
-		if err := s.loadCurrentTrack(); err != nil {
+		if err := s.loadCurrentTrack(transferState.Playback.IsPaused); err != nil {
 			return fmt.Errorf("failed loading current track: %w", err)
-		}
-
-		// start playing if not initially paused
-		if !transferState.Playback.IsPaused {
-			if err := s.play(); err != nil {
-				return fmt.Errorf("failed playing: %w", err)
-			}
 		}
 
 		s.app.server.Emit(&ApiEvent{

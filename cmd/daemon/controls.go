@@ -89,18 +89,13 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 		})
 
 		// load current track into stream
-		if err := s.loadCurrentTrack(); err != nil {
+		if err := s.loadCurrentTrack(!hasNextTrack); err != nil {
 			log.WithError(err).Error("failed loading current track")
 			return
 		}
 
-		// start playing if there is something next or become stopped
-		if hasNextTrack {
-			if err := s.play(); err != nil {
-				log.WithError(err).Error("failed playing")
-				return
-			}
-		} else {
+		// if no track to be played, just stop
+		if !hasNextTrack {
 			s.app.server.Emit(&ApiEvent{
 				Type: ApiEventTypeStopped,
 				Data: ApiEventDataStopped{
@@ -151,21 +146,14 @@ func (s *Session) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.Con
 	})
 
 	// load current track into stream
-	if err := s.loadCurrentTrack(); err != nil {
+	if err := s.loadCurrentTrack(paused); err != nil {
 		return fmt.Errorf("failed loading current track: %w", err)
-	}
-
-	// start playing if not initially paused
-	if !paused {
-		if err := s.play(); err != nil {
-			return fmt.Errorf("failed playing: %w", err)
-		}
 	}
 
 	return nil
 }
 
-func (s *Session) loadCurrentTrack() error {
+func (s *Session) loadCurrentTrack(paused bool) error {
 	if s.stream != nil {
 		s.stream.Stop()
 		s.stream = nil
@@ -181,6 +169,7 @@ func (s *Session) loadCurrentTrack() error {
 
 		s.playerState.IsPlaying = true
 		s.playerState.IsBuffering = true
+		s.playerState.IsPaused = paused
 	})
 
 	s.app.server.Emit(&ApiEvent{
@@ -191,12 +180,12 @@ func (s *Session) loadCurrentTrack() error {
 		},
 	})
 
-	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate, trackPosition)
+	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate, trackPosition, paused)
 	if err != nil {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
 
-	log.Infof("loaded track \"%s\" (position: %dms, duration: %dms)", *stream.Track.Name, trackPosition, *stream.Track.Duration)
+	log.Infof("loaded track \"%s\" (paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, paused, trackPosition, *stream.Track.Duration)
 
 	s.updateState(func(s *State) {
 		s.playerState.Duration = int64(*stream.Track.Duration)
@@ -305,15 +294,8 @@ func (s *Session) skipPrev() error {
 	})
 
 	// load current track into stream
-	if err := s.loadCurrentTrack(); err != nil {
+	if err := s.loadCurrentTrack(paused); err != nil {
 		return fmt.Errorf("failed loading current track: %w", err)
-	}
-
-	// start playing if not paused
-	if !paused {
-		if err := s.play(); err != nil {
-			return fmt.Errorf("failed playing: %w", err)
-		}
 	}
 
 	return nil
@@ -339,15 +321,8 @@ func (s *Session) skipNext() error {
 	})
 
 	// load current track into stream
-	if err := s.loadCurrentTrack(); err != nil {
+	if err := s.loadCurrentTrack(paused); err != nil {
 		return fmt.Errorf("failed loading current track: %w", err)
-	}
-
-	// start playing if not paused
-	if !paused {
-		if err := s.play(); err != nil {
-			return fmt.Errorf("failed playing: %w", err)
-		}
 	}
 
 	return nil
