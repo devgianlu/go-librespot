@@ -7,7 +7,6 @@ import (
 	"go-librespot/audio"
 	"go-librespot/output"
 	downloadpb "go-librespot/proto/spotify/download"
-	metadatapb "go-librespot/proto/spotify/metadata"
 	"go-librespot/spclient"
 	"go-librespot/vorbis"
 	"io"
@@ -234,6 +233,8 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 	if file == nil {
 		return nil, fmt.Errorf("failed fetching requested bitrate: %d", bitrate)
 	}
+
+	log.Debugf("selected format %s for %s", file.Format.String(), tid.Uri())
 
 	audioKey, err := p.audioKey.Request(tid, file.FileId)
 	if err != nil {

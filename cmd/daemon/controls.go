@@ -192,7 +192,7 @@ func (s *Session) loadCurrentTrack(paused bool) error {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
 
-	log.Infof("loaded track \"%s\" (paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, paused, trackPosition, *stream.Track.Duration)
+	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, trackId.Uri(), paused, trackPosition, *stream.Track.Duration)
 
 	s.updateState(func(s *State) {
 		s.playerState.Duration = int64(*stream.Track.Duration)

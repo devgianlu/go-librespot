@@ -124,6 +124,8 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 	s.withState(func(s *State) { s.lastCommand = &req })
 
+	log.Debugf("handling %s player command from %s", req.Command.Endpoint, req.SentByDeviceId)
+
 	switch req.Command.Endpoint {
 	case "transfer":
 		var transferState connectpb.TransferState
