@@ -113,6 +113,12 @@ loop:
 					}
 
 					cmd.resp <- nil
+
+					if data.paused {
+						p.ev <- Event{Type: EventTypePaused}
+					} else {
+						p.ev <- Event{Type: EventTypePlaying}
+					}
 				}
 			case playerCmdPlay:
 				if out != nil {
