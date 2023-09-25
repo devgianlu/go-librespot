@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/xlab/vorbis-go/vorbis"
@@ -263,6 +264,29 @@ func (d *Decoder) Read(p []float32) (n int, err error) {
 	return n, nil
 }
 
+func (d *Decoder) safeSynthesisPcmout() (ret int32) {
+	defer func() {
+		err := recover()
+		if err == nil {
+			return
+		}
+
+		switch err := err.(type) {
+		case string:
+			// the calloc inside allocPPFloatMemory will sometimes fail for no apparent reason,
+			// avoid panicking the entire program and fail locally instead.
+			if strings.HasPrefix(err, "memory alloc error") {
+				ret = -1
+				return
+			}
+		}
+
+		panic(err)
+	}()
+
+	return vorbis.SynthesisPcmout(&d.dspState, d.pcm)
+}
+
 func (d *Decoder) readNextPage() (err error) {
 	for {
 		if ret := vorbis.OggSyncPageout(&d.syncState, &d.page); ret < 0 {
@@ -296,8 +320,8 @@ func (d *Decoder) readNextPage() (err error) {
 			vorbis.SynthesisBlockin(&d.dspState, &d.block)
 		}
 
-		samples := vorbis.SynthesisPcmout(&d.dspState, d.pcm)
-		for ; samples > 0; samples = vorbis.SynthesisPcmout(&d.dspState, d.pcm) {
+		samples := d.safeSynthesisPcmout()
+		for ; samples > 0; samples = d.safeSynthesisPcmout() {
 			for i := 0; i < int(samples); i++ {
 				for j := 0; j < int(d.info.Channels); j++ {
 					d.buf = append(d.buf, d.pcm[0][j][:samples][i]*d.gain)
