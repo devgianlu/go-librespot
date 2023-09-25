@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
@@ -49,42 +50,9 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 		})
 	case player.EventTypeNotPlaying:
 		var prevUri, playOrigin string
-		var hasNextTrack bool
 		s.withState(func(s *State) {
 			prevUri = s.playerState.Track.Uri
-
-			if s.tracks != nil {
-				if s.playerState.Options.RepeatingTrack {
-					hasNextTrack = true
-					s.playerState.IsPaused = false
-				} else {
-					// try to get the next track
-					hasNextTrack = s.tracks.GoNext()
-
-					// if we could not get the next track we probably ended the context
-					if !hasNextTrack && s.playerState.Options.RepeatingContext {
-						hasNextTrack = s.tracks.GoStart()
-					}
-
-					s.playerState.IsPaused = !hasNextTrack
-				}
-
-				s.playerState.Track = s.tracks.CurrentTrack()
-				s.playerState.PrevTracks = s.tracks.PrevTracks()
-				s.playerState.NextTracks = s.tracks.NextTracks()
-				s.playerState.Index = s.tracks.Index()
-			}
-
-			s.playerState.Timestamp = time.Now().UnixMilli()
-			s.playerState.PositionAsOfTimestamp = 0
-
 			playOrigin = s.playerState.PlayOrigin.FeatureIdentifier
-
-			if !hasNextTrack {
-				s.playerState.IsPlaying = false
-				s.playerState.IsPaused = false
-				s.playerState.IsBuffering = false
-			}
 		})
 
 		s.app.server.Emit(&ApiEvent{
@@ -95,10 +63,10 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 			},
 		})
 
-		// load current track into stream
-		if err := s.loadCurrentTrack(!hasNextTrack); err != nil {
+		hasNextTrack, err := s.advanceNext(false)
+		if err != nil {
+			// TODO: move into stopped state
 			log.WithError(err).Error("failed loading current track")
-			return
 		}
 
 		// if no track to be played, just stop
@@ -333,6 +301,60 @@ func (s *Session) skipNext() error {
 	}
 
 	return nil
+}
+
+func (s *Session) advanceNext(forceNext bool) (bool, error) {
+	var uri string
+	var hasNextTrack bool
+	s.withState(func(s *State) {
+		if s.tracks != nil {
+			if !forceNext && s.playerState.Options.RepeatingTrack {
+				hasNextTrack = true
+				s.playerState.IsPaused = false
+			} else {
+				// try to get the next track
+				hasNextTrack = s.tracks.GoNext()
+
+				// if we could not get the next track we probably ended the context
+				if !hasNextTrack && s.playerState.Options.RepeatingContext {
+					hasNextTrack = s.tracks.GoStart()
+				}
+
+				s.playerState.IsPaused = !hasNextTrack
+			}
+
+			s.playerState.Track = s.tracks.CurrentTrack()
+			s.playerState.PrevTracks = s.tracks.PrevTracks()
+			s.playerState.NextTracks = s.tracks.NextTracks()
+			s.playerState.Index = s.tracks.Index()
+
+			uri = s.playerState.Track.Uri
+		}
+
+		s.playerState.Timestamp = time.Now().UnixMilli()
+		s.playerState.PositionAsOfTimestamp = 0
+
+		if !hasNextTrack {
+			s.playerState.IsPlaying = false
+			s.playerState.IsPaused = false
+			s.playerState.IsBuffering = false
+		}
+	})
+
+	// load current track into stream
+	if err := s.loadCurrentTrack(!hasNextTrack); errors.Is(err, librespot.ErrTrackRestricted) {
+		log.Infof("skipping restricted track: %s", uri)
+		if forceNext {
+			// we failed in finding another track to play, just stop
+			return false, err
+		}
+
+		return s.advanceNext(true)
+	} else if err != nil {
+		return false, fmt.Errorf("failed advancing to next track (%s): %w", uri, err)
+	}
+
+	return hasNextTrack, nil
 }
 
 func (s *Session) updateVolume(newVal uint32) {

@@ -35,7 +35,8 @@ type Session struct {
 	spotConnId string
 
 	// TODO: can this be factored better?
-	prodInfo *ProductInfo
+	prodInfo    *ProductInfo
+	countryCode string
 
 	// TODO: consider not locking this if we are modifying it always from the same routine
 	state     *State
@@ -58,6 +59,9 @@ func (s *Session) handleAccesspointPacket(pktType ap.PacketType, payload []byte)
 		}
 
 		s.prodInfo = &prod
+		return nil
+	case ap.PacketTypeCountryCode:
+		s.countryCode = string(payload)
 		return nil
 	default:
 		return nil
@@ -360,7 +364,7 @@ func (s *Session) Connect(creds SessionCredentials) (err error) {
 	s.audioKey = audio.NewAudioKeyProvider(s.ap)
 
 	// init player
-	s.player, err = player.NewPlayer(s.sp, s.audioKey, s.app.cfg.AudioDevice, s.app.cfg.VolumeSteps)
+	s.player, err = player.NewPlayer(s.sp, s.audioKey, s.countryCode, s.app.cfg.AudioDevice, s.app.cfg.VolumeSteps)
 	if err != nil {
 		return fmt.Errorf("failed initializing player: %w", err)
 	}
@@ -377,7 +381,7 @@ func (s *Session) Close() {
 }
 
 func (s *Session) Run() {
-	apRecv := s.ap.Receive(ap.PacketTypeProductInfo)
+	apRecv := s.ap.Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
 	msgRecv := s.dealer.ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/")
 	reqRecv := s.dealer.ReceiveRequest("hm://connect-state/v1/player/command")
 	playerRecv := s.player.Receive()
