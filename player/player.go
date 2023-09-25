@@ -19,7 +19,7 @@ const Channels = 2
 const MaxStateVolume = 65535
 
 type Player struct {
-	countryCode string
+	countryCode *string
 
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
@@ -58,7 +58,7 @@ type playerCmdDataSet struct {
 	paused bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode string, device string, volumeSteps uint32) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *string, device string, volumeSteps uint32) (*Player, error) {
 	p := &Player{
 		sp:          sp,
 		audioKey:    audioKey,
@@ -215,7 +215,7 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
 	}
 
-	if isTrackRestricted(trackMeta, p.countryCode) {
+	if isTrackRestricted(trackMeta, *p.countryCode) {
 		return nil, librespot.ErrTrackRestricted
 	}
 

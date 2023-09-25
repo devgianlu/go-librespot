@@ -1,14 +1,13 @@
 package player
 
 import (
-	"fmt"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"strings"
 )
 
 func isTrackRestricted(track *metadatapb.Track, country string) bool {
 	if len(country) != 2 {
-		panic(fmt.Sprintf("invalid country code: %s", country))
+		return false
 	}
 
 	contains := func(list string) bool {

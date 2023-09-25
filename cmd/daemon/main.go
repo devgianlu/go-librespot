@@ -68,7 +68,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 func (app *App) newSession(creds SessionCredentials) (*Session, error) {
 	// connect new session
-	sess := &Session{app: app}
+	sess := &Session{app: app, countryCode: new(string)}
 	if err := sess.Connect(creds); err != nil {
 		return nil, err
 	}

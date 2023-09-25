@@ -36,7 +36,7 @@ type Session struct {
 
 	// TODO: can this be factored better?
 	prodInfo    *ProductInfo
-	countryCode string
+	countryCode *string
 
 	// TODO: consider not locking this if we are modifying it always from the same routine
 	state     *State
@@ -61,7 +61,7 @@ func (s *Session) handleAccesspointPacket(pktType ap.PacketType, payload []byte)
 		s.prodInfo = &prod
 		return nil
 	case ap.PacketTypeCountryCode:
-		s.countryCode = string(payload)
+		*s.countryCode = string(payload)
 		return nil
 	default:
 		return nil
