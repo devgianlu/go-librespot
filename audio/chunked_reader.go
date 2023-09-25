@@ -195,6 +195,9 @@ func (r *HttpChunkedReader) Read(p []byte) (n int, err error) {
 
 func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
 	chunkIdx, off := int(pos/DefaultChunkSize), int(pos%DefaultChunkSize)
+	if chunkIdx >= len(r.chunks) {
+		return 0, io.EOF
+	}
 
 	// start prefetching next chunks
 	r.prefetchChunks(chunkIdx)
@@ -202,7 +205,7 @@ func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
 	n = 0
 	for len(p) > 0 {
 		if chunkIdx >= len(r.chunks) {
-			return n, io.EOF
+			return n, nil
 		}
 
 		// get the chunk data
