@@ -323,7 +323,7 @@ func loadConfig(cfg *Config) error {
 
 	configBytes, err := os.ReadFile(cfg.ConfigPath)
 	if err != nil {
-		return fmt.Errorf("failde reading configuration file: %w", err)
+		return fmt.Errorf("failed reading configuration file: %w", err)
 	}
 
 	if err := yaml.Unmarshal(configBytes, cfg); err != nil {

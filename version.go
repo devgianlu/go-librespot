@@ -25,8 +25,7 @@ func VersionString() string {
 }
 
 func SystemInfoString() string {
-	// TODO: add operating system?
-	return fmt.Sprintf("%s; Go %s", VersionString(), runtime.Version())
+	return fmt.Sprintf("%s; Go %s (%s %s)", VersionString(), runtime.Version(), runtime.GOOS, runtime.GOARCH)
 }
 
 func UserAgent() string {
