@@ -52,15 +52,22 @@ func NewApp(cfg *Config) (app *App, err error) {
 		return nil, err
 	}
 
-	// FIXME: make device id persistent
-	deviceIdBytes := make([]byte, 20)
-	_, _ = rand.Read(deviceIdBytes)
-	app.deviceId = hex.EncodeToString(deviceIdBytes)
+	if len(cfg.DeviceId) == 0 {
+		deviceIdBytes := make([]byte, 20)
+		_, _ = rand.Read(deviceIdBytes)
+		app.deviceId = hex.EncodeToString(deviceIdBytes)
+		log.Infof("generated new device id: %s", app.deviceId)
+	} else {
+		app.deviceId = cfg.DeviceId
+	}
 
-	// FIXME: make client token persistent
-	app.clientToken, err = retrieveClientToken(app.deviceId)
-	if err != nil {
-		return nil, fmt.Errorf("failed obtaining client token: %w", err)
+	if len(cfg.ClientToken) == 0 {
+		app.clientToken, err = retrieveClientToken(app.deviceId)
+		if err != nil {
+			return nil, fmt.Errorf("failed obtaining client token: %w", err)
+		}
+	} else {
+		app.clientToken = cfg.ClientToken
 	}
 
 	return app, nil
@@ -297,8 +304,10 @@ type Config struct {
 	CredentialsPath string `yaml:"-"`
 
 	LogLevel    string `yaml:"log_level"`
+	DeviceId    string `yaml:"device_id"`
 	DeviceName  string `yaml:"device_name"`
 	DeviceType  string `yaml:"device_type"`
+	ClientToken string `yaml:"client_token"`
 	ServerPort  int    `yaml:"server_port"`
 	AudioDevice string `yaml:"audio_device"`
 	Bitrate     int    `yaml:"bitrate"`

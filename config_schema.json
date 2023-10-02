@@ -21,6 +21,12 @@
           ],
           "default": "info"
         },
+        "device_id": {
+          "type": "string",
+          "description": "The device ID in hex",
+          "minLength": 40,
+          "maxLength": 40
+        },
         "device_name": {
           "type": "string",
           "description": "The device name showed in the Spotify UI",
@@ -49,6 +55,10 @@
             "home_thing"
           ],
           "default": "computer"
+        },
+        "client_token": {
+          "type": "string",
+          "description": "The Spotify client token"
         },
         "audio_device": {
           "type": "string",
