@@ -215,13 +215,15 @@ func (p *Player) SetVolume(val uint32) {
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 
+const DisableCheckTrackRestricted = true
+
 func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int64, paused bool) (*Stream, error) {
 	trackMeta, err := p.sp.MetadataForTrack(tid)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
 	}
 
-	if isTrackRestricted(trackMeta, *p.countryCode) {
+	if !DisableCheckTrackRestricted && isTrackRestricted(trackMeta, *p.countryCode) {
 		return nil, librespot.ErrTrackRestricted
 	}
 
