@@ -303,7 +303,9 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 
 	resp := make(chan any)
 	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: stream, paused: paused}, resp: resp}
-	<-resp
+	if err := <-resp; err != nil {
+		return nil, err.(error)
+	}
 
 	return &Stream{p: p, Track: trackMeta, File: file}, nil
 }
