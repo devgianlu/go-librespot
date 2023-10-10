@@ -37,6 +37,10 @@ func (s *State) trackPosition() int64 {
 	}
 }
 
+func (s *State) playOrigin() string {
+	return s.playerState.PlayOrigin.FeatureIdentifier
+}
+
 func (s *Session) initState() {
 	s.state = &State{
 		lastCommand: nil,
@@ -80,20 +84,10 @@ func (s *Session) initState() {
 	s.state.reset()
 }
 
-func (s *Session) updateState(f func(s *State)) {
-	s.stateLock.Lock()
-	f(s.state)
-	s.stateLock.Unlock()
-
+func (s *Session) updateState() {
 	if err := s.putConnectState(connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after update")
 	}
-}
-
-func (s *Session) withState(f func(s *State)) {
-	s.stateLock.Lock()
-	f(s.state)
-	s.stateLock.Unlock()
 }
 
 func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
@@ -110,18 +104,16 @@ func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
 		putStateReq.HasBeenPlayingForMs = uint64(t.Milliseconds())
 	}
 
-	s.withState(func(s *State) {
-		putStateReq.IsActive = s.isActive
-		putStateReq.Device = &connectpb.Device{
-			DeviceInfo:  s.deviceInfo,
-			PlayerState: s.playerState,
-		}
+	putStateReq.IsActive = s.state.isActive
+	putStateReq.Device = &connectpb.Device{
+		DeviceInfo:  s.state.deviceInfo,
+		PlayerState: s.state.playerState,
+	}
 
-		if s.lastCommand != nil {
-			putStateReq.LastCommandMessageId = s.lastCommand.MessageId
-			putStateReq.LastCommandSentByDeviceId = s.lastCommand.SentByDeviceId
-		}
-	})
+	if s.state.lastCommand != nil {
+		putStateReq.LastCommandMessageId = s.state.lastCommand.MessageId
+		putStateReq.LastCommandSentByDeviceId = s.state.lastCommand.SentByDeviceId
+	}
 
 	// finally send the state update
 	return s.sp.PutConnectState(s.spotConnId, putStateReq)

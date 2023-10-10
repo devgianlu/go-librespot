@@ -7,11 +7,8 @@ import (
 	"flag"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"go-librespot/apresolve"
-	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/zeroconf"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -93,94 +90,6 @@ func (app *App) newSession(creds SessionCredentials) (*Session, error) {
 	return sess, nil
 }
 
-func (app *App) handleApiRequest(req ApiRequest, sess *Session) (any, error) {
-	switch req.Type {
-	case ApiRequestTypeStatus:
-		resp := &ApiResponseStatus{
-			Username:    sess.ap.Username(),
-			DeviceId:    sess.app.deviceId,
-			DeviceType:  sess.app.deviceType.String(),
-			DeviceName:  sess.app.cfg.DeviceName,
-			VolumeSteps: sess.app.cfg.VolumeSteps,
-		}
-
-		var trackPosition int64
-		sess.withState(func(s *State) {
-			resp.Volume = s.deviceInfo.Volume
-			resp.RepeatContext = s.playerState.Options.RepeatingContext
-			resp.RepeatTrack = s.playerState.Options.RepeatingTrack
-			resp.ShuffleContext = s.playerState.Options.ShufflingContext
-			resp.Stopped = !s.playerState.IsPlaying
-			resp.Paused = s.playerState.IsPaused
-			resp.Buffering = s.playerState.IsBuffering
-			resp.PlayOrigin = s.playerState.PlayOrigin.FeatureIdentifier
-
-			trackPosition = s.trackPosition()
-		})
-
-		if sess.stream != nil && sess.prodInfo != nil {
-			resp.Track = NewApiResponseStatusTrack(sess.stream.Track, sess.prodInfo, int(trackPosition))
-		}
-
-		return resp, nil
-	case ApiRequestTypeResume:
-		_ = sess.play()
-		return nil, nil
-	case ApiRequestTypePause:
-		_ = sess.pause()
-		return nil, nil
-	case ApiRequestTypeSeek:
-		_ = sess.seek(req.Data.(int64))
-		return nil, nil
-	case ApiRequestTypePrev:
-		_ = sess.skipPrev()
-		return nil, nil
-	case ApiRequestTypeNext:
-		_ = sess.skipNext()
-		return nil, nil
-	case ApiRequestTypePlay:
-		data := req.Data.(ApiRequestDataPlay)
-		ctx, err := sess.sp.ContextResolve(data.Uri)
-		if err != nil {
-			return nil, fmt.Errorf("failed resolving context: %w", err)
-		}
-
-		sess.withState(func(s *State) {
-			s.isActive = true
-
-			s.playerState.Suppressions = &connectpb.Suppressions{}
-			s.playerState.PlayOrigin = &connectpb.PlayOrigin{
-				FeatureIdentifier: "go-librespot",
-				FeatureVersion:    librespot.VersionNumberString(),
-			}
-		})
-
-		if err := sess.loadContext(ctx, func(track *connectpb.ContextTrack) bool {
-			return len(data.SkipToUri) != 0 && data.SkipToUri == track.Uri
-		}, data.Paused); err != nil {
-			return nil, fmt.Errorf("failed loading context: %w", err)
-		}
-
-		return nil, nil
-	case ApiRequestTypeGetVolume:
-		resp := &ApiResponseVolume{
-			Max: sess.app.cfg.VolumeSteps,
-		}
-
-		sess.withState(func(s *State) {
-			resp.Value = s.deviceInfo.Volume * sess.app.cfg.VolumeSteps / player.MaxStateVolume
-		})
-
-		return resp, nil
-	case ApiRequestTypeSetVolume:
-		vol := req.Data.(uint32)
-		sess.updateVolume(vol * player.MaxStateVolume / sess.app.cfg.VolumeSteps)
-		return nil, nil
-	default:
-		return nil, fmt.Errorf("unknown request type: %s", req.Type)
-	}
-}
-
 func (app *App) Zeroconf() error {
 	// pre fetch resolver endpoints
 	if err := app.resolver.FetchAll(); err != nil {
@@ -195,7 +104,9 @@ func (app *App) Zeroconf() error {
 
 	// TODO: unset this when logging out
 	var currentSession *Session
+	var sessCh chan ApiRequest
 
+	// forward API requests to proper channel only if a session is present
 	go func() {
 		for {
 			select {
@@ -205,13 +116,21 @@ func (app *App) Zeroconf() error {
 					break
 				}
 
-				data, err := app.handleApiRequest(req, currentSession)
-				req.Reply(data, err)
+				// if we are here a channel must exist
+				sessCh <- req
 			}
 		}
 	}()
 
 	return z.Serve(func(req zeroconf.NewUserRequest) bool {
+		if currentSession != nil {
+			currentSession.Close()
+			currentSession = nil
+
+			// close the channel after setting the current session to nil
+			close(sessCh)
+		}
+
 		sess, err := app.newSession(SessionBlobCredentials{
 			Username: req.Username,
 			Blob:     req.AuthBlob,
@@ -221,8 +140,11 @@ func (app *App) Zeroconf() error {
 			return false
 		}
 
+		// first create the channel and then assign the current session
+		sessCh = make(chan ApiRequest)
 		currentSession = sess
-		go sess.Run()
+
+		go sess.Run(sessCh)
 		return true
 	})
 }
@@ -285,17 +207,7 @@ func (app *App) withReusableCredentials(creds SessionCredentials) (err error) {
 		}
 	}
 
-	go func() {
-		for {
-			select {
-			case req := <-app.server.Receive():
-				data, err := app.handleApiRequest(req, sess)
-				req.Reply(data, err)
-			}
-		}
-	}()
-
-	sess.Run()
+	sess.Run(app.server.Receive())
 	return nil
 }
 

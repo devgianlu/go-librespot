@@ -85,11 +85,11 @@ type ApiResponseStatusTrack struct {
 	ArtistNames   []string `json:"artist_names"`
 	AlbumName     string   `json:"album_name"`
 	AlbumCoverUrl string   `json:"album_cover_url"`
-	Position      int      `json:"position"`
+	Position      int64    `json:"position"`
 	Duration      int      `json:"duration"`
 }
 
-func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, position int) *ApiResponseStatusTrack {
+func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
 	var artists []string
 	for _, a := range track.Artist {
 		artists = append(artists, *a.Name)
