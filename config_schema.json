@@ -63,7 +63,7 @@
         "audio_device": {
           "type": "string",
           "description": "Which audio device should be used for playback, leave empty for default",
-          "default": ""
+          "default": "default"
         },
         "server_port": {
           "type": "integer",

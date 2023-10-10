@@ -260,6 +260,9 @@ func loadConfig(cfg *Config) error {
 	if cfg.DeviceType == "" {
 		cfg.DeviceType = "computer"
 	}
+	if cfg.AudioDevice == "" {
+		cfg.AudioDevice = "default"
+	}
 	if cfg.Bitrate == 0 {
 		cfg.Bitrate = 160
 	}
