@@ -14,7 +14,10 @@ import (
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 	"sync"
+	"time"
 )
+
+const timeout = 10 * time.Second
 
 type ApiServer struct {
 	close    bool
@@ -355,7 +358,10 @@ func (s *ApiServer) Emit(ev *ApiEvent) {
 	log.Tracef("emitting websocket event: %s", ev.Type)
 
 	for _, client := range s.clients {
-		if err := wsjson.Write(context.TODO(), client, ev); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		err := wsjson.Write(ctx, client, ev)
+		cancel()
+		if err != nil {
 			// purposely do not propagate this to the caller
 			log.WithError(err).Error("failed communicating with websocket client")
 		}

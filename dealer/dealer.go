@@ -14,7 +14,10 @@ import (
 	"time"
 )
 
-const pingInterval = 30 * time.Second
+const (
+	pingInterval = 30 * time.Second
+	timeout      = 10 * time.Second
+)
 
 type Dealer struct {
 	addr        librespot.GetAddressFunc
@@ -63,9 +66,12 @@ func (d *Dealer) connect() (err error) {
 		return fmt.Errorf("failed obtaining dealer access token: %w", err)
 	}
 
-	d.conn, _, err = websocket.Dial(context.TODO(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), accessToken), &websocket.DialOptions{
+	d.conn, _, err = websocket.Dial(context.Background(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), accessToken), &websocket.DialOptions{
 		HTTPHeader: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
+		},
+		HTTPClient: &http.Client{
+			Timeout: timeout,
 		},
 	})
 	if err != nil {
@@ -109,9 +115,12 @@ loop:
 				continue
 			}
 
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			d.reconnectLock.RLock()
-			err := d.conn.Write(context.TODO(), websocket.MessageText, []byte("{\"type\":\"ping\"}"))
+			err := d.conn.Write(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			d.reconnectLock.RUnlock()
+			cancel()
+
 			if err != nil {
 				if d.stop {
 					// break early without logging if we should stop
@@ -139,7 +148,7 @@ loop:
 			break loop
 		default:
 			// no need to hold the reconnectLock since reconnection happens in this routine
-			msgType, messageBytes, err := d.conn.Read(context.TODO())
+			msgType, messageBytes, err := d.conn.Read(context.Background())
 			if err != nil {
 				log.WithError(err).Errorf("failed receiving dealer message")
 				break loop
@@ -211,9 +220,11 @@ func (d *Dealer) sendReply(key string, success bool) error {
 		return fmt.Errorf("failed marshalling reply: %w", err)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	d.reconnectLock.RLock()
-	err = d.conn.Write(context.TODO(), websocket.MessageText, replyBytes)
+	err = d.conn.Write(ctx, websocket.MessageText, replyBytes)
 	d.reconnectLock.RUnlock()
+	cancel()
 	if err != nil {
 		return fmt.Errorf("failed sending dealer reply: %w", err)
 	}
