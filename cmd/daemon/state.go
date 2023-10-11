@@ -11,6 +11,8 @@ import (
 
 type State struct {
 	isActive    bool
+	activeSince time.Time
+
 	deviceInfo  *connectpb.DeviceInfo
 	playerState *connectpb.PlayerState
 
@@ -19,8 +21,23 @@ type State struct {
 	lastCommand *dealer.RequestPayload
 }
 
+func (s *State) setActive(val bool) {
+	if val {
+		if s.isActive {
+			return
+		}
+
+		s.isActive = true
+		s.activeSince = time.Now()
+	} else {
+		s.isActive = false
+		s.activeSince = time.Time{}
+	}
+}
+
 func (s *State) reset() {
 	s.isActive = false
+	s.activeSince = time.Time{}
 	s.playerState = &connectpb.PlayerState{
 		IsSystemInitiated: true,
 		PlayOrigin:        &connectpb.PlayOrigin{},
@@ -97,7 +114,7 @@ func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
 		PutStateReason:      reason,
 	}
 
-	if t := s.player.StartedPlayingAt(); !t.IsZero() {
+	if t := s.state.activeSince; !t.IsZero() {
 		putStateReq.StartedPlayingAt = uint64(t.UnixMilli())
 	}
 	if t := s.player.HasBeenPlayingFor(); t > 0 {

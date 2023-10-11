@@ -107,10 +107,7 @@ loop:
 					cmd.resp <- err
 				} else {
 					done = out.WaitDone()
-
-					if p.startedPlaying.IsZero() {
-						p.startedPlaying = time.Now()
-					}
+					p.startedPlaying = time.Now()
 
 					cmd.resp <- nil
 
@@ -188,10 +185,6 @@ loop:
 	}
 
 	_ = out.Close()
-}
-
-func (p *Player) StartedPlayingAt() time.Time {
-	return p.startedPlaying
 }
 
 func (p *Player) HasBeenPlayingFor() time.Duration {

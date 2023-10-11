@@ -134,7 +134,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed creating track list: %w", err)
 		}
 
-		s.state.isActive = true
+		s.state.setActive(true)
 		s.state.playerState.IsPlaying = false
 		s.state.playerState.IsBuffering = false
 		s.state.playerState.IsPaused = false
@@ -318,7 +318,7 @@ func (s *Session) handleApiRequest(req ApiRequest) (any, error) {
 			return nil, fmt.Errorf("failed resolving context: %w", err)
 		}
 
-		s.state.isActive = true
+		s.state.setActive(true)
 		s.state.playerState.Suppressions = &connectpb.Suppressions{}
 		s.state.playerState.PlayOrigin = &connectpb.PlayOrigin{
 			FeatureIdentifier: "go-librespot",
