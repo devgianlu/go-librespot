@@ -158,6 +158,11 @@ func (s *Session) play() error {
 		return fmt.Errorf("no stream")
 	}
 
+	// seek before play to ensure we are at the correct stream position
+	if err := s.stream.SeekMs(s.state.trackPosition()); err != nil {
+		return fmt.Errorf("failed seeking before play: %w", err)
+	}
+
 	s.stream.Play()
 
 	streamPos := s.stream.PositionMs()
