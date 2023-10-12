@@ -290,7 +290,7 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 		return nil, fmt.Errorf("failed reading ReplayGain metadata: %w", err)
 	}
 
-	stream, err := vorbis.New(audioStream, *trackMeta.Duration, rawStream.Size(), norm.GetTrackFactor(1))
+	stream, err := vorbis.New(audioStream, *trackMeta.Duration, norm.GetTrackFactor(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}

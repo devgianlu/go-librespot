@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	"io"
 	"strings"
 	"sync"
@@ -22,9 +23,6 @@ type Decoder struct {
 
 	// gain is the default track gain.
 	gain float32
-
-	// size is the input length in bytes.
-	size int64
 
 	// duration is the input length in milliseconds.
 	duration int32
@@ -61,7 +59,7 @@ type Decoder struct {
 	// This structure is intended to be private.
 	block vorbis.Block
 
-	input    io.ReadSeeker
+	input    librespot.SizedReadSeeker
 	pcm      [][][]float32
 	buf      []float32
 	stopChan chan struct{}
@@ -79,10 +77,9 @@ type Info struct {
 }
 
 // New creates and initialises a new OggVorbis decoder for the provided bytestream.
-func New(r io.ReadSeeker, duration int32, size int64, gain float32) (*Decoder, error) {
+func New(r librespot.SizedReadSeeker, duration int32, gain float32) (*Decoder, error) {
 	d := &Decoder{
 		input:    r,
-		size:     size,
 		duration: duration,
 		gain:     gain,
 		stopChan: make(chan struct{}),
@@ -345,7 +342,7 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	_, err = d.input.Seek(pos*d.size/int64(d.duration), io.SeekStart)
+	_, err = d.input.Seek(pos*d.input.Size()/int64(d.duration), io.SeekStart)
 	if err != nil {
 		return fmt.Errorf("failed seeking input: %w", err)
 	}

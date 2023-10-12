@@ -3,6 +3,7 @@ package audio
 import (
 	"encoding/binary"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	"io"
 	"math"
 )
@@ -14,7 +15,7 @@ type ReplayGain struct {
 	albumPeak   float32
 }
 
-func ExtractReplayGainMetadata(r io.ReaderAt, limit int64) (io.ReadSeeker, *ReplayGain, error) {
+func ExtractReplayGainMetadata(r io.ReaderAt, limit int64) (librespot.SizedReadSeeker, *ReplayGain, error) {
 	payload := make([]byte, 16)
 	if _, err := r.ReadAt(payload, 144); err != nil {
 		return nil, nil, err
