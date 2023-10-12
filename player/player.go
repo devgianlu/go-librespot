@@ -143,15 +143,26 @@ loop:
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypeStopped}
 			case playerCmdSeek:
-				if source != nil {
-					err := source.SetPositionMs(cmd.data.(int64))
-					cmd.resp <- err
+				if source != nil && out != nil {
+					if err := source.SetPositionMs(cmd.data.(int64)); err != nil {
+						cmd.resp <- err
+					} else if err := out.Drop(); err != nil {
+						cmd.resp <- err
+					} else {
+						cmd.resp <- nil
+					}
 				} else {
 					cmd.resp <- nil
 				}
 			case playerCmdPosition:
-				if source != nil {
-					cmd.resp <- source.PositionMs()
+				if source != nil && out != nil {
+					delay, err := out.DelayMs()
+					if err != nil {
+						log.WithError(err).Warnf("failed getting output device delay")
+						delay = 0
+					}
+
+					cmd.resp <- source.PositionMs() - delay
 				} else {
 					cmd.resp <- int64(0)
 				}

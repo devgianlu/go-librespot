@@ -242,6 +242,42 @@ func (out *output) Resume() error {
 	return nil
 }
 
+func (out *output) Drop() error {
+	out.cond.L.Lock()
+	defer out.cond.L.Unlock()
+
+	if out.closed || out.released {
+		return nil
+	}
+
+	if err := C.snd_pcm_drop(out.handle); err < 0 {
+		return alsaError("snd_pcm_drop", err)
+	}
+
+	// since we are not actually stopping the stream, prepare it again
+	if err := C.snd_pcm_prepare(out.handle); err < 0 {
+		return alsaError("snd_pcm_prepare", err)
+	}
+
+	return nil
+}
+
+func (out *output) DelayMs() (int64, error) {
+	out.cond.L.Lock()
+	defer out.cond.L.Unlock()
+
+	if out.closed || out.released {
+		return 0, nil
+	}
+
+	var frames C.snd_pcm_sframes_t
+	if err := C.snd_pcm_delay(out.handle, &frames); err < 0 {
+		return 0, alsaError("snd_pcm_delay", err)
+	}
+
+	return int64(frames) * 1000 / int64(out.sampleRate), nil
+}
+
 func (out *output) SetVolume(vol float32) {
 	if vol < 0 || vol > 1 {
 		panic(fmt.Sprintf("invalid volume value: %0.2f", vol))

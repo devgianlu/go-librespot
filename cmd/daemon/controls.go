@@ -175,10 +175,10 @@ func (s *Session) pause() error {
 		return fmt.Errorf("no stream")
 	}
 
-	s.stream.Pause()
-
 	streamPos := s.stream.PositionMs()
 	log.Debugf("pause track at %dms", streamPos)
+
+	s.stream.Pause()
 
 	s.state.playerState.Timestamp = time.Now().UnixMilli()
 	s.state.playerState.PositionAsOfTimestamp = streamPos

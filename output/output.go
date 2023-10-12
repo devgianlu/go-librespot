@@ -57,6 +57,16 @@ func (c *Output) Resume() error {
 	return c.output.Resume()
 }
 
+// Drop empties the audio buffer without waiting.
+func (c *Output) Drop() error {
+	return c.output.Drop()
+}
+
+// DelayMs returns the output device delay in milliseconds.
+func (c *Output) DelayMs() (int64, error) {
+	return c.output.DelayMs()
+}
+
 // SetVolume sets the volume (0-1).
 func (c *Output) SetVolume(vol float32) {
 	c.output.SetVolume(vol)

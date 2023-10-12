@@ -366,10 +366,10 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 		}
 	}
 
+	d.buf = nil
 	return nil
 }
 
 func (d *Decoder) PositionMs() int64 {
-	// TODO: account for alsa delay with snd_pcm_delay
 	return int64(vorbis.GranuleTime(&d.dspState, d.lastGranulepos) * 1000)
 }
