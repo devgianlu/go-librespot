@@ -180,9 +180,14 @@ func (app *App) withReusableCredentials(creds SessionCredentials) (err error) {
 			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
 		}
 
+		log.Debugf("stored credentials found for %s", file.Username)
 		if file.Username == username {
 			storedCredentials = file.Data
+		} else {
+			log.Warnf("stored credentials found for wrong username %s != %s", file.Username, username)
 		}
+	} else {
+		log.Debugf("stored credentials not found")
 	}
 
 	var sess *Session
@@ -205,6 +210,8 @@ func (app *App) withReusableCredentials(creds SessionCredentials) (err error) {
 		} else if err := os.WriteFile(app.cfg.CredentialsPath, content, 0600); err != nil {
 			return fmt.Errorf("failed writing stored credentials file: %w", err)
 		}
+
+		log.Debugf("stored credentials for %s", sess.ap.Username())
 	}
 
 	sess.Run(app.server.Receive())
