@@ -13,28 +13,28 @@ import (
 func (s *Session) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlaying:
-		s.state.playerState.IsPlaying = true
-		s.state.playerState.IsPaused = false
-		s.state.playerState.IsBuffering = false
+		s.state.player.IsPlaying = true
+		s.state.player.IsPaused = false
+		s.state.player.IsBuffering = false
 		s.updateState()
 
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
-				Uri:        s.state.playerState.Track.Uri,
+				Uri:        s.state.player.Track.Uri,
 				PlayOrigin: s.state.playOrigin(),
 			},
 		})
 	case player.EventTypePaused:
-		s.state.playerState.IsPlaying = true
-		s.state.playerState.IsPaused = true
-		s.state.playerState.IsBuffering = false
+		s.state.player.IsPlaying = true
+		s.state.player.IsPaused = true
+		s.state.player.IsBuffering = false
 		s.updateState()
 
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
 			Data: ApiEventDataPaused{
-				Uri:        s.state.playerState.Track.Uri,
+				Uri:        s.state.player.Track.Uri,
 				PlayOrigin: s.state.playOrigin(),
 			},
 		})
@@ -42,7 +42,7 @@ func (s *Session) handlePlayerEvent(ev *player.Event) {
 		s.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
-				Uri:        s.state.playerState.Track.Uri,
+				Uri:        s.state.player.Track.Uri,
 				PlayOrigin: s.state.playOrigin(),
 			},
 		})
@@ -75,30 +75,30 @@ func (s *Session) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.Con
 		return fmt.Errorf("failed creating track list: %w", err)
 	}
 
-	s.state.playerState.IsPaused = paused
+	s.state.player.IsPaused = paused
 
-	s.state.playerState.ContextUri = ctx.Uri
-	s.state.playerState.ContextUrl = ctx.Url
-	s.state.playerState.ContextRestrictions = ctx.Restrictions
+	s.state.player.ContextUri = ctx.Uri
+	s.state.player.ContextUrl = ctx.Url
+	s.state.player.ContextRestrictions = ctx.Restrictions
 
-	if s.state.playerState.ContextMetadata == nil {
-		s.state.playerState.ContextMetadata = map[string]string{}
+	if s.state.player.ContextMetadata == nil {
+		s.state.player.ContextMetadata = map[string]string{}
 	}
 	for k, v := range ctx.Metadata {
-		s.state.playerState.ContextMetadata[k] = v
+		s.state.player.ContextMetadata[k] = v
 	}
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = 0
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = 0
 
 	// if we fail to seek, just fallback to the first track
 	tracks.TrySeek(skipTo)
 
 	s.state.tracks = tracks
-	s.state.playerState.Track = tracks.CurrentTrack()
-	s.state.playerState.PrevTracks = tracks.PrevTracks()
-	s.state.playerState.NextTracks = tracks.NextTracks()
-	s.state.playerState.Index = tracks.Index()
+	s.state.player.Track = tracks.CurrentTrack()
+	s.state.player.PrevTracks = tracks.PrevTracks()
+	s.state.player.NextTracks = tracks.NextTracks()
+	s.state.player.Index = tracks.Index()
 
 	// load current track into stream
 	if err := s.loadCurrentTrack(paused); err != nil {
@@ -114,14 +114,14 @@ func (s *Session) loadCurrentTrack(paused bool) error {
 		s.stream = nil
 	}
 
-	trackId := librespot.TrackIdFromUri(s.state.playerState.Track.Uri)
+	trackId := librespot.TrackIdFromUri(s.state.player.Track.Uri)
 	trackPosition := s.state.trackPosition()
 
 	log.Debugf("loading track %s (paused: %t, position: %dms)", trackId.Uri(), paused, trackPosition)
 
-	s.state.playerState.IsPlaying = true
-	s.state.playerState.IsBuffering = true
-	s.state.playerState.IsPaused = paused
+	s.state.player.IsPlaying = true
+	s.state.player.IsBuffering = true
+	s.state.player.IsPaused = paused
 	s.updateState()
 
 	s.app.server.Emit(&ApiEvent{
@@ -139,9 +139,9 @@ func (s *Session) loadCurrentTrack(paused bool) error {
 
 	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, trackId.Uri(), paused, trackPosition, *stream.Track.Duration)
 
-	s.state.playerState.Duration = int64(*stream.Track.Duration)
-	s.state.playerState.IsPlaying = true
-	s.state.playerState.IsBuffering = false
+	s.state.player.Duration = int64(*stream.Track.Duration)
+	s.state.player.IsPlaying = true
+	s.state.player.IsBuffering = false
 	s.updateState()
 
 	s.app.server.Emit(&ApiEvent{
@@ -163,9 +163,9 @@ func (s *Session) play() error {
 	streamPos := s.stream.PositionMs()
 	log.Debugf("resume track at %dms", streamPos)
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = streamPos
-	s.state.playerState.IsPaused = false
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = streamPos
+	s.state.player.IsPaused = false
 	s.updateState()
 	return nil
 }
@@ -180,9 +180,9 @@ func (s *Session) pause() error {
 
 	s.stream.Pause()
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = streamPos
-	s.state.playerState.IsPaused = true
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = streamPos
+	s.state.player.IsPaused = true
 	s.updateState()
 	return nil
 }
@@ -197,14 +197,14 @@ func (s *Session) seek(position int64) error {
 		return err
 	}
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = position
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = position
 	s.updateState()
 
 	s.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
 		Data: ApiEventDataSeek{
-			Uri:        s.state.playerState.Track.Uri,
+			Uri:        s.state.player.Track.Uri,
 			Position:   int(position),
 			Duration:   int(*s.stream.Track.Duration),
 			PlayOrigin: s.state.playOrigin(),
@@ -223,17 +223,17 @@ func (s *Session) skipPrev() error {
 		log.Debug("skip previous track")
 		s.state.tracks.GoPrev()
 
-		s.state.playerState.Track = s.state.tracks.CurrentTrack()
-		s.state.playerState.PrevTracks = s.state.tracks.PrevTracks()
-		s.state.playerState.NextTracks = s.state.tracks.NextTracks()
-		s.state.playerState.Index = s.state.tracks.Index()
+		s.state.player.Track = s.state.tracks.CurrentTrack()
+		s.state.player.PrevTracks = s.state.tracks.PrevTracks()
+		s.state.player.NextTracks = s.state.tracks.NextTracks()
+		s.state.player.Index = s.state.tracks.Index()
 	}
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = 0
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = 0
 
 	// load current track into stream
-	if err := s.loadCurrentTrack(s.state.playerState.IsPaused); err != nil {
+	if err := s.loadCurrentTrack(s.state.player.IsPaused); err != nil {
 		return fmt.Errorf("failed loading current track (skip prev): %w", err)
 	}
 
@@ -245,17 +245,17 @@ func (s *Session) skipNext() error {
 		log.Debug("skip next track")
 		s.state.tracks.GoNext()
 
-		s.state.playerState.Track = s.state.tracks.CurrentTrack()
-		s.state.playerState.PrevTracks = s.state.tracks.PrevTracks()
-		s.state.playerState.NextTracks = s.state.tracks.NextTracks()
-		s.state.playerState.Index = s.state.tracks.Index()
+		s.state.player.Track = s.state.tracks.CurrentTrack()
+		s.state.player.PrevTracks = s.state.tracks.PrevTracks()
+		s.state.player.NextTracks = s.state.tracks.NextTracks()
+		s.state.player.Index = s.state.tracks.Index()
 	}
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = 0
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = 0
 
 	// load current track into stream
-	if err := s.loadCurrentTrack(s.state.playerState.IsPaused); err != nil {
+	if err := s.loadCurrentTrack(s.state.player.IsPaused); err != nil {
 		return fmt.Errorf("failed loading current track (skip next): %w", err)
 	}
 
@@ -266,36 +266,36 @@ func (s *Session) advanceNext(forceNext bool) (bool, error) {
 	var uri string
 	var hasNextTrack bool
 	if s.state.tracks != nil {
-		if !forceNext && s.state.playerState.Options.RepeatingTrack {
+		if !forceNext && s.state.player.Options.RepeatingTrack {
 			hasNextTrack = true
-			s.state.playerState.IsPaused = false
+			s.state.player.IsPaused = false
 		} else {
 			// try to get the next track
 			hasNextTrack = s.state.tracks.GoNext()
 
 			// if we could not get the next track we probably ended the context
-			if !hasNextTrack && s.state.playerState.Options.RepeatingContext {
+			if !hasNextTrack && s.state.player.Options.RepeatingContext {
 				hasNextTrack = s.state.tracks.GoStart()
 			}
 
-			s.state.playerState.IsPaused = !hasNextTrack
+			s.state.player.IsPaused = !hasNextTrack
 		}
 
-		s.state.playerState.Track = s.state.tracks.CurrentTrack()
-		s.state.playerState.PrevTracks = s.state.tracks.PrevTracks()
-		s.state.playerState.NextTracks = s.state.tracks.NextTracks()
-		s.state.playerState.Index = s.state.tracks.Index()
+		s.state.player.Track = s.state.tracks.CurrentTrack()
+		s.state.player.PrevTracks = s.state.tracks.PrevTracks()
+		s.state.player.NextTracks = s.state.tracks.NextTracks()
+		s.state.player.Index = s.state.tracks.Index()
 
-		uri = s.state.playerState.Track.Uri
+		uri = s.state.player.Track.Uri
 	}
 
-	s.state.playerState.Timestamp = time.Now().UnixMilli()
-	s.state.playerState.PositionAsOfTimestamp = 0
+	s.state.player.Timestamp = time.Now().UnixMilli()
+	s.state.player.PositionAsOfTimestamp = 0
 
 	if !hasNextTrack {
-		s.state.playerState.IsPlaying = false
-		s.state.playerState.IsPaused = false
-		s.state.playerState.IsBuffering = false
+		s.state.player.IsPlaying = false
+		s.state.player.IsPaused = false
+		s.state.player.IsBuffering = false
 	}
 
 	// load current track into stream
@@ -323,7 +323,7 @@ func (s *Session) updateVolume(newVal uint32) {
 
 	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
 	s.player.SetVolume(newVal)
-	s.state.deviceInfo.Volume = newVal
+	s.state.device.Volume = newVal
 
 	if err := s.putConnectState(connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after volume change")

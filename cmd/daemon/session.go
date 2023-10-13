@@ -89,7 +89,7 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed unmarshalling ClusterUpdate: %w", err)
 		}
 
-		stopBeingActive := s.state.isActive && clusterUpdate.Cluster.ActiveDeviceId != s.app.deviceId
+		stopBeingActive := s.state.active && clusterUpdate.Cluster.ActiveDeviceId != s.app.deviceId
 
 		// We are still the active device, do not quit
 		if !stopBeingActive {
@@ -135,32 +135,32 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		s.state.setActive(true)
-		s.state.playerState.IsPlaying = false
-		s.state.playerState.IsBuffering = false
-		s.state.playerState.IsPaused = false
+		s.state.player.IsPlaying = false
+		s.state.player.IsBuffering = false
+		s.state.player.IsPaused = false
 
 		// options
-		s.state.playerState.Options = transferState.Options
+		s.state.player.Options = transferState.Options
 
 		// playback
-		s.state.playerState.Timestamp = transferState.Playback.Timestamp
-		s.state.playerState.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
-		s.state.playerState.PlaybackSpeed = transferState.Playback.PlaybackSpeed
-		s.state.playerState.IsPaused = transferState.Playback.IsPaused
+		s.state.player.Timestamp = transferState.Playback.Timestamp
+		s.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
+		s.state.player.PlaybackSpeed = transferState.Playback.PlaybackSpeed
+		s.state.player.IsPaused = transferState.Playback.IsPaused
 
 		// current session
-		s.state.playerState.PlayOrigin = transferState.CurrentSession.PlayOrigin
-		s.state.playerState.ContextUri = transferState.CurrentSession.Context.Uri
-		s.state.playerState.ContextUrl = transferState.CurrentSession.Context.Url
-		s.state.playerState.ContextRestrictions = transferState.CurrentSession.Context.Restrictions
-		s.state.playerState.Suppressions = transferState.CurrentSession.Suppressions
+		s.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
+		s.state.player.ContextUri = transferState.CurrentSession.Context.Uri
+		s.state.player.ContextUrl = transferState.CurrentSession.Context.Url
+		s.state.player.ContextRestrictions = transferState.CurrentSession.Context.Restrictions
+		s.state.player.Suppressions = transferState.CurrentSession.Suppressions
 
-		s.state.playerState.ContextMetadata = map[string]string{}
+		s.state.player.ContextMetadata = map[string]string{}
 		for k, v := range transferState.CurrentSession.Context.Metadata {
-			s.state.playerState.ContextMetadata[k] = v
+			s.state.player.ContextMetadata[k] = v
 		}
 		for k, v := range tracks.Metadata() {
-			s.state.playerState.ContextMetadata[k] = v
+			s.state.player.ContextMetadata[k] = v
 		}
 
 		// queue
@@ -182,10 +182,10 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 
 		s.state.tracks = tracks
-		s.state.playerState.Track = tracks.CurrentTrack()
-		s.state.playerState.PrevTracks = tracks.PrevTracks()
-		s.state.playerState.NextTracks = tracks.NextTracks()
-		s.state.playerState.Index = tracks.Index()
+		s.state.player.Track = tracks.CurrentTrack()
+		s.state.player.PrevTracks = tracks.PrevTracks()
+		s.state.player.NextTracks = tracks.NextTracks()
+		s.state.player.Index = tracks.Index()
 
 		// load current track into stream
 		if err := s.loadCurrentTrack(transferState.Playback.IsPaused); err != nil {
@@ -198,8 +198,8 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "play":
-		s.state.playerState.PlayOrigin = req.Command.PlayOrigin
-		s.state.playerState.Suppressions = req.Command.Options.Suppressions
+		s.state.player.PlayOrigin = req.Command.PlayOrigin
+		s.state.player.Suppressions = req.Command.Options.Suppressions
 
 		return s.loadContext(
 			req.Command.Context,
@@ -234,27 +234,27 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "skip_next":
 		return s.skipNext()
 	case "update_context":
-		if req.Command.Context.Uri != s.state.playerState.ContextUri {
+		if req.Command.Context.Uri != s.state.player.ContextUri {
 			log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
 			return nil
 		}
 
-		s.state.playerState.ContextRestrictions = req.Command.Context.Restrictions
-		if s.state.playerState.ContextMetadata == nil {
-			s.state.playerState.ContextMetadata = map[string]string{}
+		s.state.player.ContextRestrictions = req.Command.Context.Restrictions
+		if s.state.player.ContextMetadata == nil {
+			s.state.player.ContextMetadata = map[string]string{}
 		}
 		for k, v := range req.Command.Context.Metadata {
-			s.state.playerState.ContextMetadata[k] = v
+			s.state.player.ContextMetadata[k] = v
 		}
 
 		s.updateState()
 		return nil
 	case "set_repeating_context":
-		s.state.playerState.Options.RepeatingContext = req.Command.Value.(bool)
+		s.state.player.Options.RepeatingContext = req.Command.Value.(bool)
 		s.updateState()
 		return nil
 	case "set_repeating_track":
-		s.state.playerState.Options.RepeatingTrack = req.Command.Value.(bool)
+		s.state.player.Options.RepeatingTrack = req.Command.Value.(bool)
 		s.updateState()
 		return nil
 	default:
@@ -281,14 +281,14 @@ func (s *Session) handleApiRequest(req ApiRequest) (any, error) {
 			DeviceType:     s.app.deviceType.String(),
 			DeviceName:     s.app.cfg.DeviceName,
 			VolumeSteps:    s.app.cfg.VolumeSteps,
-			Volume:         s.state.deviceInfo.Volume,
-			RepeatContext:  s.state.playerState.Options.RepeatingContext,
-			RepeatTrack:    s.state.playerState.Options.RepeatingTrack,
-			ShuffleContext: s.state.playerState.Options.ShufflingContext,
-			Stopped:        !s.state.playerState.IsPlaying,
-			Paused:         s.state.playerState.IsPaused,
-			Buffering:      s.state.playerState.IsBuffering,
-			PlayOrigin:     s.state.playerState.PlayOrigin.FeatureIdentifier,
+			Volume:         s.state.device.Volume,
+			RepeatContext:  s.state.player.Options.RepeatingContext,
+			RepeatTrack:    s.state.player.Options.RepeatingTrack,
+			ShuffleContext: s.state.player.Options.ShufflingContext,
+			Stopped:        !s.state.player.IsPlaying,
+			Paused:         s.state.player.IsPaused,
+			Buffering:      s.state.player.IsBuffering,
+			PlayOrigin:     s.state.player.PlayOrigin.FeatureIdentifier,
 		}
 
 		if s.stream != nil && s.prodInfo != nil {
@@ -319,9 +319,9 @@ func (s *Session) handleApiRequest(req ApiRequest) (any, error) {
 		}
 
 		s.state.setActive(true)
-		s.state.playerState.PlaybackSpeed = 1
-		s.state.playerState.Suppressions = &connectpb.Suppressions{}
-		s.state.playerState.PlayOrigin = &connectpb.PlayOrigin{
+		s.state.player.PlaybackSpeed = 1
+		s.state.player.Suppressions = &connectpb.Suppressions{}
+		s.state.player.PlayOrigin = &connectpb.PlayOrigin{
 			FeatureIdentifier: "go-librespot",
 			FeatureVersion:    librespot.VersionNumberString(),
 		}
@@ -336,7 +336,7 @@ func (s *Session) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeGetVolume:
 		return &ApiResponseVolume{
 			Max:   s.app.cfg.VolumeSteps,
-			Value: s.state.deviceInfo.Volume * s.app.cfg.VolumeSteps / player.MaxStateVolume,
+			Value: s.state.device.Volume * s.app.cfg.VolumeSteps / player.MaxStateVolume,
 		}, nil
 	case ApiRequestTypeSetVolume:
 		vol := req.Data.(uint32)

@@ -10,11 +10,11 @@ import (
 )
 
 type State struct {
-	isActive    bool
+	active      bool
 	activeSince time.Time
 
-	deviceInfo  *connectpb.DeviceInfo
-	playerState *connectpb.PlayerState
+	device *connectpb.DeviceInfo
+	player *connectpb.PlayerState
 
 	tracks *TracksList
 
@@ -23,22 +23,22 @@ type State struct {
 
 func (s *State) setActive(val bool) {
 	if val {
-		if s.isActive {
+		if s.active {
 			return
 		}
 
-		s.isActive = true
+		s.active = true
 		s.activeSince = time.Now()
 	} else {
-		s.isActive = false
+		s.active = false
 		s.activeSince = time.Time{}
 	}
 }
 
 func (s *State) reset() {
-	s.isActive = false
+	s.active = false
 	s.activeSince = time.Time{}
-	s.playerState = &connectpb.PlayerState{
+	s.player = &connectpb.PlayerState{
 		IsSystemInitiated: true,
 		PlaybackSpeed:     1,
 		PlayOrigin:        &connectpb.PlayOrigin{},
@@ -48,21 +48,21 @@ func (s *State) reset() {
 }
 
 func (s *State) trackPosition() int64 {
-	if s.playerState.IsPaused {
-		return s.playerState.PositionAsOfTimestamp
+	if s.player.IsPaused {
+		return s.player.PositionAsOfTimestamp
 	} else {
-		return time.Now().UnixMilli() - s.playerState.Timestamp + s.playerState.PositionAsOfTimestamp
+		return time.Now().UnixMilli() - s.player.Timestamp + s.player.PositionAsOfTimestamp
 	}
 }
 
 func (s *State) playOrigin() string {
-	return s.playerState.PlayOrigin.FeatureIdentifier
+	return s.player.PlayOrigin.FeatureIdentifier
 }
 
 func (s *Session) initState() {
 	s.state = &State{
 		lastCommand: nil,
-		deviceInfo: &connectpb.DeviceInfo{
+		device: &connectpb.DeviceInfo{
 			CanPlay:               true,
 			Volume:                player.MaxStateVolume,
 			Name:                  s.app.cfg.DeviceName,
@@ -122,10 +122,10 @@ func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
 		putStateReq.HasBeenPlayingForMs = uint64(t.Milliseconds())
 	}
 
-	putStateReq.IsActive = s.state.isActive
+	putStateReq.IsActive = s.state.active
 	putStateReq.Device = &connectpb.Device{
-		DeviceInfo:  s.state.deviceInfo,
-		PlayerState: s.state.playerState,
+		DeviceInfo:  s.state.device,
+		PlayerState: s.state.player,
 	}
 
 	if s.state.lastCommand != nil {
