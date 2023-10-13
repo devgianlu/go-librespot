@@ -15,7 +15,7 @@ type ReplayGain struct {
 	albumPeak   float32
 }
 
-func ExtractReplayGainMetadata(r io.ReaderAt, limit int64) (librespot.SizedReadSeeker, *ReplayGain, error) {
+func ExtractReplayGainMetadata(r io.ReaderAt, limit int64) (librespot.SizedReadAtSeeker, *ReplayGain, error) {
 	payload := make([]byte, 16)
 	if _, err := r.ReadAt(payload, 144); err != nil {
 		return nil, nil, err

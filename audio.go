@@ -2,8 +2,9 @@ package go_librespot
 
 import "io"
 
-type SizedReadSeeker interface {
+type SizedReadAtSeeker interface {
 	io.ReadSeeker
+	io.ReaderAt
 
 	Size() int64
 }

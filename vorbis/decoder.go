@@ -59,7 +59,7 @@ type Decoder struct {
 	// This structure is intended to be private.
 	block vorbis.Block
 
-	input    librespot.SizedReadSeeker
+	input    librespot.SizedReadAtSeeker
 	pcm      [][][]float32
 	buf      []float32
 	stopChan chan struct{}
@@ -77,7 +77,7 @@ type Info struct {
 }
 
 // New creates and initialises a new OggVorbis decoder for the provided bytestream.
-func New(r librespot.SizedReadSeeker, duration int32, gain float32) (*Decoder, error) {
+func New(r librespot.SizedReadAtSeeker, duration int32, gain float32) (*Decoder, error) {
 	d := &Decoder{
 		input:    r,
 		duration: duration,
