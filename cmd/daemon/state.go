@@ -40,6 +40,7 @@ func (s *State) reset() {
 	s.activeSince = time.Time{}
 	s.playerState = &connectpb.PlayerState{
 		IsSystemInitiated: true,
+		PlaybackSpeed:     1,
 		PlayOrigin:        &connectpb.PlayOrigin{},
 		Suppressions:      &connectpb.Suppressions{},
 		Options:           &connectpb.ContextPlayerOptions{},

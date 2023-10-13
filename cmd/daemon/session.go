@@ -319,6 +319,7 @@ func (s *Session) handleApiRequest(req ApiRequest) (any, error) {
 		}
 
 		s.state.setActive(true)
+		s.state.playerState.PlaybackSpeed = 1
 		s.state.playerState.Suppressions = &connectpb.Suppressions{}
 		s.state.playerState.PlayOrigin = &connectpb.PlayOrigin{
 			FeatureIdentifier: "go-librespot",
