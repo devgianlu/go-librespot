@@ -21,6 +21,10 @@ jobs:
             cc: arm-linux-gnueabihf-gcc
           - target: aarch64-linux-gnu
             cc: aarch64-linux-gnu-gcc
+          - target: i686-w64-mingw32
+            cc: i686-w64-mingw32-gcc
+          - target: x86_64-w64-mingw32
+            cc: x86_64-w64-mingw32-gcc
     env:
       CC: ${{ matrix.cc }}
     steps:
@@ -95,24 +99,38 @@ jobs:
       matrix:
         include:
           - target: x86-64-linux-gnu
+            goos: linux
             goarch: amd64
             goamd64: v1
             cc: gcc
             tar: linux_x86_64
           - target: arm-rpi-linux-gnueabihf
+            goos: linux
             goarch: arm
             goarm: 6
             cc: arm-rpi-linux-gnueabihf-gcc
             tar: linux_armv6_rpi
           - target: arm-linux-gnueabihf
+            goos: linux
             goarch: arm
             goarm: 6
             cc: arm-linux-gnueabihf-gcc
             tar: linux_armv6
           - target: aarch64-linux-gnu
+            goos: linux
             goarch: arm64
             cc: aarch64-linux-gnu-gcc
             tar: linux_arm64
+          - target: i686-w64-mingw32
+            goos: windows
+            goarch: 386
+            cc: i686-w64-mingw32-gcc
+            tar: windows_386
+          - target: x86_64-w64-mingw32
+            goos: windows
+            goarch: amd64
+            cc: x86_64-w64-mingw32-gcc
+            tar: windows_x86-64
     steps:
       - uses: actions/checkout@v3
         with:
@@ -160,6 +178,8 @@ jobs:
             -ldflags="-s -w -X go-librespot.commit=${{ github.sha }} -X go-librespot.version=${{ github.ref_name }}" \
             -o ./go-librespot -a ./cmd/daemon
           tar -zcvf /tmp/out/go-librespot_${{ matrix.tar }}.tar.gz go-librespot README.md
+
+        # TODO: copy Windows DLLs to archive
 
       - name: Upload compiled binary
         uses: actions/upload-artifact@v3
