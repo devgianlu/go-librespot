@@ -285,12 +285,12 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
 	}
 
-	audioStream, norm, err := audio.ExtractReplayGainMetadata(decryptedStream, rawStream.Size())
+	audioStream, meta, err := audio.ExtractMetadataPage(decryptedStream, rawStream.Size())
 	if err != nil {
-		return nil, fmt.Errorf("failed reading ReplayGain metadata: %w", err)
+		return nil, fmt.Errorf("failed reading metadata page: %w", err)
 	}
 
-	stream, err := vorbis.New(audioStream, *trackMeta.Duration, norm.GetTrackFactor(1))
+	stream, err := vorbis.New(audioStream, *trackMeta.Duration, meta.GetTrackFactor(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}
