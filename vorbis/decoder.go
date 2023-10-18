@@ -127,28 +127,39 @@ func (d *Decoder) Close() {
 }
 
 func (d *Decoder) decoderStateCleanup() {
-	vorbis.OggStreamClear(&d.streamState)
-	d.streamState.Free()
-
-	vorbis.CommentClear(&d.comment)
-	d.comment.Free()
-
-	vorbis.InfoClear(&d.info)
-	d.info.Free()
-
 	vorbis.OggSyncClear(&d.syncState)
 	d.syncState.Free()
 
-	vorbis.DspClear(&d.dspState)
-	d.dspState.Free()
+	if d.streamState.Ref() != nil {
+		vorbis.OggStreamClear(&d.streamState)
+		d.streamState.Free()
+	}
 
-	vorbis.BlockClear(&d.block)
-	d.block.Free()
+	if d.comment.Ref() != nil {
+		vorbis.CommentClear(&d.comment)
+		d.comment.Free()
+	}
 
-	vorbis.OggPacketClear(&d.packet)
-	d.packet.Free()
+	if d.info.Ref() != nil {
+		vorbis.InfoClear(&d.info)
+		d.info.Free()
+	}
 
-	// clear up all remaining refs
+	if d.dspState.Ref() != nil {
+		vorbis.DspClear(&d.dspState)
+		d.dspState.Free()
+	}
+
+	if d.block.Ref() != nil {
+		vorbis.BlockClear(&d.block)
+		d.block.Free()
+	}
+
+	if d.packet.Ref() != nil {
+		vorbis.OggPacketClear(&d.packet)
+		d.packet.Free()
+	}
+
 	d.page.Free()
 }
 
@@ -173,7 +184,7 @@ func (d *Decoder) readChunk() (n int, err error) {
 
 func (d *Decoder) readStreamHeaders() error {
 	if _, err := d.readChunk(); err != nil {
-		return fmt.Errorf("vorbis: failed reading chunk: %w", err)
+		return fmt.Errorf("vorbis: failed reading headers chunk: %w", err)
 	}
 
 	// Read the first page
