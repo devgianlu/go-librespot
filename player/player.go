@@ -290,15 +290,15 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 		return nil, fmt.Errorf("failed reading metadata page: %w", err)
 	}
 
-	stream, err := vorbis.New(audioStream, *trackMeta.Duration, meta.GetTrackFactor(1))
+	stream, err := vorbis.New(audioStream, meta, meta.GetTrackFactor(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}
 
-	if stream.Info().SampleRate != SampleRate {
-		return nil, fmt.Errorf("unsupported sample rate: %d", stream.Info().SampleRate)
-	} else if stream.Info().Channels != Channels {
-		return nil, fmt.Errorf("unsupported channels: %d", stream.Info().Channels)
+	if stream.SampleRate != SampleRate {
+		return nil, fmt.Errorf("unsupported sample rate: %d", stream.SampleRate)
+	} else if stream.Channels != Channels {
+		return nil, fmt.Errorf("unsupported channels: %d", stream.Channels)
 	}
 
 	if err := stream.SetPositionMs(trackPosition); err != nil {

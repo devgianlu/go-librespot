@@ -200,3 +200,26 @@ func (m MetadataPage) GetAlbumFactor(normalisationPregain float32) float32 {
 
 	return normalisationFactor
 }
+
+func (m MetadataPage) GetSeekPosition(samplesPos int64) int64 {
+	// figure out a relative position based on samples and clamp it to [0,100)
+	samplesRelPos := float32(samplesPos) * 100 / float32(m.seekSamples)
+	samplesIntPos := int32(samplesRelPos)
+	if samplesIntPos <= 0 {
+		samplesIntPos = 1
+	} else if samplesIntPos > 99 {
+		samplesIntPos = 99
+	}
+
+	// interpolate our requested samples position
+	tablePrev, tableCurr := m.seekTable[samplesIntPos-1], m.seekTable[samplesIntPos]
+	interpolatedPos := float32(tableCurr-tablePrev)*(samplesRelPos-float32(samplesIntPos)) + float32(tablePrev)
+
+	// transform the interpolated position to a bytes position
+	bytesPos := interpolatedPos * 1.525879e-05 * float32(m.seekSize)
+	if bytesPos < 0 {
+		return 0
+	}
+
+	return int64(bytesPos)
+}
