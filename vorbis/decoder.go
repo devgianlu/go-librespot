@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
+	"go-librespot/audio"
 	"io"
 	"strings"
 	"sync"
@@ -21,11 +22,14 @@ const (
 type Decoder struct {
 	sync.Mutex
 
+	SampleRate int32
+	Channels   int32
+
+	// meta is the associated metadata (for seeking)
+	meta *audio.MetadataPage
+
 	// gain is the default track gain.
 	gain float32
-
-	// duration is the input length in milliseconds.
-	duration int32
 
 	// syncState tracks the synchronization of the current page. It is used during
 	// decoding to track the status of data as it is read in, synchronized, verified,
@@ -77,10 +81,10 @@ type Info struct {
 }
 
 // New creates and initialises a new OggVorbis decoder for the provided bytestream.
-func New(r librespot.SizedReadAtSeeker, duration int32, gain float32) (*Decoder, error) {
+func New(r librespot.SizedReadAtSeeker, meta *audio.MetadataPage, gain float32) (*Decoder, error) {
 	d := &Decoder{
 		input:    r,
-		duration: duration,
+		meta:     meta,
 		gain:     gain,
 		stopChan: make(chan struct{}),
 	}
@@ -104,11 +108,6 @@ func New(r librespot.SizedReadAtSeeker, duration int32, gain float32) (*Decoder,
 	vorbis.BlockInit(&d.dspState, &d.block)
 
 	return d, nil
-}
-
-// Info returns some basic info about the Vorbis stream the decoder was fed with.
-func (d *Decoder) Info() Info {
-	return ReadInfo(&d.info, &d.comment)
 }
 
 // Close stops and finalizes the decoding process, releases the allocated resources.
@@ -155,11 +154,7 @@ func (d *Decoder) decoderStateCleanup() {
 		d.block.Free()
 	}
 
-	if d.packet.Ref() != nil {
-		vorbis.OggPacketClear(&d.packet)
-		d.packet.Free()
-	}
-
+	d.packet.Free()
 	d.page.Free()
 }
 
@@ -242,8 +237,10 @@ forPage:
 
 	d.info.Deref()
 	d.comment.Deref()
-	d.comment.UserComments = make([][]byte, d.comment.Comments)
-	d.comment.Deref()
+
+	d.Channels = d.info.Channels
+	d.SampleRate = int32(d.info.Rate)
+
 	return nil
 }
 
@@ -353,28 +350,36 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 	d.Lock()
 	defer d.Unlock()
 
-	_, err = d.input.Seek(pos*d.input.Size()/int64(d.duration), io.SeekStart)
-	if err != nil {
+	// get the seek position in bytes from the milliseconds
+	posSamples := pos * int64(d.SampleRate) / 1000
+	posBytes := d.meta.GetSeekPosition(posSamples)
+	if posBytes > d.input.Size() {
+		posBytes = d.input.Size()
+	}
+
+	// seek there
+	if _, err = d.input.Seek(posBytes, io.SeekStart); err != nil {
 		return fmt.Errorf("failed seeking input: %w", err)
 	}
 
-	// read data at seek offset
+	// empty the read buffer here, if we found the correct offset
+	// the buffer will contain the correct page data
+	d.buf = nil
+
+	// we trust that the bytes offset we were given is accurate and process the data at this point
 	if _, err = d.readChunk(); err != nil {
 		return fmt.Errorf("failed reading chunk: %w", err)
 	}
 
-	for {
-		err = d.readNextPage()
-		if err != nil {
-			return fmt.Errorf("failed reading page: %w", err)
-		}
+	// get in sync with the next page, this avoids obvious sync errors
+	vorbis.OggSyncPageout(&d.syncState, &d.page)
 
-		if d.PositionMs() >= pos {
-			break
-		}
+	// read the page now that we are aligned
+	if err = d.readNextPage(); err != nil {
+		return fmt.Errorf("failed reading page: %w", err)
 	}
 
-	d.buf = nil
+	log.Tracef("seek to %dms (diff: %dms, samples: %d, bytes: %d)", pos, pos-d.PositionMs(), posSamples, posBytes)
 	return nil
 }
 
