@@ -157,7 +157,7 @@ jobs:
         run: |
           mkdir -p /tmp/out/${{ matrix.target }}/
           go build \
-            -ldflags="-s -w -X go-librespot.commit={{.ShortCommit}} -X go-librespot.version={{.Version}}" \
+            -ldflags="-s -w -X go-librespot.commit=${{ github.sha }} -X go-librespot.version=${{ github.ref_name }}" \
             -o ./go-librespot ./cmd/daemon
           tar -zcvf /tmp/out/go-librespot_${{ matrix.tar }}.tar.gz go-librespot README.md
 
@@ -179,14 +179,18 @@ jobs:
           name: binaries
           path: /tmp/out
 
-      - name: Build changelog
-        uses: mikepenz/release-changelog-builder-action@v3
+      - name: Generate changelog
+        uses: jaywcjlove/changelog-generator@main
         id: changelog
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filter-author: (dependabot|renovate\\[bot\\]|dependabot\\[bot\\]|Renovate Bot)
+          filter: '[R|r]elease[d]\s+[v|V]\d(\.\d+){0,2}'
 
       - name: Release binaries
         uses: softprops/action-gh-release@v1
         with:
-          body: ${{ steps.changelog.outputs.changelog }}
+          body: |
+            ${{ steps.changelog.outputs.compareurl }}
+            ${{ steps.changelog.outputs.changelog }}
           files: /tmp/out/*
