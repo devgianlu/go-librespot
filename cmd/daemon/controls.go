@@ -160,6 +160,13 @@ func (s *Session) setRepeatingContext(val bool) {
 
 	s.state.player.Options.RepeatingContext = val
 	s.updateState()
+
+	s.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeRepeatContext,
+		Data: ApiEventDataRepeatContext{
+			Value: val,
+		},
+	})
 }
 
 func (s *Session) setRepeatingTrack(val bool) {
@@ -169,6 +176,13 @@ func (s *Session) setRepeatingTrack(val bool) {
 
 	s.state.player.Options.RepeatingTrack = val
 	s.updateState()
+
+	s.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeRepeatTrack,
+		Data: ApiEventDataRepeatTrack{
+			Value: val,
+		},
+	})
 }
 
 func (s *Session) setShufflingContext(val bool) {
@@ -180,6 +194,13 @@ func (s *Session) setShufflingContext(val bool) {
 	log.Warnf("shuffle context is not supported yet")
 	s.state.player.Options.ShufflingContext = val
 	s.updateState()
+
+	s.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeShuffleContext,
+		Data: ApiEventDataShuffleContext{
+			Value: val,
+		},
+	})
 }
 
 func (s *Session) play() error {

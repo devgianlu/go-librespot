@@ -51,16 +51,19 @@ const (
 type ApiEventType string
 
 const (
-	ApiEventTypePlaying    ApiEventType = "playing"
-	ApiEventTypeNotPlaying ApiEventType = "not_playing"
-	ApiEventTypeWillPlay   ApiEventType = "will_play"
-	ApiEventTypePaused     ApiEventType = "paused"
-	ApiEventTypeActive     ApiEventType = "active"
-	ApiEventTypeInactive   ApiEventType = "inactive"
-	ApiEventTypeMetadata   ApiEventType = "metadata"
-	ApiEventTypeVolume     ApiEventType = "volume"
-	ApiEventTypeSeek       ApiEventType = "seek"
-	ApiEventTypeStopped    ApiEventType = "stopped"
+	ApiEventTypePlaying        ApiEventType = "playing"
+	ApiEventTypeNotPlaying     ApiEventType = "not_playing"
+	ApiEventTypeWillPlay       ApiEventType = "will_play"
+	ApiEventTypePaused         ApiEventType = "paused"
+	ApiEventTypeActive         ApiEventType = "active"
+	ApiEventTypeInactive       ApiEventType = "inactive"
+	ApiEventTypeMetadata       ApiEventType = "metadata"
+	ApiEventTypeVolume         ApiEventType = "volume"
+	ApiEventTypeSeek           ApiEventType = "seek"
+	ApiEventTypeStopped        ApiEventType = "stopped"
+	ApiEventTypeRepeatTrack    ApiEventType = "repeat_track"
+	ApiEventTypeRepeatContext  ApiEventType = "repeat_context"
+	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 )
 
 type ApiRequest struct {
@@ -179,6 +182,18 @@ type ApiEventDataSeek struct {
 	Position   int    `json:"position"`
 	Duration   int    `json:"duration"`
 	PlayOrigin string `json:"play_origin"`
+}
+
+type ApiEventDataRepeatTrack struct {
+	Value bool `json:"value"`
+}
+
+type ApiEventDataRepeatContext struct {
+	Value bool `json:"value"`
+}
+
+type ApiEventDataShuffleContext struct {
+	Value bool `json:"value"`
 }
 
 func NewApiServer(port int) (_ *ApiServer, err error) {
