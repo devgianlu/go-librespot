@@ -101,7 +101,6 @@ func (s *Session) handleDealerMessage(msg dealer.Message) error {
 			s.stream = nil
 		}
 
-		// FIXME: Fails with 422: Ignoring BECAME_INACTIVE
 		s.state.reset()
 		if err := s.putConnectState(connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
 			return fmt.Errorf("failed inactive state put: %w", err)

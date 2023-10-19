@@ -109,6 +109,10 @@ func (s *Session) updateState() {
 }
 
 func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
+	if reason == connectpb.PutStateReason_BECAME_INACTIVE {
+		return s.sp.PutConnectStateInactive(s.spotConnId, false)
+	}
+
 	putStateReq := &connectpb.PutStateRequest{
 		ClientSideTimestamp: uint64(time.Now().UnixMilli()),
 		MemberType:          connectpb.MemberType_CONNECT_STATE,

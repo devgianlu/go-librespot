@@ -15,6 +15,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 )
 
 type Spclient struct {
@@ -86,6 +87,30 @@ func (c *Spclient) request(method string, path string, query url.Values, header 
 type putStateError struct {
 	ErrorType string `json:"error_type"`
 	Message   string `json:"message"`
+}
+
+func (c *Spclient) PutConnectStateInactive(spotConnId string, notify bool) error {
+	resp, err := c.request(
+		"PUT",
+		fmt.Sprintf("/connect-state/v1/devices/%s/inactive", c.deviceId),
+		url.Values{"notify": []string{strconv.FormatBool(notify)}},
+		http.Header{
+			"X-Spotify-Connection-Id": []string{spotConnId},
+		},
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 204 {
+		return fmt.Errorf("put state inactive request failed with status %d", resp.StatusCode)
+	} else {
+		log.Debug("put connect state inactive")
+		return nil
+	}
 }
 
 func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutStateRequest) error {
