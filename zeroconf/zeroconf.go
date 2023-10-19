@@ -225,6 +225,8 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 type HandleNewRequestFunc func(req NewUserRequest) bool
 
 func (z *Zeroconf) Serve(handler HandleNewRequestFunc) error {
+	defer z.server.Shutdown()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		if err := request.ParseForm(); err != nil {
