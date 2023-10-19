@@ -114,10 +114,14 @@ func (s *Session) loadCurrentTrack(paused bool) error {
 		s.stream = nil
 	}
 
-	trackId := librespot.TrackIdFromUri(s.state.player.Track.Uri)
-	trackPosition := s.state.trackPosition()
+	spotId := librespot.SpotifyIdFromUri(s.state.player.Track.Uri)
+	println("spot", spotId.Type(), spotId.Uri())
+	if spotId.Type() != librespot.SpotifyIdTypeTrack {
+		return fmt.Errorf("unsupported spotify type: %s", spotId.Type())
+	}
 
-	log.Debugf("loading track %s (paused: %t, position: %dms)", trackId.Uri(), paused, trackPosition)
+	trackPosition := s.state.trackPosition()
+	log.Debugf("loading %s %s (paused: %t, position: %dms)", spotId.Type(), spotId.Uri(), paused, trackPosition)
 
 	s.state.player.IsPlaying = true
 	s.state.player.IsBuffering = true
@@ -127,17 +131,17 @@ func (s *Session) loadCurrentTrack(paused bool) error {
 	s.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeWillPlay,
 		Data: ApiEventDataWillPlay{
-			Uri:        trackId.Uri(),
+			Uri:        spotId.Uri(),
 			PlayOrigin: s.state.playOrigin(),
 		},
 	})
 
-	stream, err := s.player.NewStream(trackId, s.app.cfg.Bitrate, trackPosition, paused)
+	stream, err := s.player.NewStream(spotId, s.app.cfg.Bitrate, trackPosition, paused)
 	if err != nil {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
 
-	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, trackId.Uri(), paused, trackPosition, *stream.Track.Duration)
+	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, spotId.Uri(), paused, trackPosition, *stream.Track.Duration)
 
 	s.state.player.Duration = int64(*stream.Track.Duration)
 	s.state.player.IsPlaying = true

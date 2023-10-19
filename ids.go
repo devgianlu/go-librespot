@@ -14,7 +14,8 @@ var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{21,22})$")
 func ContextTrackToProvidedTrack(track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
 	var uri string
 	if len(track.Gid) > 0 {
-		uri = TrackId(track.Gid).Uri()
+		// FIXME: this might not always be a track
+		uri = SpotifyIdFromGid(SpotifyIdTypeTrack, track.Gid).Uri()
 	} else if len(track.Uri) > 0 {
 		uri = track.Uri
 	} else {
@@ -34,27 +35,51 @@ func ContextTrackToProvidedTrack(track *connectpb.ContextTrack) *connectpb.Provi
 	}
 }
 
-type TrackId []byte
+type SpotifyIdType string
 
-func (id TrackId) Hex() string {
-	return hex.EncodeToString(id)
+const (
+	SpotifyIdTypeTrack   SpotifyIdType = "track"
+	SpotifyIdTypeEpisode SpotifyIdType = "episode"
+)
+
+type SpotifyId struct {
+	typ SpotifyIdType
+	id  []byte
 }
 
-func (id TrackId) Base62() string {
-	s := new(big.Int).SetBytes(id).Text(62)
+func (id SpotifyId) Type() SpotifyIdType {
+	return id.typ
+}
+
+func (id SpotifyId) Id() []byte {
+	return id.id
+}
+
+func (id SpotifyId) Hex() string {
+	return hex.EncodeToString(id.id)
+}
+
+func (id SpotifyId) Base62() string {
+	s := new(big.Int).SetBytes(id.id).Text(62)
 	return strings.Repeat("0", 22-len(s)) + s
 }
 
-func (id TrackId) Uri() string {
-	return fmt.Sprintf("spotify:track:%s", id.Base62())
+func (id SpotifyId) Uri() string {
+	return fmt.Sprintf("spotify:%s:%s", id.Type(), id.Base62())
 }
 
-func TrackIdFromUri(uri string) TrackId {
+func SpotifyIdFromGid(typ SpotifyIdType, id []byte) SpotifyId {
+	if len(id) != 16 {
+		panic(fmt.Sprintf("invalid gid: %s", hex.EncodeToString(id)))
+	}
+
+	return SpotifyId{typ, id}
+}
+
+func SpotifyIdFromUri(uri string) SpotifyId {
 	matches := UriRegexp.FindStringSubmatch(uri)
 	if len(matches) == 0 {
 		panic(fmt.Sprintf("invalid uri: %s", uri))
-	} else if matches[1] != "track" {
-		panic(fmt.Sprintf("invalid uri type for track: %s", matches[1]))
 	}
 
 	var i big.Int
@@ -63,5 +88,5 @@ func TrackIdFromUri(uri string) TrackId {
 		panic("failed decoding base62 track uri")
 	}
 
-	return i.FillBytes(make([]byte, 16))
+	return SpotifyId{SpotifyIdType(matches[1]), i.FillBytes(make([]byte, 16))}
 }

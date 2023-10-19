@@ -112,7 +112,8 @@ func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, p
 	}
 
 	return &ApiResponseStatusTrack{
-		Uri:           librespot.TrackId(track.Gid).Uri(),
+		// FIXME: this might not always be a track
+		Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
 		Name:          *track.Name,
 		ArtistNames:   artists,
 		AlbumName:     *track.Album.Name,

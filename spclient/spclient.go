@@ -180,7 +180,11 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 	return &protoResp, nil
 }
 
-func (c *Spclient) MetadataForTrack(track librespot.TrackId) (*metadatapb.Track, error) {
+func (c *Spclient) MetadataForTrack(track librespot.SpotifyId) (*metadatapb.Track, error) {
+	if track.Type() != librespot.SpotifyIdTypeTrack {
+		panic(fmt.Sprintf("invalid type: %s", track.Type()))
+	}
+
 	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
 	if err != nil {
 		return nil, err

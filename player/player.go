@@ -221,7 +221,7 @@ func (p *Player) SetVolume(val uint32) {
 
 const DisableCheckTrackRestricted = true
 
-func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int64, paused bool) (*Stream, error) {
+func (p *Player) NewStream(tid librespot.SpotifyId, bitrate int, trackPosition int64, paused bool) (*Stream, error) {
 	trackMeta, err := p.sp.MetadataForTrack(tid)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
@@ -248,7 +248,7 @@ func (p *Player) NewStream(tid librespot.TrackId, bitrate int, trackPosition int
 
 	log.Debugf("selected format %s for %s", file.Format.String(), tid.Uri())
 
-	audioKey, err := p.audioKey.Request(tid, file.FileId)
+	audioKey, err := p.audioKey.Request(tid.Id(), file.FileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed retrieving audio key: %w", err)
 	}

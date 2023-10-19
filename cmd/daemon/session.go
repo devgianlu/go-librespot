@@ -171,7 +171,7 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 				return true
 			} else if len(track.Uri) > 0 && track.Uri == currentTrack.Uri {
 				return true
-			} else if len(track.Gid) > 0 && librespot.TrackId(track.Gid).Uri() == currentTrack.Uri {
+			} else if len(track.Gid) > 0 && librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri() == currentTrack.Uri /* FIXME: this might not always be a track */ {
 				return true
 			} else {
 				return false
