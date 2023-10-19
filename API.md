@@ -43,3 +43,9 @@ The following events are emitted:
 - `volume`: The player volume changed, the following data is provided:
   - `value`: The volume, ranging from 0 to max
   - `max`: The max volume value
+- `shuffle_context`: The player shuffling context setting changed
+  - `value`: Whether shuffling context is enabled
+- `repeat_context`: The player repeating context setting changed
+  - `value`: Whether repeating context is enabled
+- `repeat_track`: The player repeating track setting changed
+  - `value`: Whether repeating track is enabled

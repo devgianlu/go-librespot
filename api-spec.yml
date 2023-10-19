@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  version: 0.0.1
+  version: 0.0.8
   title: go-librespot API
   description: go-librespot daemon API
 
@@ -185,6 +185,54 @@ paths:
                   description: Volume from 0 to max
                   type: number
                   minimum: 0
+                  required: true
+      responses:
+        200:
+          description: Successful response
+  /player/repeat_context:
+    post:
+      description: Toggle repeating context
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                repeat_context:
+                  description: Whether repeating context should be enabled
+                  type: boolean
+                  required: true
+      responses:
+        200:
+          description: Successful response
+  /player/repeat_track:
+    post:
+      description: Toggle repeating track
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                repeat_track:
+                  description: Whether repeating track should be enabled
+                  type: boolean
+                  required: true
+      responses:
+        200:
+          description: Successful response
+  /player/shuffle_context:
+    post:
+      description: Toggle shuffling context
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shuffle_context:
+                  description: Whether shuffling context should be enabled
+                  type: boolean
                   required: true
       responses:
         200:
