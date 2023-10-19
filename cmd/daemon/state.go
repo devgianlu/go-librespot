@@ -59,15 +59,15 @@ func (s *State) playOrigin() string {
 	return s.player.PlayOrigin.FeatureIdentifier
 }
 
-func (s *Session) initState() {
-	s.state = &State{
+func (p *AppPlayer) initState() {
+	p.state = &State{
 		lastCommand: nil,
 		device: &connectpb.DeviceInfo{
 			CanPlay:               true,
 			Volume:                player.MaxStateVolume,
-			Name:                  s.app.cfg.DeviceName,
-			DeviceId:              s.app.deviceId,
-			DeviceType:            s.app.deviceType,
+			Name:                  p.app.cfg.DeviceName,
+			DeviceId:              p.app.deviceId,
+			DeviceType:            p.app.deviceType,
 			DeviceSoftwareVersion: librespot.VersionString(),
 			ClientId:              librespot.ClientId,
 			SpircVersion:          "3.2.6",
@@ -77,7 +77,7 @@ func (s *Session) initState() {
 				GaiaEqConnectId:            true,
 				SupportsLogout:             true,
 				IsObservable:               true,
-				VolumeSteps:                int32(s.app.cfg.VolumeSteps),
+				VolumeSteps:                int32(p.app.cfg.VolumeSteps),
 				SupportedTypes:             []string{"audio/track"}, // TODO: support episodes
 				CommandAcks:                true,
 				SupportsRename:             false,
@@ -99,18 +99,18 @@ func (s *Session) initState() {
 			},
 		},
 	}
-	s.state.reset()
+	p.state.reset()
 }
 
-func (s *Session) updateState() {
-	if err := s.putConnectState(connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
+func (p *AppPlayer) updateState() {
+	if err := p.putConnectState(connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after update")
 	}
 }
 
-func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
+func (p *AppPlayer) putConnectState(reason connectpb.PutStateReason) error {
 	if reason == connectpb.PutStateReason_BECAME_INACTIVE {
-		return s.sp.PutConnectStateInactive(s.spotConnId, false)
+		return p.sess.Spclient().PutConnectStateInactive(p.spotConnId, false)
 	}
 
 	putStateReq := &connectpb.PutStateRequest{
@@ -119,24 +119,24 @@ func (s *Session) putConnectState(reason connectpb.PutStateReason) error {
 		PutStateReason:      reason,
 	}
 
-	if t := s.state.activeSince; !t.IsZero() {
+	if t := p.state.activeSince; !t.IsZero() {
 		putStateReq.StartedPlayingAt = uint64(t.UnixMilli())
 	}
-	if t := s.player.HasBeenPlayingFor(); t > 0 {
+	if t := p.player.HasBeenPlayingFor(); t > 0 {
 		putStateReq.HasBeenPlayingForMs = uint64(t.Milliseconds())
 	}
 
-	putStateReq.IsActive = s.state.active
+	putStateReq.IsActive = p.state.active
 	putStateReq.Device = &connectpb.Device{
-		DeviceInfo:  s.state.device,
-		PlayerState: s.state.player,
+		DeviceInfo:  p.state.device,
+		PlayerState: p.state.player,
 	}
 
-	if s.state.lastCommand != nil {
-		putStateReq.LastCommandMessageId = s.state.lastCommand.MessageId
-		putStateReq.LastCommandSentByDeviceId = s.state.lastCommand.SentByDeviceId
+	if p.state.lastCommand != nil {
+		putStateReq.LastCommandMessageId = p.state.lastCommand.MessageId
+		putStateReq.LastCommandSentByDeviceId = p.state.lastCommand.SentByDeviceId
 	}
 
 	// finally send the state update
-	return s.sp.PutConnectState(s.spotConnId, putStateReq)
+	return p.sess.Spclient().PutConnectState(p.spotConnId, putStateReq)
 }

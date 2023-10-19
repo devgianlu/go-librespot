@@ -8,12 +8,13 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/apresolve"
+	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
+	"go-librespot/session"
 	"go-librespot/zeroconf"
 	"gopkg.in/yaml.v3"
 	"os"
 	"strings"
-	"sync"
 )
 
 type App struct {
@@ -24,9 +25,6 @@ type App struct {
 	deviceId    string
 	deviceType  devicespb.DeviceType
 	clientToken string
-
-	sess     *Session
-	sessLock sync.Mutex
 
 	server *ApiServer
 }
@@ -42,7 +40,6 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg}
-	app.resolver = apresolve.NewApResolver()
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
 	if err != nil {
@@ -58,36 +55,37 @@ func NewApp(cfg *Config) (app *App, err error) {
 		app.deviceId = cfg.DeviceId
 	}
 
-	if len(cfg.ClientToken) == 0 {
-		app.clientToken, err = retrieveClientToken(app.deviceId)
-		if err != nil {
-			return nil, fmt.Errorf("failed obtaining client token: %w", err)
-		}
-	} else {
+	if len(cfg.ClientToken) > 0 {
 		app.clientToken = cfg.ClientToken
 	}
 
 	return app, nil
 }
 
-func (app *App) newSession(creds SessionCredentials) (*Session, error) {
-	// connect new session
-	sess := &Session{app: app, countryCode: new(string)}
-	if err := sess.Connect(creds); err != nil {
+func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
+	appPlayer := &AppPlayer{
+		app:         app,
+		stop:        make(chan struct{}, 1),
+		countryCode: new(string),
+	}
+
+	if appPlayer.sess, err = session.NewSessionFromOptions(&session.Options{
+		DeviceType:  app.deviceType,
+		DeviceId:    app.deviceId,
+		ClientToken: app.clientToken,
+		Resolver:    app.resolver,
+		Credentials: creds,
+	}); err != nil {
 		return nil, err
 	}
 
-	app.sessLock.Lock()
-	defer app.sessLock.Unlock()
+	appPlayer.initState()
 
-	// disconnect previous session
-	if app.sess != nil {
-		app.sess.Close()
+	if appPlayer.player, err = player.NewPlayer(appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(), appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.VolumeSteps); err != nil {
+		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
 
-	// update current session
-	app.sess = sess
-	return sess, nil
+	return appPlayer, nil
 }
 
 func (app *App) Zeroconf() error {
@@ -103,35 +101,35 @@ func (app *App) Zeroconf() error {
 	}
 
 	// TODO: unset this when logging out
-	var currentSession *Session
-	var sessCh chan ApiRequest
+	var currentPlayer *AppPlayer
+	var apiCh chan ApiRequest
 
 	// forward API requests to proper channel only if a session is present
 	go func() {
 		for {
 			select {
 			case req := <-app.server.Receive():
-				if currentSession == nil {
+				if currentPlayer == nil {
 					req.Reply(nil, ErrNoSession)
 					break
 				}
 
 				// if we are here a channel must exist
-				sessCh <- req
+				apiCh <- req
 			}
 		}
 	}()
 
 	return z.Serve(func(req zeroconf.NewUserRequest) bool {
-		if currentSession != nil {
-			currentSession.Close()
-			currentSession = nil
+		if currentPlayer != nil {
+			currentPlayer.Close()
+			currentPlayer = nil
 
 			// close the channel after setting the current session to nil
-			close(sessCh)
+			close(apiCh)
 		}
 
-		sess, err := app.newSession(SessionBlobCredentials{
+		appPlayer, err := app.newAppPlayer(session.BlobCredentials{
 			Username: req.Username,
 			Blob:     req.AuthBlob,
 		})
@@ -141,10 +139,10 @@ func (app *App) Zeroconf() error {
 		}
 
 		// first create the channel and then assign the current session
-		sessCh = make(chan ApiRequest)
-		currentSession = sess
+		apiCh = make(chan ApiRequest)
+		currentPlayer = appPlayer
 
-		go sess.Run(sessCh)
+		go appPlayer.Run(apiCh)
 		return true
 	})
 }
@@ -155,19 +153,19 @@ type storedCredentialsFile struct {
 }
 
 func (app *App) SpotifyToken(username, token string) error {
-	return app.withReusableCredentials(SessionSpotifyTokenCredentials{username, token})
+	return app.withReusableCredentials(session.SpotifyTokenCredentials{Username: username, Token: token})
 }
 
 func (app *App) UserPass(username, password string) error {
-	return app.withReusableCredentials(SessionUserPassCredentials{username, password})
+	return app.withReusableCredentials(session.UserPassCredentials{Username: username, Password: password})
 }
 
-func (app *App) withReusableCredentials(creds SessionCredentials) (err error) {
+func (app *App) withReusableCredentials(creds any) (err error) {
 	var username string
 	switch creds := creds.(type) {
-	case SessionSpotifyTokenCredentials:
+	case session.SpotifyTokenCredentials:
 		username = creds.Username
-	case SessionUserPassCredentials:
+	case session.UserPassCredentials:
 		username = creds.Username
 	default:
 		return fmt.Errorf("unsupported credentials for reuse")
@@ -190,31 +188,31 @@ func (app *App) withReusableCredentials(creds SessionCredentials) (err error) {
 		log.Debugf("stored credentials not found")
 	}
 
-	var sess *Session
+	var appPlayer *AppPlayer
 	if len(storedCredentials) > 0 {
-		sess, err = app.newSession(SessionStoredCredentials{username, storedCredentials})
+		appPlayer, err = app.newAppPlayer(session.StoredCredentials{Username: username, Data: storedCredentials})
 		if err != nil {
 			return err
 		}
 	} else {
-		sess, err = app.newSession(creds)
+		appPlayer, err = app.newAppPlayer(creds)
 		if err != nil {
 			return err
 		}
 
 		if content, err := json.Marshal(&storedCredentialsFile{
-			Username: sess.ap.Username(),
-			Data:     sess.ap.StoredCredentials(),
+			Username: appPlayer.sess.Username(),
+			Data:     appPlayer.sess.StoredCredentials(),
 		}); err != nil {
 			return fmt.Errorf("failed marshalling stored credentials: %w", err)
 		} else if err := os.WriteFile(app.cfg.CredentialsPath, content, 0600); err != nil {
 			return fmt.Errorf("failed writing stored credentials file: %w", err)
 		}
 
-		log.Debugf("stored credentials for %s", sess.ap.Username())
+		log.Debugf("stored credentials for %s", appPlayer.sess.Username())
 	}
 
-	sess.Run(app.server.Receive())
+	appPlayer.Run(app.server.Receive())
 	return nil
 }
 
