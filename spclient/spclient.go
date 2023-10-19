@@ -42,14 +42,19 @@ func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5T
 	}, nil
 }
 
-func (c *Spclient) request(method string, path string, header http.Header, body []byte) (*http.Response, error) {
+func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	accessToken, err := c.accessToken()
 	if err != nil {
 		return nil, fmt.Errorf("failed obtaining spclient access token: %w", err)
 	}
 
+	reqUrl := c.baseUrl.JoinPath(path)
+	if query != nil {
+		reqUrl.RawQuery = query.Encode()
+	}
+
 	req := &http.Request{
-		URL:    c.baseUrl.JoinPath(path),
+		URL:    reqUrl,
 		Method: method,
 		Header: http.Header{},
 	}
@@ -92,6 +97,7 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutSta
 	resp, err := c.request(
 		"PUT",
 		fmt.Sprintf("/connect-state/v1/devices/%s", c.deviceId),
+		nil,
 		http.Header{
 			"X-Spotify-Connection-Id": []string{spotConnId},
 			"Content-Type":            []string{"application/x-protobuf"},
@@ -125,7 +131,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 		path = fmt.Sprintf("/storage-resolve/files/audio/interactive/%s", hex.EncodeToString(fileId))
 	}
 
-	resp, err := c.request("GET", path, nil, nil)
+	resp, err := c.request("GET", path, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +156,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 }
 
 func (c *Spclient) MetadataForTrack(track librespot.TrackId) (*metadatapb.Track, error) {
-	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil)
+	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +181,7 @@ func (c *Spclient) MetadataForTrack(track librespot.TrackId) (*metadatapb.Track,
 }
 
 func (c *Spclient) ContextResolve(uri string) (*connectpb.Context, error) {
-	resp, err := c.request("GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil)
+	resp, err := c.request("GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
