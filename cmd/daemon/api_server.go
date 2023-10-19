@@ -34,15 +34,18 @@ var ErrNoSession = errors.New("no session")
 type ApiRequestType string
 
 const (
-	ApiRequestTypeStatus    ApiRequestType = "status"
-	ApiRequestTypeResume    ApiRequestType = "resume"
-	ApiRequestTypePause     ApiRequestType = "pause"
-	ApiRequestTypeSeek      ApiRequestType = "seek"
-	ApiRequestTypePrev      ApiRequestType = "prev"
-	ApiRequestTypeNext      ApiRequestType = "next"
-	ApiRequestTypePlay      ApiRequestType = "play"
-	ApiRequestTypeGetVolume ApiRequestType = "get_volume"
-	ApiRequestTypeSetVolume ApiRequestType = "set_volume"
+	ApiRequestTypeStatus              ApiRequestType = "status"
+	ApiRequestTypeResume              ApiRequestType = "resume"
+	ApiRequestTypePause               ApiRequestType = "pause"
+	ApiRequestTypeSeek                ApiRequestType = "seek"
+	ApiRequestTypePrev                ApiRequestType = "prev"
+	ApiRequestTypeNext                ApiRequestType = "next"
+	ApiRequestTypePlay                ApiRequestType = "play"
+	ApiRequestTypeGetVolume           ApiRequestType = "get_volume"
+	ApiRequestTypeSetVolume           ApiRequestType = "set_volume"
+	ApiRequestTypeSetRepeatingContext ApiRequestType = "repeating_context"
+	ApiRequestTypeSetRepeatingTrack   ApiRequestType = "repeating_track"
+	ApiRequestTypeSetShufflingContext ApiRequestType = "shuffling_context"
 )
 
 type ApiEventType string
@@ -303,6 +306,51 @@ func (s *ApiServer) serve() {
 			}
 
 			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data.Volume}, w)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	m.HandleFunc("/player/repeat_context", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			var data struct {
+				Repeat bool `json:"repeat_context"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingContext, Data: data.Repeat}, w)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	m.HandleFunc("/player/repeat_track", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			var data struct {
+				Repeat bool `json:"repeat_track"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingTrack, Data: data.Repeat}, w)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	m.HandleFunc("/player/shuffle_context", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			var data struct {
+				Shuffle bool `json:"shuffle_context"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.Shuffle}, w)
 		} else {
 			w.WriteHeader(http.StatusBadRequest)
 		}

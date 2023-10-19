@@ -342,6 +342,15 @@ func (s *Session) handleApiRequest(req ApiRequest) (any, error) {
 		vol := req.Data.(uint32)
 		s.updateVolume(vol * player.MaxStateVolume / s.app.cfg.VolumeSteps)
 		return nil, nil
+	case ApiRequestTypeSetRepeatingContext:
+		s.setRepeatingContext(req.Data.(bool))
+		return nil, nil
+	case ApiRequestTypeSetRepeatingTrack:
+		s.setRepeatingTrack(req.Data.(bool))
+		return nil, nil
+	case ApiRequestTypeSetShufflingContext:
+		s.setShufflingContext(req.Data.(bool))
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}
