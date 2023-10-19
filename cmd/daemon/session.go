@@ -249,12 +249,13 @@ func (s *Session) handlePlayerCommand(req dealer.RequestPayload) error {
 		s.updateState()
 		return nil
 	case "set_repeating_context":
-		s.state.player.Options.RepeatingContext = req.Command.Value.(bool)
-		s.updateState()
+		s.setRepeatingContext(req.Command.Value.(bool))
 		return nil
 	case "set_repeating_track":
-		s.state.player.Options.RepeatingTrack = req.Command.Value.(bool)
-		s.updateState()
+		s.setRepeatingTrack(req.Command.Value.(bool))
+		return nil
+	case "set_shuffling_context":
+		s.setShufflingContext(req.Command.Value.(bool))
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)

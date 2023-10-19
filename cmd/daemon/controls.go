@@ -153,6 +153,35 @@ func (s *Session) loadCurrentTrack(paused bool) error {
 	return nil
 }
 
+func (s *Session) setRepeatingContext(val bool) {
+	if val == s.state.player.Options.RepeatingContext {
+		return
+	}
+
+	s.state.player.Options.RepeatingContext = val
+	s.updateState()
+}
+
+func (s *Session) setRepeatingTrack(val bool) {
+	if val == s.state.player.Options.RepeatingTrack {
+		return
+	}
+
+	s.state.player.Options.RepeatingTrack = val
+	s.updateState()
+}
+
+func (s *Session) setShufflingContext(val bool) {
+	if val == s.state.player.Options.ShufflingContext {
+		return
+	}
+
+	// TODO: support shuffling context
+	log.Warnf("shuffle context is not supported yet")
+	s.state.player.Options.ShufflingContext = val
+	s.updateState()
+}
+
 func (s *Session) play() error {
 	if s.stream == nil {
 		return fmt.Errorf("no stream")
