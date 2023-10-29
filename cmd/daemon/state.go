@@ -78,7 +78,7 @@ func (p *AppPlayer) initState() {
 				SupportsLogout:             true,
 				IsObservable:               true,
 				VolumeSteps:                int32(p.app.cfg.VolumeSteps),
-				SupportedTypes:             []string{"audio/track"}, // TODO: support episodes
+				SupportedTypes:             []string{"audio/track", "audio/episode"},
 				CommandAcks:                true,
 				SupportsRename:             false,
 				Hidden:                     false,

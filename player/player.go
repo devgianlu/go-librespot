@@ -7,6 +7,7 @@ import (
 	"go-librespot/audio"
 	"go-librespot/output"
 	downloadpb "go-librespot/proto/spotify/download"
+	"go-librespot/proto/spotify/metadata"
 	"go-librespot/spclient"
 	"go-librespot/vorbis"
 	"io"
@@ -222,29 +223,50 @@ func (p *Player) SetVolume(val uint32) {
 const DisableCheckMediaRestricted = true
 
 func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPosition int64, paused bool) (*Stream, error) {
-	trackMeta, err := p.sp.MetadataForTrack(spotId)
-	if err != nil {
-		return nil, fmt.Errorf("failed getting track metadata: %w", err)
-	}
-
-	media := librespot.NewMediaFromTrack(trackMeta)
-	if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
-		return nil, librespot.ErrMediaRestricted
-	}
-
-	if len(trackMeta.File) == 0 {
-		for _, alt := range trackMeta.Alternative {
-			if len(alt.File) == 0 {
-				continue
-			}
-
-			trackMeta.File = append(trackMeta.File, alt.File...)
+	var media *librespot.Media
+	var file *metadata.AudioFile
+	if spotId.Type() == librespot.SpotifyIdTypeTrack {
+		trackMeta, err := p.sp.MetadataForTrack(spotId)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting track metadata: %w", err)
 		}
-	}
 
-	file := selectBestMediaFormat(trackMeta.File, bitrate)
-	if file == nil {
-		return nil, fmt.Errorf("no playable formats for %s", spotId.Uri())
+		media = librespot.NewMediaFromTrack(trackMeta)
+		if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
+			return nil, librespot.ErrMediaRestricted
+		}
+
+		if len(trackMeta.File) == 0 {
+			for _, alt := range trackMeta.Alternative {
+				if len(alt.File) == 0 {
+					continue
+				}
+
+				trackMeta.File = append(trackMeta.File, alt.File...)
+			}
+		}
+
+		file = selectBestMediaFormat(trackMeta.File, bitrate)
+		if file == nil {
+			return nil, fmt.Errorf("no playable formats for %s", spotId.Uri())
+		}
+	} else if spotId.Type() == librespot.SpotifyIdTypeEpisode {
+		episodeMeta, err := p.sp.MetadataForEpisode(spotId)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting episode metadata: %w", err)
+		}
+
+		media = librespot.NewMediaFromEpisode(episodeMeta)
+		if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
+			return nil, librespot.ErrMediaRestricted
+		}
+
+		file = selectBestMediaFormat(episodeMeta.Audio, bitrate)
+		if file == nil {
+			return nil, fmt.Errorf("no playable formats for %s", spotId.Uri())
+		}
+	} else {
+		return nil, fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
 
 	log.Debugf("selected format %s for %s", file.Format.String(), spotId.Uri())

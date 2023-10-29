@@ -115,8 +115,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	}
 
 	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
-	println("spot", spotId.Type(), spotId.Uri())
-	if spotId.Type() != librespot.SpotifyIdTypeTrack {
+	if spotId.Type() != librespot.SpotifyIdTypeTrack && spotId.Type() != librespot.SpotifyIdTypeEpisode {
 		return fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
 
