@@ -209,6 +209,35 @@ func (c *Spclient) MetadataForTrack(track librespot.SpotifyId) (*metadatapb.Trac
 	return &protoResp, nil
 }
 
+func (c *Spclient) MetadataForEpisode(episode librespot.SpotifyId) (*metadatapb.Episode, error) {
+	if episode.Type() != librespot.SpotifyIdTypeEpisode {
+		panic(fmt.Sprintf("invalid type: %s", episode.Type()))
+	}
+
+	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/episode/%s", episode.Hex()), nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from episode metadata: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var protoResp metadatapb.Episode
+	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling Episode: %w", err)
+	}
+
+	return &protoResp, nil
+}
+
 func (c *Spclient) ContextResolve(uri string) (*connectpb.Context, error) {
 	resp, err := c.request("GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
 	if err != nil {
