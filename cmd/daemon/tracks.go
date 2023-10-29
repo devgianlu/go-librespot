@@ -94,7 +94,7 @@ func (tl *TracksList) PrevTracks() []*connectpb.ProvidedTrack {
 			trackIdx = len(page) - 1
 		}
 
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(librespot.InferSpotifyIdTypeFromContextUri(tl.ctx.Uri()), page[trackIdx]))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), page[trackIdx]))
 		trackIdx--
 	}
 
@@ -132,7 +132,7 @@ func (tl *TracksList) NextTracks() []*connectpb.ProvidedTrack {
 			trackIdx = 0
 		}
 
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(librespot.InferSpotifyIdTypeFromContextUri(tl.ctx.Uri()), page[trackIdx]))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), page[trackIdx]))
 		trackIdx++
 	}
 
@@ -152,7 +152,7 @@ func (tl *TracksList) CurrentTrack() *connectpb.ProvidedTrack {
 		return nil
 	}
 
-	return librespot.ContextTrackToProvidedTrack(librespot.InferSpotifyIdTypeFromContextUri(tl.ctx.Uri()), page[tl.trackIdx])
+	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), page[tl.trackIdx])
 }
 
 func (tl *TracksList) GoStart() bool {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	librespot "go-librespot"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"io"
 	"strings"
@@ -15,12 +16,14 @@ var ErrNoMorePages = errors.New("no more pages")
 type ContextResolver struct {
 	sp *Spclient
 
+	typ librespot.SpotifyIdType
 	ctx *connectpb.Context
 }
 
 func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver, error) {
+	typ := librespot.InferSpotifyIdTypeFromContextUri(ctx.Uri)
 	if len(ctx.Pages) > 0 {
-		return &ContextResolver{sp, ctx}, nil
+		return &ContextResolver{sp, typ, ctx}, nil
 	} else {
 		newCtx, err := sp.ContextResolve(ctx.Uri)
 		if err != nil {
@@ -36,8 +39,12 @@ func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver,
 			newCtx.Metadata[key] = val
 		}
 
-		return &ContextResolver{sp, newCtx}, nil
+		return &ContextResolver{sp, typ, newCtx}, nil
 	}
+}
+
+func (r *ContextResolver) Type() librespot.SpotifyIdType {
+	return r.typ
 }
 
 func (r *ContextResolver) Uri() string {
