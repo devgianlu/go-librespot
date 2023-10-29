@@ -133,7 +133,7 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
 			Name:          *episode.Name,
-			ArtistNames:   []string{*episode.Show.Publisher},
+			ArtistNames:   []string{*episode.Show.Name},
 			AlbumName:     *episode.Show.Name,
 			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
