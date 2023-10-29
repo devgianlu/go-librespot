@@ -89,15 +89,13 @@ func (p *KeyProvider) recvLoop() {
 
 			reqs[reqSeq] = req
 
-			// FIXME: this might not always be a track
-			uri := librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, req.gid).Uri()
 			if err := p.ap.Send(ap.PacketTypeRequestKey, buf.Bytes()); err != nil {
 				delete(reqs, reqSeq)
-				req.resp <- keyResponse{err: fmt.Errorf("failed sending key request for file %s, track: %s: %w",
-					hex.EncodeToString(req.fileId), uri, err)}
+				req.resp <- keyResponse{err: fmt.Errorf("failed sending key request for file %s, gid: %s: %w",
+					hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid), err)}
 			}
 
-			log.Debugf("requested aes key for file %s, track: %s", hex.EncodeToString(req.fileId), uri)
+			log.Debugf("requested aes key for file %s, gid: %s", hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid))
 		}
 	}
 }
