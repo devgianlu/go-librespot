@@ -40,6 +40,10 @@ func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver,
 	}
 }
 
+func (r *ContextResolver) Uri() string {
+	return r.ctx.Uri
+}
+
 func (r *ContextResolver) Metadata() map[string]string {
 	return r.ctx.Metadata
 }

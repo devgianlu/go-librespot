@@ -156,13 +156,14 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// queue
 		// TODO: transfer queue
 
-		currentTrack := librespot.ContextTrackToProvidedTrack(transferState.Playback.CurrentTrack)
+		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
+		currentTrack := librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
 		if err := tracks.Seek(func(track *connectpb.ContextTrack) bool {
 			if len(track.Uid) > 0 && track.Uid == currentTrack.Uid {
 				return true
 			} else if len(track.Uri) > 0 && track.Uri == currentTrack.Uri {
 				return true
-			} else if len(track.Gid) > 0 && librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri() == currentTrack.Uri /* FIXME: this might not always be a track */ {
+			} else if len(track.Gid) > 0 && librespot.SpotifyIdFromGid(contextSpotType, track.Gid).Uri() == currentTrack.Uri {
 				return true
 			} else {
 				return false

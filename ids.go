@@ -11,13 +11,20 @@ import (
 
 var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{21,22})$")
 
-func ContextTrackToProvidedTrack(track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
+func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
+	if strings.HasPrefix(uri, "spotify:episode:") || strings.HasPrefix(uri, "spotify:show:") {
+		return SpotifyIdTypeEpisode
+	}
+
+	return SpotifyIdTypeTrack
+}
+
+func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
 	var uri string
-	if len(track.Gid) > 0 {
-		// FIXME: this might not always be a track
-		uri = SpotifyIdFromGid(SpotifyIdTypeTrack, track.Gid).Uri()
-	} else if len(track.Uri) > 0 {
+	if len(track.Uri) > 0 {
 		uri = track.Uri
+	} else if len(track.Gid) > 0 {
+		uri = SpotifyIdFromGid(typ, track.Gid).Uri()
 	} else {
 		panic("invalid context track")
 	}
