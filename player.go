@@ -45,7 +45,7 @@ func (te Media) Track() *metadatapb.Track {
 }
 
 func (te Media) Episode() *metadatapb.Episode {
-	if te.track == nil {
+	if te.episode == nil {
 		panic("not an episode")
 	}
 
