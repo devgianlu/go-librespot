@@ -6,6 +6,7 @@ import (
 	"go-librespot/dealer"
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
+	"go-librespot/tracks"
 	"time"
 )
 
@@ -16,7 +17,7 @@ type State struct {
 	device *connectpb.DeviceInfo
 	player *connectpb.PlayerState
 
-	tracks *TracksList
+	tracks *tracks.List
 
 	lastCommand *dealer.RequestPayload
 }

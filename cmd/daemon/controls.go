@@ -7,6 +7,7 @@ import (
 	librespot "go-librespot"
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
+	"go-librespot/tracks"
 	"time"
 )
 
@@ -70,7 +71,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 }
 
 func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.ContextTrack) bool, paused bool) error {
-	tracks, err := NewTrackListFromContext(p.sess.Spclient(), ctx)
+	ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), ctx)
 	if err != nil {
 		return fmt.Errorf("failed creating track list: %w", err)
 	}
@@ -92,13 +93,13 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.C
 	p.state.player.PositionAsOfTimestamp = 0
 
 	// if we fail to seek, just fallback to the first track
-	tracks.TrySeek(skipTo)
+	ctxTracks.TrySeek(skipTo)
 
-	p.state.tracks = tracks
-	p.state.player.Track = tracks.CurrentTrack()
-	p.state.player.PrevTracks = tracks.PrevTracks()
-	p.state.player.NextTracks = tracks.NextTracks()
-	p.state.player.Index = tracks.Index()
+	p.state.tracks = ctxTracks
+	p.state.player.Track = ctxTracks.CurrentTrack()
+	p.state.player.PrevTracks = ctxTracks.PrevTracks()
+	p.state.player.NextTracks = ctxTracks.NextTracks()
+	p.state.player.Index = ctxTracks.Index()
 
 	// load current track into stream
 	if err := p.loadCurrentTrack(paused); err != nil {

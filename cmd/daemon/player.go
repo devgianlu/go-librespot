@@ -10,6 +10,7 @@ import (
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/session"
+	"go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
 	"strings"
 )
@@ -119,7 +120,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
 		}
 
-		tracks, err := NewTrackListFromContext(p.sess.Spclient(), transferState.CurrentSession.Context)
+		ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
 			return fmt.Errorf("failed creating track list: %w", err)
 		}
@@ -149,7 +150,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		for k, v := range transferState.CurrentSession.Context.Metadata {
 			p.state.player.ContextMetadata[k] = v
 		}
-		for k, v := range tracks.Metadata() {
+		for k, v := range ctxTracks.Metadata() {
 			p.state.player.ContextMetadata[k] = v
 		}
 
@@ -158,7 +159,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
 		currentTrack := librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
-		if err := tracks.Seek(func(track *connectpb.ContextTrack) bool {
+		if err := ctxTracks.Seek(func(track *connectpb.ContextTrack) bool {
 			if len(track.Uid) > 0 && track.Uid == currentTrack.Uid {
 				return true
 			} else if len(track.Uri) > 0 && track.Uri == currentTrack.Uri {
@@ -172,11 +173,11 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
 
-		p.state.tracks = tracks
-		p.state.player.Track = tracks.CurrentTrack()
-		p.state.player.PrevTracks = tracks.PrevTracks()
-		p.state.player.NextTracks = tracks.NextTracks()
-		p.state.player.Index = tracks.Index()
+		p.state.tracks = ctxTracks
+		p.state.player.Track = ctxTracks.CurrentTrack()
+		p.state.player.PrevTracks = ctxTracks.PrevTracks()
+		p.state.player.NextTracks = ctxTracks.NextTracks()
+		p.state.player.Index = ctxTracks.Index()
 
 		// load current track into stream
 		if err := p.loadCurrentTrack(transferState.Playback.IsPaused); err != nil {

@@ -1,4 +1,4 @@
-package main
+package tracks
 
 import (
 	"errors"
@@ -9,15 +9,15 @@ import (
 	"go-librespot/spclient"
 )
 
-type TracksList struct {
+type List struct {
 	ctx *spclient.ContextResolver
 
 	pageIdx  int
 	trackIdx int
 }
 
-func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *TracksList, err error) {
-	tl := &TracksList{}
+func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *List, err error) {
+	tl := &List{}
 	tl.ctx, err = spclient.NewContextResolver(sp, ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing context resolver: %w", err)
@@ -26,17 +26,17 @@ func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *
 	return tl, nil
 }
 
-func (tl *TracksList) Metadata() map[string]string {
+func (tl *List) Metadata() map[string]string {
 	return tl.ctx.Metadata()
 }
 
-func (tl *TracksList) TrySeek(f func(track *connectpb.ContextTrack) bool) {
+func (tl *List) TrySeek(f func(track *connectpb.ContextTrack) bool) {
 	if err := tl.Seek(f); err != nil {
 		tl.pageIdx, tl.trackIdx = 0, 0
 	}
 }
 
-func (tl *TracksList) Seek(f func(*connectpb.ContextTrack) bool) error {
+func (tl *List) Seek(f func(*connectpb.ContextTrack) bool) error {
 	tl.pageIdx, tl.trackIdx = 0, 0
 
 	for {
@@ -60,7 +60,7 @@ func (tl *TracksList) Seek(f func(*connectpb.ContextTrack) bool) error {
 
 const MaxTracksInContext = 32
 
-func (tl *TracksList) PrevTracks() []*connectpb.ProvidedTrack {
+func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	tracks := make([]*connectpb.ProvidedTrack, 0, MaxTracksInContext)
 	pageIdx, trackIdx := tl.pageIdx, tl.trackIdx-1
 
@@ -101,7 +101,7 @@ func (tl *TracksList) PrevTracks() []*connectpb.ProvidedTrack {
 	return tracks
 }
 
-func (tl *TracksList) NextTracks() []*connectpb.ProvidedTrack {
+func (tl *List) NextTracks() []*connectpb.ProvidedTrack {
 	tracks := make([]*connectpb.ProvidedTrack, 0, MaxTracksInContext)
 	pageIdx, trackIdx := tl.pageIdx, tl.trackIdx+1
 
@@ -139,11 +139,11 @@ func (tl *TracksList) NextTracks() []*connectpb.ProvidedTrack {
 	return tracks
 }
 
-func (tl *TracksList) Index() *connectpb.ContextIndex {
+func (tl *List) Index() *connectpb.ContextIndex {
 	return &connectpb.ContextIndex{Page: uint32(tl.pageIdx), Track: uint32(tl.trackIdx)}
 }
 
-func (tl *TracksList) CurrentTrack() *connectpb.ProvidedTrack {
+func (tl *List) CurrentTrack() *connectpb.ProvidedTrack {
 	page, _, err := tl.ctx.Page(tl.pageIdx)
 	if errors.Is(err, spclient.ErrNoMorePages) {
 		return nil
@@ -155,7 +155,7 @@ func (tl *TracksList) CurrentTrack() *connectpb.ProvidedTrack {
 	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), page[tl.trackIdx])
 }
 
-func (tl *TracksList) GoStart() bool {
+func (tl *List) GoStart() bool {
 	tracks, _, err := tl.ctx.Page(0)
 	if err != nil || len(tracks) == 0 {
 		return false
@@ -165,7 +165,7 @@ func (tl *TracksList) GoStart() bool {
 	return true
 }
 
-func (tl *TracksList) GoNext() bool {
+func (tl *List) GoNext() bool {
 	// Get the current page
 	page, _, err := tl.ctx.Page(tl.pageIdx)
 	if errors.Is(err, spclient.ErrNoMorePages) {
@@ -196,7 +196,7 @@ func (tl *TracksList) GoNext() bool {
 	return true
 }
 
-func (tl *TracksList) GoPrev() bool {
+func (tl *List) GoPrev() bool {
 	// We fit in the current page
 	if tl.trackIdx-1 >= 0 {
 		tl.trackIdx -= 1
