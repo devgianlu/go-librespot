@@ -17,7 +17,7 @@ func formatBitrate(format metadatapb.AudioFile_Format) int {
 	}
 }
 
-func selectBestFormat(files []*metadatapb.AudioFile, preferredBitrate int) *metadatapb.AudioFile {
+func selectBestMediaFormat(files []*metadatapb.AudioFile, preferredBitrate int) *metadatapb.AudioFile {
 	absDist := func(a, b int) int {
 		if a > b {
 			return a - b

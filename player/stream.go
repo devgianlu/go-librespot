@@ -1,11 +1,14 @@
 package player
 
-import metadatapb "go-librespot/proto/spotify/metadata"
+import (
+	librespot "go-librespot"
+	metadatapb "go-librespot/proto/spotify/metadata"
+)
 
 type Stream struct {
 	p *Player
 
-	Track *metadatapb.Track
+	Media *librespot.Media
 	File  *metadatapb.AudioFile
 }
 

@@ -141,16 +141,16 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
 
-	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", *stream.Track.Name, spotId.Uri(), paused, trackPosition, *stream.Track.Duration)
+	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", stream.Media.Name(), spotId.Uri(), paused, trackPosition, stream.Media.Duration())
 
-	p.state.player.Duration = int64(*stream.Track.Duration)
+	p.state.player.Duration = int64(stream.Media.Duration())
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false
 	p.updateState()
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeMetadata,
-		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(stream.Track, p.prodInfo, trackPosition)),
+		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(stream.Media, p.prodInfo, trackPosition)),
 	})
 
 	p.stream = stream
@@ -265,7 +265,7 @@ func (p *AppPlayer) seek(position int64) error {
 		Data: ApiEventDataSeek{
 			Uri:        p.state.player.Track.Uri,
 			Position:   int(position),
-			Duration:   int(*p.stream.Track.Duration),
+			Duration:   int(p.stream.Media.Duration()),
 			PlayOrigin: p.state.playOrigin(),
 		},
 	})
@@ -358,7 +358,7 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 	}
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(!hasNextTrack); errors.Is(err, librespot.ErrTrackRestricted) {
+	if err := p.loadCurrentTrack(!hasNextTrack); errors.Is(err, librespot.ErrMediaRestricted) {
 		log.Infof("skipping restricted track: %s", uri)
 		if forceNext {
 			// we failed in finding another track to play, just stop

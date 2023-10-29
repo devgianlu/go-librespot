@@ -1,11 +1,12 @@
 package player
 
 import (
+	librespot "go-librespot"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"strings"
 )
 
-func isTrackRestricted(track *metadatapb.Track, country string) bool {
+func isMediaRestricted(media *librespot.Media, country string) bool {
 	if len(country) != 2 {
 		return false
 	}
@@ -19,7 +20,7 @@ func isTrackRestricted(track *metadatapb.Track, country string) bool {
 		return false
 	}
 
-	for _, res := range track.Restriction {
+	for _, res := range media.Restriction() {
 		switch ress := res.CountryRestriction.(type) {
 		case *metadatapb.Restriction_CountriesAllowed:
 			if len(ress.CountriesAllowed) == 0 {

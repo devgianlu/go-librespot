@@ -219,16 +219,17 @@ func (p *Player) SetVolume(val uint32) {
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 
-const DisableCheckTrackRestricted = true
+const DisableCheckMediaRestricted = true
 
-func (p *Player) NewStream(tid librespot.SpotifyId, bitrate int, trackPosition int64, paused bool) (*Stream, error) {
-	trackMeta, err := p.sp.MetadataForTrack(tid)
+func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPosition int64, paused bool) (*Stream, error) {
+	trackMeta, err := p.sp.MetadataForTrack(spotId)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting track metadata: %w", err)
 	}
 
-	if !DisableCheckTrackRestricted && isTrackRestricted(trackMeta, *p.countryCode) {
-		return nil, librespot.ErrTrackRestricted
+	media := librespot.NewMediaFromTrack(trackMeta)
+	if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
+		return nil, librespot.ErrMediaRestricted
 	}
 
 	if len(trackMeta.File) == 0 {
@@ -241,14 +242,14 @@ func (p *Player) NewStream(tid librespot.SpotifyId, bitrate int, trackPosition i
 		}
 	}
 
-	file := selectBestFormat(trackMeta.File, bitrate)
+	file := selectBestMediaFormat(trackMeta.File, bitrate)
 	if file == nil {
-		return nil, fmt.Errorf("no playable formats for %s", tid.Uri())
+		return nil, fmt.Errorf("no playable formats for %s", spotId.Uri())
 	}
 
-	log.Debugf("selected format %s for %s", file.Format.String(), tid.Uri())
+	log.Debugf("selected format %s for %s", file.Format.String(), spotId.Uri())
 
-	audioKey, err := p.audioKey.Request(tid.Id(), file.FileId)
+	audioKey, err := p.audioKey.Request(spotId.Id(), file.FileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed retrieving audio key: %w", err)
 	}
@@ -301,7 +302,7 @@ func (p *Player) NewStream(tid librespot.SpotifyId, bitrate int, trackPosition i
 		return nil, fmt.Errorf("unsupported channels: %d", stream.Channels)
 	}
 
-	if err := stream.SetPositionMs(trackPosition); err != nil {
+	if err := stream.SetPositionMs(mediaPosition); err != nil {
 		return nil, fmt.Errorf("failed seeking stream: %w", err)
 	}
 
@@ -311,5 +312,5 @@ func (p *Player) NewStream(tid librespot.SpotifyId, bitrate int, trackPosition i
 		return nil, err.(error)
 	}
 
-	return &Stream{p: p, Track: trackMeta, File: file}, nil
+	return &Stream{p: p, Media: media, File: file}, nil
 }

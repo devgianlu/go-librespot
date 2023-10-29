@@ -283,7 +283,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		}
 
 		if p.stream != nil && p.prodInfo != nil {
-			resp.Track = NewApiResponseStatusTrack(p.stream.Track, p.prodInfo, p.state.trackPosition())
+			resp.Track = NewApiResponseStatusTrack(p.stream.Media, p.prodInfo, p.state.trackPosition())
 		}
 
 		return resp, nil

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
-	metadatapb "go-librespot/proto/spotify/metadata"
 	"net"
 	"net/http"
 	"nhooyr.io/websocket"
@@ -98,28 +97,48 @@ type ApiResponseStatusTrack struct {
 	Duration      int      `json:"duration"`
 }
 
-func NewApiResponseStatusTrack(track *metadatapb.Track, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
-	var artists []string
-	for _, a := range track.Artist {
-		artists = append(artists, *a.Name)
-	}
+func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
+	if media.IsTrack() {
+		track := media.Track()
 
-	var albumCoverId string
-	if len(track.Album.Cover) > 0 {
-		albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
-	} else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
-		albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
-	}
+		var artists []string
+		for _, a := range track.Artist {
+			artists = append(artists, *a.Name)
+		}
 
-	return &ApiResponseStatusTrack{
-		// FIXME: this might not always be a track
-		Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
-		Name:          *track.Name,
-		ArtistNames:   artists,
-		AlbumName:     *track.Album.Name,
-		AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
-		Position:      position,
-		Duration:      int(*track.Duration),
+		var albumCoverId string
+		if len(track.Album.Cover) > 0 {
+			albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
+		} else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
+			albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
+		}
+
+		return &ApiResponseStatusTrack{
+			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
+			Name:          *track.Name,
+			ArtistNames:   artists,
+			AlbumName:     *track.Album.Name,
+			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+			Position:      position,
+			Duration:      int(*track.Duration),
+		}
+	} else {
+		episode := media.Episode()
+
+		var albumCoverId string
+		if len(episode.CoverImage.Image) > 0 {
+			albumCoverId = hex.EncodeToString(episode.CoverImage.Image[0].FileId)
+		}
+
+		return &ApiResponseStatusTrack{
+			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
+			Name:          *episode.Name,
+			ArtistNames:   []string{*episode.Show.Publisher},
+			AlbumName:     *episode.Show.Name,
+			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+			Position:      position,
+			Duration:      int(*episode.Duration),
+		}
 	}
 }
 
