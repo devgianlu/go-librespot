@@ -95,6 +95,9 @@ type ApiResponseStatusTrack struct {
 	AlbumCoverUrl string   `json:"album_cover_url"`
 	Position      int64    `json:"position"`
 	Duration      int      `json:"duration"`
+	ReleaseDate   string   `json:"release_date"`
+	TrackNumber   int      `json:"track_number"`
+	DiscNumber    int      `json:"disc_number"`
 }
 
 func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
@@ -121,6 +124,9 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
 			Duration:      int(*track.Duration),
+			ReleaseDate:   track.Album.Date.String(),
+			TrackNumber:   int(*track.Number),
+			DiscNumber:    int(*track.DiscNumber),
 		}
 	} else {
 		episode := media.Episode()
@@ -138,6 +144,9 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
 			Duration:      int(*episode.Duration),
+			ReleaseDate:   "",
+			TrackNumber:   0,
+			DiscNumber:    0,
 		}
 	}
 }
