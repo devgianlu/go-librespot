@@ -8,6 +8,7 @@ import (
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate/model"
 	"go-librespot/tracks"
+	"math"
 	"time"
 )
 
@@ -391,7 +392,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeVolume,
 		Data: ApiEventDataVolume{
-			Value: newVal * p.app.cfg.VolumeSteps / player.MaxStateVolume,
+			Value: uint32(math.Ceil(float64(newVal*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
 			Max:   p.app.cfg.VolumeSteps,
 		},
 	})

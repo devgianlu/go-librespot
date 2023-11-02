@@ -12,6 +12,7 @@ import (
 	"go-librespot/session"
 	"go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
+	"math"
 	"strings"
 )
 
@@ -329,7 +330,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeGetVolume:
 		return &ApiResponseVolume{
 			Max:   p.app.cfg.VolumeSteps,
-			Value: p.state.device.Volume * p.app.cfg.VolumeSteps / player.MaxStateVolume,
+			Value: uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
 		}, nil
 	case ApiRequestTypeSetVolume:
 		vol := req.Data.(uint32)
