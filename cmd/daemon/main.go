@@ -46,6 +46,8 @@ func NewApp(cfg *Config) (app *App, err error) {
 		return nil, err
 	}
 
+	app.resolver = apresolve.NewApResolver()
+
 	if len(cfg.DeviceId) == 0 {
 		deviceIdBytes := make([]byte, 20)
 		_, _ = rand.Read(deviceIdBytes)
