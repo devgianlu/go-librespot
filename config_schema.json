@@ -118,6 +118,17 @@
           "description": "The preferred bitrate for audio playback, default is 160kbps",
           "enum": [96, 160, 320],
           "default": 160
+        },
+        "volume_steps": {
+          "type": "number",
+          "description": "The number of volume steps",
+          "min": 1,
+          "default": 100
+        },
+        "external_volume": {
+          "type": "boolean",
+          "description": "Whether volume is controlled externally, if true the app will not pre-multiply samples",
+          "default": false
         }
       },
       "required": [
