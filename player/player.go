@@ -25,7 +25,7 @@ type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 
-	newOutput func(source librespot.Float32Reader, paused bool) (*output.Output, error)
+	newOutput func(source librespot.Float32Reader, paused bool, volume float32) (*output.Output, error)
 
 	cmd chan playerCmd
 	ev  chan Event
@@ -64,13 +64,14 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *
 		sp:          sp,
 		audioKey:    audioKey,
 		countryCode: countryCode,
-		newOutput: func(reader librespot.Float32Reader, paused bool) (*output.Output, error) {
+		newOutput: func(reader librespot.Float32Reader, paused bool, volume float32) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
 				Reader:          reader,
 				SampleRate:      SampleRate,
 				ChannelCount:    Channels,
 				Device:          device,
 				InitiallyPaused: paused,
+				InitialVolume:   volume,
 			})
 		},
 		volumeSteps: volumeSteps,
@@ -84,9 +85,13 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *
 }
 
 func (p *Player) manageLoop() {
+	var volume float32
 	var out *output.Output
 	var source librespot.AudioSource
 	var done <-chan error
+
+	// initial volume is 1
+	volume = 1
 
 loop:
 	for {
@@ -102,7 +107,7 @@ loop:
 				source = data.source
 
 				var err error
-				out, err = p.newOutput(source, data.paused)
+				out, err = p.newOutput(source, data.paused, volume)
 				if err != nil {
 					source = nil
 					cmd.resp <- err
@@ -168,9 +173,9 @@ loop:
 					cmd.resp <- int64(0)
 				}
 			case playerCmdVolume:
-				if source != nil {
-					vol := cmd.data.(float32)
-					out.SetVolume(vol)
+				volume = cmd.data.(float32)
+				if out != nil {
+					out.SetVolume(volume)
 				}
 			case playerCmdClose:
 				break loop

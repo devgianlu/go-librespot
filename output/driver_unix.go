@@ -43,13 +43,13 @@ func alsaError(name string, err C.int) error {
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initiallyPaused bool) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initiallyPaused bool, initialVolume float32) (*output, error) {
 	out := &output{
 		reader:     reader,
 		channels:   channels,
 		sampleRate: sampleRate,
 		device:     device,
-		volume:     1,
+		volume:     initialVolume,
 		cond:       sync.NewCond(&sync.Mutex{}),
 		done:       make(chan error, 1),
 	}

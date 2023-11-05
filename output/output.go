@@ -36,10 +36,13 @@ type NewOutputOptions struct {
 
 	// InitiallyPaused specifies whether the output device should be paused from the start.
 	InitiallyPaused bool
+
+	// InitialVolume specifies the initial output volume.
+	InitialVolume float32
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.InitiallyPaused)
+	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.InitiallyPaused, options.InitialVolume)
 	if err != nil {
 		return nil, err
 	}
