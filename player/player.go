@@ -30,7 +30,8 @@ type Player struct {
 	cmd chan playerCmd
 	ev  chan Event
 
-	volumeSteps uint32
+	externalVolume bool
+	volumeSteps    uint32
 
 	startedPlaying time.Time
 }
@@ -59,7 +60,7 @@ type playerCmdDataSet struct {
 	paused bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *string, device string, volumeSteps uint32) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *string, device string, volumeSteps uint32, externalVolume bool) (*Player, error) {
 	p := &Player{
 		sp:          sp,
 		audioKey:    audioKey,
@@ -74,9 +75,10 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *
 				InitialVolume:   volume,
 			})
 		},
-		volumeSteps: volumeSteps,
-		cmd:         make(chan playerCmd),
-		ev:          make(chan Event, 128), // FIXME: is too messy?
+		externalVolume: externalVolume,
+		volumeSteps:    volumeSteps,
+		cmd:            make(chan playerCmd),
+		ev:             make(chan Event, 128), // FIXME: is too messy?
 	}
 
 	go p.manageLoop()
@@ -173,9 +175,11 @@ loop:
 					cmd.resp <- int64(0)
 				}
 			case playerCmdVolume:
-				volume = cmd.data.(float32)
-				if out != nil {
-					out.SetVolume(volume)
+				if !p.externalVolume {
+					volume = cmd.data.(float32)
+					if out != nil {
+						out.SetVolume(volume)
+					}
 				}
 			case playerCmdClose:
 				break loop
