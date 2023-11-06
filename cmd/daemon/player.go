@@ -174,6 +174,11 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
 
+		// shuffle the context if needed
+		if err := ctxTracks.ToggleShuffle(transferState.Options.ShufflingContext); err != nil {
+			return fmt.Errorf("failed shuffling context")
+		}
+
 		p.state.tracks = ctxTracks
 		p.state.player.Track = ctxTracks.CurrentTrack()
 		p.state.player.PrevTracks = ctxTracks.PrevTracks()

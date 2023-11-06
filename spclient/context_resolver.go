@@ -2,7 +2,6 @@ package spclient
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
@@ -10,8 +9,6 @@ import (
 	"io"
 	"strings"
 )
-
-var ErrNoMorePages = errors.New("no more pages")
 
 type ContextResolver struct {
 	sp *Spclient
@@ -89,16 +86,16 @@ func (r *ContextResolver) loadPage(url string) (*connectpb.ContextPage, error) {
 	return &contextPage, nil
 }
 
-func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, map[string]string, error) {
+func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
 	for idx >= len(r.ctx.Pages) {
 		lastPage := r.ctx.Pages[len(r.ctx.Pages)-1]
 		if len(lastPage.NextPageUrl) == 0 {
-			return nil, nil, ErrNoMorePages
+			return nil, io.EOF
 		}
 
 		newPage, err := r.loadPage(lastPage.NextPageUrl)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed fetching next page: %w", err)
+			return nil, fmt.Errorf("failed fetching next page: %w", err)
 		}
 
 		r.ctx.Pages = append(r.ctx.Pages, newPage)
@@ -106,20 +103,19 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, map[string]s
 
 	page := r.ctx.Pages[idx]
 	if page.Loading {
-		return nil, nil, fmt.Errorf("context page is loading")
+		return nil, fmt.Errorf("context page is loading")
 	}
 
 	if len(page.Tracks) == 0 {
 		if len(page.PageUrl) == 0 {
-			return nil, nil, fmt.Errorf("invalid empty page without url")
+			return nil, fmt.Errorf("invalid empty page without url")
 		}
 
 		newPage, err := r.loadPage(page.PageUrl)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed fetching page: %w", err)
+			return nil, fmt.Errorf("failed fetching page: %w", err)
 		}
 
-		// TODO: do we need to preserve any field?
 		r.ctx.Pages[idx] = newPage
 	}
 
@@ -127,5 +123,5 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, map[string]s
 		log.Warnf("returning empty context page (%s) for %s", page.PageUrl, r.ctx.Uri)
 	}
 
-	return page.Tracks, page.Metadata, nil
+	return page.Tracks, nil
 }
