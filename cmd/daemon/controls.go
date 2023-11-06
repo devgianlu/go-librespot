@@ -195,9 +195,16 @@ func (p *AppPlayer) setShufflingContext(val bool) {
 		return
 	}
 
-	// TODO: support shuffling context
-	log.Warnf("shuffle context is not supported yet")
+	if err := p.state.tracks.ToggleShuffle(val); err != nil {
+		log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", val)
+		return
+	}
+
 	p.state.player.Options.ShufflingContext = val
+	p.state.player.Track = p.state.tracks.CurrentTrack()
+	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+	p.state.player.NextTracks = p.state.tracks.NextTracks()
+	p.state.player.Index = p.state.tracks.Index()
 	p.updateState()
 
 	p.app.server.Emit(&ApiEvent{
