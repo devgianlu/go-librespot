@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -12,9 +11,11 @@ import (
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	"go-librespot/session"
 	"go-librespot/zeroconf"
+	"golang.org/x/exp/rand"
 	"gopkg.in/yaml.v3"
 	"os"
 	"strings"
+	"time"
 )
 
 type App struct {
@@ -281,6 +282,8 @@ func loadConfig(cfg *Config) error {
 }
 
 func main() {
+	rand.Seed(uint64(time.Now().UnixNano()))
+
 	var cfg Config
 	if err := loadConfig(&cfg); err != nil {
 		log.WithError(err).Fatal("failed loading config")
