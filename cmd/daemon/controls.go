@@ -94,7 +94,9 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.C
 	p.state.player.PositionAsOfTimestamp = 0
 
 	// if we fail to seek, just fallback to the first track
-	ctxTracks.TrySeek(skipTo)
+	if err := ctxTracks.TrySeek(skipTo); err != nil {
+		return fmt.Errorf("failed seeking to track: %w", err)
+	}
 
 	p.state.tracks = ctxTracks
 	p.state.player.Track = ctxTracks.CurrentTrack()

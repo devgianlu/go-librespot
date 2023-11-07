@@ -34,10 +34,15 @@ func (tl *List) Metadata() map[string]string {
 	return tl.ctx.Metadata()
 }
 
-func (tl *List) TrySeek(f func(track *connectpb.ContextTrack) bool) {
+func (tl *List) TrySeek(f func(track *connectpb.ContextTrack) bool) error {
 	if err := tl.Seek(f); err != nil {
-		_ = tl.tracks.moveStart()
+		err = tl.tracks.moveStart()
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 func (tl *List) Seek(f func(*connectpb.ContextTrack) bool) error {

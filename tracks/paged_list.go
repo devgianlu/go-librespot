@@ -23,7 +23,7 @@ type pagedListInterator[T any] struct {
 
 func (i *pagedListInterator[T]) prev() bool {
 	if i.pos < 0 {
-		panic("invalid paged list iterator position")
+		panic(fmt.Sprintf("invalid paged list iterator position: %d", i.pos))
 	}
 
 	if i.pos == 0 {
@@ -58,7 +58,7 @@ func (i *pagedListInterator[T]) error() error {
 
 func (i *pagedListInterator[T]) get() pagedListItem[T] {
 	if i.pos < 0 {
-		panic("invalid paged list iterator position")
+		panic(fmt.Sprintf("invalid paged list iterator position: %d", i.pos))
 	}
 
 	return i.list.list[i.pos]
@@ -76,7 +76,7 @@ func newPagedList[T any](pages librespot.PageResolver[T]) *pagedList[T] {
 
 func (l *pagedList[T]) iterHere() *pagedListInterator[T] {
 	if l.pos < 0 {
-		panic("invalid paged list position")
+		panic(fmt.Sprintf("invalid paged list position: %d", l.pos))
 	}
 
 	return &pagedListInterator[T]{list: l, pos: l.pos, err: nil}
@@ -87,10 +87,12 @@ func (l *pagedList[T]) iterStart() *pagedListInterator[T] {
 }
 
 func (l *pagedList[T]) moveStart() error {
-	if pageIdx, err := l.fetchNextPage(); errors.Is(err, io.EOF) {
-		return fmt.Errorf("failed moving to start: no more pages as of %d", pageIdx)
-	} else if err != nil {
-		return fmt.Errorf("failed moving to start: %w", err)
+	if len(l.list) == 0 {
+		if pageIdx, err := l.fetchNextPage(); errors.Is(err, io.EOF) {
+			return fmt.Errorf("failed moving to start: no more pages as of %d", pageIdx)
+		} else if err != nil {
+			return fmt.Errorf("failed moving to start: %w", err)
+		}
 	}
 
 	l.pos = 0
@@ -108,7 +110,7 @@ func (l *pagedList[T]) move(iter *pagedListInterator[T]) {
 
 func (l *pagedList[T]) get() pagedListItem[T] {
 	if l.pos < 0 {
-		panic("invalid paged list position")
+		panic(fmt.Sprintf("invalid paged list position: %d", l.pos))
 	}
 
 	return l.list[l.pos]
