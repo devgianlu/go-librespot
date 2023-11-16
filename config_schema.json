@@ -114,16 +114,21 @@
           }
         },
         "bitrate": {
-          "type": "number",
+          "type": "integer",
           "description": "The preferred bitrate for audio playback, default is 160kbps",
           "enum": [96, 160, 320],
           "default": 160
         },
         "volume_steps": {
-          "type": "number",
+          "type": "integer",
           "description": "The number of volume steps",
           "min": 1,
           "default": 100
+        },
+        "normalisation_pregain": {
+          "type": "number",
+          "description": "The normalisation pregain to apply to track/album normalisation factors",
+          "default": 1
         },
         "external_volume": {
           "type": "boolean",

@@ -20,7 +20,8 @@ const Channels = 2
 const MaxStateVolume = 65535
 
 type Player struct {
-	countryCode *string
+	normalisationPregain float32
+	countryCode          *string
 
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
@@ -60,11 +61,12 @@ type playerCmdDataSet struct {
 	paused bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, countryCode *string, device string, volumeSteps uint32, externalVolume bool) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationPregain float32, countryCode *string, device string, volumeSteps uint32, externalVolume bool) (*Player, error) {
 	p := &Player{
-		sp:          sp,
-		audioKey:    audioKey,
-		countryCode: countryCode,
+		sp:                   sp,
+		audioKey:             audioKey,
+		normalisationPregain: normalisationPregain,
+		countryCode:          countryCode,
 		newOutput: func(reader librespot.Float32Reader, paused bool, volume float32) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
 				Reader:          reader,
@@ -322,7 +324,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("failed reading metadata page: %w", err)
 	}
 
-	stream, err := vorbis.New(audioStream, meta, meta.GetTrackFactor(1))
+	stream, err := vorbis.New(audioStream, meta, meta.GetTrackFactor(p.normalisationPregain))
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}

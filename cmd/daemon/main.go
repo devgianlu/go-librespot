@@ -84,7 +84,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 
 	appPlayer.initState()
 
-	if appPlayer.player, err = player.NewPlayer(appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(), appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.VolumeSteps, app.cfg.ExternalVolume); err != nil {
+	if appPlayer.player, err = player.NewPlayer(appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(), app.cfg.NormalisationPregain, appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.VolumeSteps, app.cfg.ExternalVolume); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
 
@@ -223,17 +223,18 @@ type Config struct {
 	ConfigPath      string `yaml:"-"`
 	CredentialsPath string `yaml:"-"`
 
-	LogLevel       string `yaml:"log_level"`
-	DeviceId       string `yaml:"device_id"`
-	DeviceName     string `yaml:"device_name"`
-	DeviceType     string `yaml:"device_type"`
-	ClientToken    string `yaml:"client_token"`
-	ServerPort     int    `yaml:"server_port"`
-	AudioDevice    string `yaml:"audio_device"`
-	Bitrate        int    `yaml:"bitrate"`
-	VolumeSteps    uint32 `yaml:"volume_steps"`
-	ExternalVolume bool   `yaml:"external_volume"`
-	Credentials    struct {
+	LogLevel             string  `yaml:"log_level"`
+	DeviceId             string  `yaml:"device_id"`
+	DeviceName           string  `yaml:"device_name"`
+	DeviceType           string  `yaml:"device_type"`
+	ClientToken          string  `yaml:"client_token"`
+	ServerPort           int     `yaml:"server_port"`
+	AudioDevice          string  `yaml:"audio_device"`
+	Bitrate              int     `yaml:"bitrate"`
+	VolumeSteps          uint32  `yaml:"volume_steps"`
+	NormalisationPregain float32 `json:"normalisation_pregain"`
+	ExternalVolume       bool    `yaml:"external_volume"`
+	Credentials          struct {
 		Type     string `yaml:"type"`
 		UserPass struct {
 			Username string `yaml:"username"`
@@ -277,6 +278,9 @@ func loadConfig(cfg *Config) error {
 	}
 	if cfg.VolumeSteps == 0 {
 		cfg.VolumeSteps = 100
+	}
+	if cfg.NormalisationPregain == 0 {
+		cfg.NormalisationPregain = 1
 	}
 
 	return nil
