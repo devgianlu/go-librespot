@@ -232,7 +232,7 @@ type Config struct {
 	AudioDevice          string  `yaml:"audio_device"`
 	Bitrate              int     `yaml:"bitrate"`
 	VolumeSteps          uint32  `yaml:"volume_steps"`
-	NormalisationPregain float32 `json:"normalisation_pregain"`
+	NormalisationPregain float32 `yaml:"normalisation_pregain"`
 	ExternalVolume       bool    `yaml:"external_volume"`
 	Credentials          struct {
 		Type     string `yaml:"type"`
