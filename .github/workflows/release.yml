@@ -158,7 +158,7 @@ jobs:
           mkdir -p /tmp/out/${{ matrix.target }}/
           go build \
             -ldflags="-s -w -X go-librespot.commit=${{ github.sha }} -X go-librespot.version=${{ github.ref_name }}" \
-            -o ./go-librespot ./cmd/daemon
+            -o ./go-librespot -a ./cmd/daemon
           tar -zcvf /tmp/out/go-librespot_${{ matrix.tar }}.tar.gz go-librespot README.md
 
       - name: Upload compiled binary
