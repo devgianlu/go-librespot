@@ -60,22 +60,24 @@ func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLog
 	return dealer, nil
 }
 
-func (d *Dealer) connect() (err error) {
+func (d *Dealer) connect() error {
 	accessToken, err := d.accessToken()
 	if err != nil {
 		return fmt.Errorf("failed obtaining dealer access token: %w", err)
 	}
 
-	d.conn, _, err = websocket.Dial(context.Background(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), accessToken), &websocket.DialOptions{
+	if conn, _, err := websocket.Dial(context.Background(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), accessToken), &websocket.DialOptions{
 		HTTPHeader: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
 		},
 		HTTPClient: &http.Client{
 			Timeout: timeout,
 		},
-	})
-	if err != nil {
+	}); err != nil {
 		return err
+	} else {
+		// we assign to d.conn after because if Dial fails we'll have a nil d.conn which we don't want
+		d.conn = conn
 	}
 
 	// remove the read limit
