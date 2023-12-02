@@ -39,3 +39,11 @@ go build -o go-librespot-daemon ./cmd/daemon
 ```
 
 To crosscompile for different architectures the `GOOS` and `GOARCH` environment variables can be used.
+
+## Development
+
+To recompile protobuf definitions use:
+
+```shell
+protoc --go_out=proto --go_opt module=go-librespot/proto -I proto proto/*.proto
+```

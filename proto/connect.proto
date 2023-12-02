@@ -134,8 +134,11 @@ message Capabilities {
   bool supports_set_options_command = 25;
   CapabilitySupportDetails supports_hifi = 26;
   string connect_capabilities = 27;
+  bool supports_rooms = 28;
+  bool supports_dj = 29;
+  spotify.connectstate.BitrateLevel supported_audio_quality = 30;
 
-  //reserved 1, 4, 24, "supported_contexts", "supports_lossless_audio";
+  reserved 1, 4, 24; // "supported_contexts", "supports_lossless_audio"
 }
 
 message CapabilitySupportDetails {
@@ -204,6 +207,11 @@ enum PutStateReason {
   PICKER_OPENED = 6;
   BECAME_INACTIVE = 7;
   ALIAS_CHANGED = 8;
+  NEW_CONNECTION = 9;
+  PULL_PLAYBACK = 10;
+  AUDIO_DRIVER_INFO_CHANGED = 11;
+  PUT_STATE_RATE_LIMITED = 12;
+  BACKEND_METADATA_APPLIED = 13;
 }
 
 enum MemberType {

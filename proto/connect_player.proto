@@ -184,25 +184,26 @@ message PlaybackQuality {
 }
 
 enum BitrateLevel {
-  unknown_bitrate_level = 0;
-  low = 1;
-  normal = 2;
-  high = 3;
-  very_high = 4;
-  hifi = 5;
+  UNKNOWN_BITRATE_LEVEL = 0;
+  LOW = 1;
+  NORMAL = 2;
+  HIGH = 3;
+  VERY_HIGH = 4;
+  HIFI = 5;
+  HIFI24 = 6;
 }
 
 enum BitrateStrategy {
-  unknown_strategy = 0;
-  best_matching = 1;
-  backend_advised = 2;
-  offlined_file = 3;
-  cached_file = 4;
-  local_file = 5;
+  UNKNOWN_BITRATE_STRATEGY = 0;
+  BEST_MATCHING = 1;
+  BACKEND_ADVISED = 2;
+  OFFLINED_FILE = 3;
+  CACHED_FILE = 4;
+  LOCAL_FILE = 5;
 }
 
 enum HiFiStatus {
-  none = 0;
-  off = 1;
-  on = 2;
+  NONE = 0;
+  OFF = 1;
+  ON = 2;
 }
