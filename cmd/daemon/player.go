@@ -8,7 +8,7 @@ import (
 	"go-librespot/ap"
 	"go-librespot/dealer"
 	"go-librespot/player"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
+	connectpb "go-librespot/proto/spotify/connectstate"
 	"go-librespot/session"
 	"go-librespot/tracks"
 	"google.golang.org/protobuf/proto"

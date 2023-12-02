@@ -5,7 +5,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
+	connectpb "go-librespot/proto/spotify/connectstate"
 	"io"
 	"strings"
 )

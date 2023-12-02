@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
+	connectpb "go-librespot/proto/spotify/connectstate"
 	"io"
 	"reflect"
 	"strings"

@@ -6,7 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"go-librespot/player"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
+	connectpb "go-librespot/proto/spotify/connectstate"
 	"go-librespot/tracks"
 	"math"
 	"time"

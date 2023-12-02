@@ -5,7 +5,7 @@ import (
 	librespot "go-librespot"
 	"go-librespot/dealer"
 	"go-librespot/player"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
+	connectpb "go-librespot/proto/spotify/connectstate"
 	"go-librespot/tracks"
 	"time"
 )

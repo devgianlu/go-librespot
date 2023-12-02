@@ -8,7 +8,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
-	connectpb "go-librespot/proto/spotify/connectstate/model"
+	connectpb "go-librespot/proto/spotify/connectstate"
 	storagepb "go-librespot/proto/spotify/download"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"google.golang.org/protobuf/proto"

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package spotify.connectstate;
 
-option go_package = "go-librespot/proto/spotify/connectstate/model";
+option go_package = "go-librespot/proto/spotify/connectstate";
 
 message PlayerState {
   int64 timestamp = 1;

@@ -5,7 +5,7 @@ package spotify.connectstate;
 import "connect_player.proto";
 import "connect_devices.proto";
 
-option go_package = "go-librespot/proto/spotify/connectstate/model";
+option go_package = "go-librespot/proto/spotify/connectstate";
 
 message ClusterUpdate {
   Cluster cluster = 1;
