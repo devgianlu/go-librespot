@@ -36,6 +36,8 @@ func (tl *List) Metadata() map[string]string {
 
 func (tl *List) TrySeek(f func(track *connectpb.ContextTrack) bool) error {
 	if err := tl.Seek(f); err != nil {
+		log.WithError(err).Warnf("failed seeking to track in context %s", tl.ctx.Uri())
+
 		err = tl.tracks.moveStart()
 		if err != nil {
 			return err

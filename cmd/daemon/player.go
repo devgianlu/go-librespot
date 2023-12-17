@@ -160,7 +160,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
 		currentTrack := librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
-		if err := ctxTracks.Seek(tracks.ProvidedTrackComparator(contextSpotType, currentTrack)); err != nil {
+		if err := ctxTracks.TrySeek(tracks.ProvidedTrackComparator(contextSpotType, currentTrack)); err != nil {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
 
