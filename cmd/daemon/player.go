@@ -189,6 +189,11 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.player.PlayOrigin = req.Command.PlayOrigin
 		p.state.player.Suppressions = req.Command.Options.Suppressions
 
+		// apply overrides
+		p.state.player.Options.ShufflingContext = req.Command.Options.PlayerOptionsOverride.ShufflingContext
+		p.state.player.Options.RepeatingTrack = req.Command.Options.PlayerOptionsOverride.RepeatingTrack
+		p.state.player.Options.RepeatingContext = req.Command.Options.PlayerOptionsOverride.RepeatingContext
+
 		var skipTo skipToFunc
 		if len(req.Command.Options.SkipTo.TrackUri) > 0 || len(req.Command.Options.SkipTo.TrackUid) > 0 {
 			skipTo = func(track *connectpb.ContextTrack) bool {
