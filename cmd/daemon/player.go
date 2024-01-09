@@ -189,9 +189,9 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.player.PlayOrigin = req.Command.PlayOrigin
 		p.state.player.Suppressions = req.Command.Options.Suppressions
 
-		return p.loadContext(
-			req.Command.Context,
-			func(track *connectpb.ContextTrack) bool {
+		var skipTo skipToFunc
+		if len(req.Command.Options.SkipTo.TrackUri) > 0 || len(req.Command.Options.SkipTo.TrackUid) > 0 {
+			skipTo = func(track *connectpb.ContextTrack) bool {
 				if len(req.Command.Options.SkipTo.TrackUid) > 0 && req.Command.Options.SkipTo.TrackUid == track.Uid {
 					return true
 				} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
@@ -199,9 +199,10 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 				} else {
 					return false
 				}
-			},
-			req.Command.Options.InitiallyPaused,
-		)
+			}
+		}
+
+		return p.loadContext(req.Command.Context, skipTo, req.Command.Options.InitiallyPaused)
 	case "pause":
 		return p.pause()
 	case "resume":
@@ -315,9 +316,14 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			FeatureVersion:    librespot.VersionNumberString(),
 		}
 
-		if err := p.loadContext(ctx, func(track *connectpb.ContextTrack) bool {
-			return len(data.SkipToUri) != 0 && data.SkipToUri == track.Uri
-		}, data.Paused); err != nil {
+		var skipTo skipToFunc
+		if len(data.SkipToUri) > 0 {
+			skipTo = func(track *connectpb.ContextTrack) bool {
+				return data.SkipToUri == track.Uri
+			}
+		}
+
+		if err := p.loadContext(ctx, skipTo, data.Paused); err != nil {
 			return nil, fmt.Errorf("failed loading context: %w", err)
 		}
 

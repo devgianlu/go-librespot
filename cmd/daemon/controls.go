@@ -71,7 +71,9 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 	}
 }
 
-func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.ContextTrack) bool, paused bool) error {
+type skipToFunc func(*connectpb.ContextTrack) bool
+
+func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, paused bool) error {
 	ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), ctx)
 	if err != nil {
 		return fmt.Errorf("failed creating track list: %w", err)
@@ -93,9 +95,26 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo func(*connectpb.C
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
-	// if we fail to seek, just fallback to the first track
-	if err := ctxTracks.TrySeek(skipTo); err != nil {
-		return fmt.Errorf("failed seeking to track: %w", err)
+	if skipTo == nil {
+		// if shuffle is enabled, we'll start from a random track
+		if err := ctxTracks.ToggleShuffle(p.state.player.Options.ShufflingContext); err != nil {
+			return fmt.Errorf("failed shuffling context")
+		}
+
+		// seek to the first track
+		if err := ctxTracks.TrySeek(func(_ *connectpb.ContextTrack) bool { return true }); err != nil {
+			return fmt.Errorf("failed seeking to track: %w", err)
+		}
+	} else {
+		// seek to the given track
+		if err := ctxTracks.TrySeek(skipTo); err != nil {
+			return fmt.Errorf("failed seeking to track: %w", err)
+		}
+
+		// shuffle afterwards
+		if err := ctxTracks.ToggleShuffle(p.state.player.Options.ShufflingContext); err != nil {
+			return fmt.Errorf("failed shuffling context")
+		}
 	}
 
 	p.state.tracks = ctxTracks
