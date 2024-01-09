@@ -82,7 +82,7 @@ func (c *Login5) Login(credentials proto.Message) error {
 
 	req := &pb.LoginRequest{
 		ClientInfo: &pb.ClientInfo{
-			ClientId: librespot.ClientId,
+			ClientId: librespot.ClientIdHex,
 			DeviceId: c.deviceId,
 		},
 	}

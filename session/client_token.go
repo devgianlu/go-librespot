@@ -18,7 +18,7 @@ func retrieveClientToken(deviceId string) (string, error) {
 		RequestType: pbhttp.ClientTokenRequestType_REQUEST_CLIENT_DATA_REQUEST,
 		Request: &pbhttp.ClientTokenRequest_ClientData{
 			ClientData: &pbhttp.ClientDataRequest{
-				ClientId:      librespot.ClientId,
+				ClientId:      librespot.ClientIdHex,
 				ClientVersion: librespot.VersionString(),
 				Data: &pbhttp.ClientDataRequest_ConnectivitySdkData{
 					ConnectivitySdkData: &pbdata.ConnectivitySdkData{
