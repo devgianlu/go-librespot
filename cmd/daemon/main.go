@@ -85,7 +85,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	appPlayer.initState()
 
 	if appPlayer.player, err = player.NewPlayer(
-		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
+		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(), app.cfg.NormalisationEnabled,
 		*app.cfg.NormalisationPregain, appPlayer.countryCode, *app.cfg.AudioDevice,
 		*app.cfg.VolumeSteps, app.cfg.ExternalVolume,
 	); err != nil {
@@ -236,6 +236,7 @@ type Config struct {
 	AudioDevice          *string  `yaml:"audio_device"`
 	Bitrate              *int     `yaml:"bitrate"`
 	VolumeSteps          *uint32  `yaml:"volume_steps"`
+	NormalisationEnabled bool     `yaml:"normalisation_enabled"`
 	NormalisationPregain *float32 `yaml:"normalisation_pregain"`
 	ExternalVolume       bool     `yaml:"external_volume"`
 	Credentials          struct {
@@ -291,7 +292,7 @@ func loadConfig(cfg *Config) error {
 	}
 	if cfg.NormalisationPregain == nil {
 		cfg.NormalisationPregain = new(float32)
-		*cfg.NormalisationPregain = 1
+		*cfg.NormalisationPregain = 0
 	}
 
 	return nil

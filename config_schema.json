@@ -125,10 +125,15 @@
           "min": 1,
           "default": 100
         },
+        "normalisation_enabled": {
+          "type": "boolean",
+          "description": "Whether track/album normalisation is enabled",
+          "default": false
+        },
         "normalisation_pregain": {
           "type": "number",
           "description": "The normalisation pregain to apply to track/album normalisation factors",
-          "default": 1
+          "default": 0
         },
         "external_volume": {
           "type": "boolean",
