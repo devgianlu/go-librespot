@@ -158,7 +158,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		},
 	})
 
-	stream, err := p.player.NewStream(spotId, p.app.cfg.Bitrate, trackPosition, paused)
+	stream, err := p.player.NewStream(spotId, *p.app.cfg.Bitrate, trackPosition, paused)
 	if err != nil {
 		return fmt.Errorf("failed creating stream: %w", err)
 	}
@@ -420,8 +420,8 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeVolume,
 		Data: ApiEventDataVolume{
-			Value: uint32(math.Ceil(float64(newVal*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
-			Max:   p.app.cfg.VolumeSteps,
+			Value: uint32(math.Ceil(float64(newVal**p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
+			Max:   *p.app.cfg.VolumeSteps,
 		},
 	})
 }

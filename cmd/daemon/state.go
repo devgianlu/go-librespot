@@ -66,7 +66,7 @@ func (p *AppPlayer) initState() {
 		device: &connectpb.DeviceInfo{
 			CanPlay:               true,
 			Volume:                player.MaxStateVolume,
-			Name:                  p.app.cfg.DeviceName,
+			Name:                  *p.app.cfg.DeviceName,
 			DeviceId:              p.app.deviceId,
 			DeviceType:            p.app.deviceType,
 			DeviceSoftwareVersion: librespot.VersionString(),
@@ -78,7 +78,7 @@ func (p *AppPlayer) initState() {
 				GaiaEqConnectId:            true,
 				SupportsLogout:             true,
 				IsObservable:               true,
-				VolumeSteps:                int32(p.app.cfg.VolumeSteps),
+				VolumeSteps:                int32(*p.app.cfg.VolumeSteps),
 				SupportedTypes:             []string{"audio/track", "audio/episode"},
 				CommandAcks:                true,
 				SupportsRename:             false,

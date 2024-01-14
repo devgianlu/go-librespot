@@ -42,24 +42,24 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg}
 
-	app.deviceType, err = parseDeviceType(cfg.DeviceType)
+	app.deviceType, err = parseDeviceType(*cfg.DeviceType)
 	if err != nil {
 		return nil, err
 	}
 
 	app.resolver = apresolve.NewApResolver()
 
-	if len(cfg.DeviceId) == 0 {
+	if cfg.DeviceId == nil {
 		deviceIdBytes := make([]byte, 20)
 		_, _ = rand.Read(deviceIdBytes)
 		app.deviceId = hex.EncodeToString(deviceIdBytes)
 		log.Infof("generated new device id: %s", app.deviceId)
 	} else {
-		app.deviceId = cfg.DeviceId
+		app.deviceId = *cfg.DeviceId
 	}
 
-	if len(cfg.ClientToken) > 0 {
-		app.clientToken = cfg.ClientToken
+	if cfg.ClientToken != nil {
+		app.clientToken = *cfg.ClientToken
 	}
 
 	return app, nil
@@ -84,7 +84,11 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 
 	appPlayer.initState()
 
-	if appPlayer.player, err = player.NewPlayer(appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(), app.cfg.NormalisationPregain, appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.VolumeSteps, app.cfg.ExternalVolume); err != nil {
+	if appPlayer.player, err = player.NewPlayer(
+		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
+		*app.cfg.NormalisationPregain, appPlayer.countryCode, *app.cfg.AudioDevice,
+		*app.cfg.VolumeSteps, app.cfg.ExternalVolume,
+	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
 
@@ -98,7 +102,7 @@ func (app *App) Zeroconf() error {
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.cfg.DeviceName, app.deviceId, app.deviceType)
+	z, err := zeroconf.NewZeroconf(*app.cfg.DeviceName, app.deviceId, app.deviceType)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
@@ -223,17 +227,17 @@ type Config struct {
 	ConfigPath      string `yaml:"-"`
 	CredentialsPath string `yaml:"-"`
 
-	LogLevel             string  `yaml:"log_level"`
-	DeviceId             string  `yaml:"device_id"`
-	DeviceName           string  `yaml:"device_name"`
-	DeviceType           string  `yaml:"device_type"`
-	ClientToken          string  `yaml:"client_token"`
-	ServerPort           int     `yaml:"server_port"`
-	AudioDevice          string  `yaml:"audio_device"`
-	Bitrate              int     `yaml:"bitrate"`
-	VolumeSteps          uint32  `yaml:"volume_steps"`
-	NormalisationPregain float32 `yaml:"normalisation_pregain"`
-	ExternalVolume       bool    `yaml:"external_volume"`
+	LogLevel             *string  `yaml:"log_level"`
+	DeviceId             *string  `yaml:"device_id"`
+	DeviceName           *string  `yaml:"device_name"`
+	DeviceType           *string  `yaml:"device_type"`
+	ClientToken          *string  `yaml:"client_token"`
+	ServerPort           *int     `yaml:"server_port"`
+	AudioDevice          *string  `yaml:"audio_device"`
+	Bitrate              *int     `yaml:"bitrate"`
+	VolumeSteps          *uint32  `yaml:"volume_steps"`
+	NormalisationPregain *float32 `yaml:"normalisation_pregain"`
+	ExternalVolume       bool     `yaml:"external_volume"`
 	Credentials          struct {
 		Type     string `yaml:"type"`
 		UserPass struct {
@@ -261,26 +265,33 @@ func loadConfig(cfg *Config) error {
 		return fmt.Errorf("failed unmarshalling configuration file: %w", err)
 	}
 
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = "info"
+	if cfg.LogLevel == nil {
+		cfg.LogLevel = new(string)
+		*cfg.LogLevel = "info"
 	}
-	if cfg.DeviceName == "" {
-		cfg.DeviceName = "go-librespot"
+	if cfg.DeviceName == nil {
+		cfg.DeviceName = new(string)
+		*cfg.DeviceName = "go-librespot"
 	}
-	if cfg.DeviceType == "" {
-		cfg.DeviceType = "computer"
+	if cfg.DeviceType == nil {
+		cfg.DeviceType = new(string)
+		*cfg.DeviceType = "computer"
 	}
-	if cfg.AudioDevice == "" {
-		cfg.AudioDevice = "default"
+	if cfg.AudioDevice == nil {
+		cfg.AudioDevice = new(string)
+		*cfg.AudioDevice = "default"
 	}
-	if cfg.Bitrate == 0 {
-		cfg.Bitrate = 160
+	if cfg.Bitrate == nil {
+		cfg.Bitrate = new(int)
+		*cfg.Bitrate = 160
 	}
-	if cfg.VolumeSteps == 0 {
-		cfg.VolumeSteps = 100
+	if cfg.VolumeSteps == nil {
+		cfg.VolumeSteps = new(uint32)
+		*cfg.VolumeSteps = 100
 	}
-	if cfg.NormalisationPregain == 0 {
-		cfg.NormalisationPregain = 1
+	if cfg.NormalisationPregain == nil {
+		cfg.NormalisationPregain = new(float32)
+		*cfg.NormalisationPregain = 1
 	}
 
 	return nil
@@ -295,9 +306,9 @@ func main() {
 	}
 
 	// parse and set log level
-	logLevel, err := log.ParseLevel(cfg.LogLevel)
+	logLevel, err := log.ParseLevel(*cfg.LogLevel)
 	if err != nil {
-		log.WithError(err).Fatalf("invalid log level: %s", cfg.LogLevel)
+		log.WithError(err).Fatalf("invalid log level: %s", *cfg.LogLevel)
 	} else {
 		log.SetLevel(logLevel)
 	}
@@ -309,8 +320,8 @@ func main() {
 	}
 
 	// create api server if needed
-	if cfg.ServerPort != 0 {
-		app.server, err = NewApiServer(cfg.ServerPort)
+	if cfg.ServerPort != nil {
+		app.server, err = NewApiServer(*cfg.ServerPort)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating api server")
 		}

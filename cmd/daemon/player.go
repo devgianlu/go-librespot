@@ -274,8 +274,8 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			Username:       p.sess.Username(),
 			DeviceId:       p.app.deviceId,
 			DeviceType:     p.app.deviceType.String(),
-			DeviceName:     p.app.cfg.DeviceName,
-			VolumeSteps:    p.app.cfg.VolumeSteps,
+			DeviceName:     *p.app.cfg.DeviceName,
+			VolumeSteps:    *p.app.cfg.VolumeSteps,
 			Volume:         p.state.device.Volume,
 			RepeatContext:  p.state.player.Options.RepeatingContext,
 			RepeatTrack:    p.state.player.Options.RepeatingTrack,
@@ -335,12 +335,12 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		return nil, nil
 	case ApiRequestTypeGetVolume:
 		return &ApiResponseVolume{
-			Max:   p.app.cfg.VolumeSteps,
-			Value: uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
+			Max:   *p.app.cfg.VolumeSteps,
+			Value: uint32(math.Ceil(float64(p.state.device.Volume**p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
 		}, nil
 	case ApiRequestTypeSetVolume:
 		vol := req.Data.(uint32)
-		p.updateVolume(vol * player.MaxStateVolume / p.app.cfg.VolumeSteps)
+		p.updateVolume(vol * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
 		p.setRepeatingContext(req.Data.(bool))
