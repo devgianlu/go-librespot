@@ -291,7 +291,7 @@ func loadConfig(cfg *Config) error {
 	}
 	if cfg.NormalisationPregain == nil {
 		cfg.NormalisationPregain = new(float32)
-		*cfg.NormalisationPregain = 1
+		*cfg.NormalisationPregain = 0
 	}
 
 	return nil

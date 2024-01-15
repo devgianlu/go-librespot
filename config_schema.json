@@ -128,7 +128,7 @@
         "normalisation_pregain": {
           "type": "number",
           "description": "The normalisation pregain to apply to track/album normalisation factors",
-          "default": 1
+          "default": 0
         },
         "external_volume": {
           "type": "boolean",
