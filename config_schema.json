@@ -125,6 +125,11 @@
           "min": 1,
           "default": 100
         },
+        "normalisation_disabled": {
+          "type": "boolean",
+          "description": "Whether track/album normalisation should be disabled",
+          "default": false
+        },
         "normalisation_pregain": {
           "type": "number",
           "description": "The normalisation pregain to apply to track/album normalisation factors",
