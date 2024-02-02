@@ -30,7 +30,7 @@ type Login5 struct {
 func NewLogin5(deviceId, clientToken string) *Login5 {
 	baseUrl, err := url.Parse("https://login5.spotify.com/")
 	if err != nil {
-		panic("invalid apresolve base URL")
+		panic("invalid login5 base URL")
 	}
 
 	return &Login5{
