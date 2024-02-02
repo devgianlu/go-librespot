@@ -5,19 +5,28 @@ import (
 	"runtime"
 )
 
-var (
-	commit  = ""
-	version = ""
-)
+var commit, version string
 
 func VersionNumberString() string {
 	if len(version) > 0 {
 		return version
-	} else if len(commit) > 0 {
-		return commit
+	} else if len(commit) >= 8 {
+		return commit[:8]
 	} else {
 		return "dev"
 	}
+}
+
+func SpotifyLikeClientVersion() string {
+	if len(version) > 0 {
+		if len(commit) >= 8 {
+			return fmt.Sprintf("%s.g%s", version, commit[:8])
+		} else {
+			return version
+		}
+	}
+
+	return "0.0.0"
 }
 
 func VersionString() string {
