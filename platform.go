@@ -135,15 +135,7 @@ func GetPlatformSpecificData() *clienttokenpb.PlatformSpecificData {
 	case "windows":
 		return &clienttokenpb.PlatformSpecificData{
 			Data: &clienttokenpb.PlatformSpecificData_DesktopWindows{
-				DesktopWindows: &clienttokenpb.NativeDesktopWindowsData{
-					OsVersion:        10,
-					OsBuild:          21370,
-					PlatformId:       2,
-					UnknownValue_6:   9,
-					ImageFileMachine: 332,
-					PeMachine:        34404,
-					UnknownValue_10:  true,
-				},
+				DesktopWindows: &clienttokenpb.NativeDesktopWindowsData{},
 			},
 		}
 	}
