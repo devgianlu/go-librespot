@@ -76,7 +76,7 @@ func (p *AppPlayer) initState() {
 				CanBePlayer:                true,
 				RestrictToLocal:            false,
 				GaiaEqConnectId:            true,
-				SupportsLogout:             true,
+				SupportsLogout:             p.app.cfg.ZeroconfEnabled,
 				IsObservable:               true,
 				VolumeSteps:                int32(*p.app.cfg.VolumeSteps),
 				SupportedTypes:             []string{"audio/track", "audio/episode"},

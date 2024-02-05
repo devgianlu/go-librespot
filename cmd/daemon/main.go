@@ -27,7 +27,8 @@ type App struct {
 	deviceType  devicespb.DeviceType
 	clientToken string
 
-	server *ApiServer
+	server   *ApiServer
+	logoutCh chan *AppPlayer
 }
 
 func parseDeviceType(val string) (devicespb.DeviceType, error) {
@@ -40,7 +41,7 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 }
 
 func NewApp(cfg *Config) (app *App, err error) {
-	app = &App{cfg: cfg}
+	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
 	app.deviceType, err = parseDeviceType(*cfg.DeviceType)
 	if err != nil {
@@ -69,6 +70,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
 		app:         app,
 		stop:        make(chan struct{}, 1),
+		logout:      app.logoutCh,
 		countryCode: new(string),
 	}
 
@@ -97,62 +99,15 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 }
 
 func (app *App) Zeroconf() error {
-	// pre fetch resolver endpoints
-	if err := app.resolver.FetchAll(); err != nil {
-		return fmt.Errorf("failed getting endpoints from resolver: %w", err)
-	}
+	return app.withAppPlayer(nil)
+}
 
-	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(*app.cfg.DeviceName, app.deviceId, app.deviceType)
-	if err != nil {
-		return fmt.Errorf("failed initializing zeroconf: %w", err)
-	}
+func (app *App) SpotifyToken(username, token string) error {
+	return app.withCredentials(session.SpotifyTokenCredentials{Username: username, Token: token})
+}
 
-	// TODO: unset this when logging out
-	var currentPlayer *AppPlayer
-	var apiCh chan ApiRequest
-
-	// forward API requests to proper channel only if a session is present
-	go func() {
-		for {
-			select {
-			case req := <-app.server.Receive():
-				if currentPlayer == nil {
-					req.Reply(nil, ErrNoSession)
-					break
-				}
-
-				// if we are here a channel must exist
-				apiCh <- req
-			}
-		}
-	}()
-
-	return z.Serve(func(req zeroconf.NewUserRequest) bool {
-		if currentPlayer != nil {
-			currentPlayer.Close()
-			currentPlayer = nil
-
-			// close the channel after setting the current session to nil
-			close(apiCh)
-		}
-
-		appPlayer, err := app.newAppPlayer(session.BlobCredentials{
-			Username: req.Username,
-			Blob:     req.AuthBlob,
-		})
-		if err != nil {
-			log.WithError(err).Errorf("failed creating new session for %s from %s", req.Username, req.DeviceName)
-			return false
-		}
-
-		// first create the channel and then assign the current session
-		apiCh = make(chan ApiRequest)
-		currentPlayer = appPlayer
-
-		go appPlayer.Run(apiCh)
-		return true
-	})
+func (app *App) UserPass(username, password string) error {
+	return app.withCredentials(session.UserPassCredentials{Username: username, Password: password})
 }
 
 type storedCredentialsFile struct {
@@ -160,15 +115,7 @@ type storedCredentialsFile struct {
 	Data     []byte `json:"data"`
 }
 
-func (app *App) SpotifyToken(username, token string) error {
-	return app.withReusableCredentials(session.SpotifyTokenCredentials{Username: username, Token: token})
-}
-
-func (app *App) UserPass(username, password string) error {
-	return app.withReusableCredentials(session.UserPassCredentials{Username: username, Password: password})
-}
-
-func (app *App) withReusableCredentials(creds any) (err error) {
+func (app *App) withCredentials(creds any) (err error) {
 	var username string
 	switch creds := creds.(type) {
 	case session.SpotifyTokenCredentials:
@@ -220,8 +167,113 @@ func (app *App) withReusableCredentials(creds any) (err error) {
 		log.Debugf("stored credentials for %s", appPlayer.sess.Username())
 	}
 
-	appPlayer.Run(app.server.Receive())
-	return nil
+	return app.withAppPlayer(appPlayer)
+}
+
+func (app *App) withAppPlayer(appPlayer *AppPlayer) (err error) {
+	// if zeroconf is disabled, there is not much we need to do
+	if !app.cfg.ZeroconfEnabled {
+		if appPlayer == nil {
+			panic("zeroconf is disabled and no credentials are present")
+		}
+
+		appPlayer.Run(app.server.Receive())
+		return nil
+	}
+
+	// pre fetch resolver endpoints
+	if err := app.resolver.FetchAll(); err != nil {
+		return fmt.Errorf("failed getting endpoints from resolver: %w", err)
+	}
+
+	// start zeroconf server and dispatch
+	z, err := zeroconf.NewZeroconf(*app.cfg.DeviceName, app.deviceId, app.deviceType)
+	if err != nil {
+		return fmt.Errorf("failed initializing zeroconf: %w", err)
+	}
+
+	var currentPlayer *AppPlayer
+	var apiCh chan ApiRequest
+
+	// set current player to the provided one if we have it
+	if appPlayer != nil {
+		log.Debugf("initializing zeroconf with provided player, username: %s", appPlayer.sess.Username())
+
+		// first create the channel and then assign the current session
+		apiCh = make(chan ApiRequest)
+		currentPlayer = appPlayer
+
+		go appPlayer.Run(apiCh)
+
+		// let zeroconf know that we already have a user
+		z.SetCurrentUser(appPlayer.sess.Username())
+	}
+
+	// forward API requests to proper channel only if a session is present
+	go func() {
+		for {
+			select {
+			case req := <-app.server.Receive():
+				if currentPlayer == nil {
+					req.Reply(nil, ErrNoSession)
+					break
+				}
+
+				// if we are here the channel must exist
+				apiCh <- req
+			}
+		}
+	}()
+
+	// listen for logout events and unset session when that happens
+	go func() {
+		for {
+			select {
+			case p := <-app.logoutCh:
+				// check that the logout request is for the current player
+				if p != currentPlayer {
+					continue
+				}
+
+				currentPlayer.Close()
+				currentPlayer = nil
+
+				// close the channel after setting the current session to nil
+				close(apiCh)
+
+				// unset the zeroconf user
+				z.SetCurrentUser("")
+			}
+		}
+	}()
+
+	return z.Serve(func(req zeroconf.NewUserRequest) bool {
+		if currentPlayer != nil {
+			currentPlayer.Close()
+			currentPlayer = nil
+
+			// close the channel after setting the current session to nil
+			close(apiCh)
+
+			// no need to unset the zeroconf user here as the new one will overwrite it anyway
+		}
+
+		newAppPlayer, err := app.newAppPlayer(session.BlobCredentials{
+			Username: req.Username,
+			Blob:     req.AuthBlob,
+		})
+		if err != nil {
+			log.WithError(err).Errorf("failed creating new session for %s from %s", req.Username, req.DeviceName)
+			return false
+		}
+
+		// first create the channel and then assign the current session
+		apiCh = make(chan ApiRequest)
+		currentPlayer = newAppPlayer
+
+		go newAppPlayer.Run(apiCh)
+		return true
+	})
 }
 
 type Config struct {
@@ -240,6 +292,7 @@ type Config struct {
 	NormalisationDisabled bool     `yaml:"normalisation_disabled"`
 	NormalisationPregain  *float32 `yaml:"normalisation_pregain"`
 	ExternalVolume        bool     `yaml:"external_volume"`
+	ZeroconfEnabled       bool     `yaml:"zeroconf_enabled"`
 	Credentials           struct {
 		Type     string `yaml:"type"`
 		UserPass struct {
@@ -333,6 +386,8 @@ func main() {
 
 	switch cfg.Credentials.Type {
 	case "zeroconf":
+		// ensure zeroconf is enabled
+		app.cfg.ZeroconfEnabled = true
 		if err := app.Zeroconf(); err != nil {
 			log.WithError(err).Fatal("failed running zeroconf")
 		}

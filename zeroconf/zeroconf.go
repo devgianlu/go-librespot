@@ -69,6 +69,12 @@ func NewZeroconf(deviceName, deviceId string, deviceType devicespb.DeviceType) (
 	return z, nil
 }
 
+func (z *Zeroconf) SetCurrentUser(username string) {
+	z.userLock.Lock()
+	z.currentUser = username
+	z.userLock.Unlock()
+}
+
 // Close stops the zeroconf responder and HTTP listener,
 // but does not close the last opened session.
 func (z *Zeroconf) Close() {

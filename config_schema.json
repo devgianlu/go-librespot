@@ -70,6 +70,11 @@
           "description": "Which port to use for the API server, leave empty to disable",
           "default": 0
         },
+        "zeroconf_enabled": {
+          "type": "boolean",
+          "description": "Whether Zeroconf discovery should always be enabled (even when logging in with credentials)",
+          "default": false
+        },
         "credentials": {
           "type": "object",
           "properties": {
@@ -116,7 +121,11 @@
         "bitrate": {
           "type": "integer",
           "description": "The preferred bitrate for audio playback, default is 160kbps",
-          "enum": [96, 160, 320],
+          "enum": [
+            96,
+            160,
+            320
+          ],
           "default": 160
         },
         "volume_steps": {

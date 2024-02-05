@@ -20,7 +20,8 @@ type AppPlayer struct {
 	app  *App
 	sess *session.Session
 
-	stop chan struct{}
+	stop   chan struct{}
+	logout chan *AppPlayer
 
 	player *player.Player
 
@@ -73,9 +74,9 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 
 		p.updateVolume(uint32(setVolCmd.Volume))
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/logout") {
-		// TODO: we should do this only when using zeroconf (?)
-		log.Infof("logging out from %s", p.sess.Username())
-		p.Close()
+		// this should happen only with zeroconf enabled
+		log.Debugf("requested logout out from %s", p.sess.Username())
+		p.logout <- p
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
 		var clusterUpdate connectpb.ClusterUpdate
 		if err := proto.Unmarshal(msg.Payload, &clusterUpdate); err != nil {
