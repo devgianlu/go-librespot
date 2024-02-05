@@ -16,6 +16,7 @@ import (
 	"go-librespot/dh"
 	pb "go-librespot/proto/spotify"
 	"golang.org/x/crypto/pbkdf2"
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net"
@@ -286,9 +287,15 @@ loop:
 
 	ap.recvChansLock.RLock()
 	defer ap.recvChansLock.RUnlock()
+
+	var closedChannels []chan Packet
 	for _, ll := range ap.recvChans {
 		for _, ch := range ll {
-			close(ch)
+			// call close on each channel only once
+			if !slices.Contains(closedChannels, ch) {
+				closedChannels = append(closedChannels, ch)
+				close(ch)
+			}
 		}
 	}
 }
