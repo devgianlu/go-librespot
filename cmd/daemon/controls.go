@@ -387,8 +387,8 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 	}
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(!hasNextTrack); errors.Is(err, librespot.ErrMediaRestricted) {
-		log.Infof("skipping restricted track: %s", uri)
+	if err := p.loadCurrentTrack(!hasNextTrack); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
+		log.WithError(err).Infof("skipping unplayable media: %s", uri)
 		if forceNext {
 			// we failed in finding another track to play, just stop
 			return false, err
