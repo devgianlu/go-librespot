@@ -100,7 +100,9 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed inactive state put: %w", err)
 		}
 
-		// TODO: logout if using zeroconf (?)
+		if p.app.cfg.ZeroconfEnabled {
+			p.logout <- p
+		}
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeInactive,
