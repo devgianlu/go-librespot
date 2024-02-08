@@ -17,6 +17,9 @@ type List struct {
 	shuffleLen  int
 	shuffleKeep int
 	tracks      *pagedList[*connectpb.ContextTrack]
+
+	playingQueue bool
+	queue        []*connectpb.ContextTrack
 }
 
 func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *List, err error) {
@@ -72,7 +75,7 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	iter := tl.tracks.iterHere()
 	for len(tracks) < MaxTracksInContext && iter.prev() {
 		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item, "context"))
 	}
 
 	if err := iter.error(); err != nil {
@@ -85,10 +88,21 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 func (tl *List) NextTracks() []*connectpb.ProvidedTrack {
 	tracks := make([]*connectpb.ProvidedTrack, 0, MaxTracksInContext)
 
+	if len(tl.queue) > 0 {
+		queue := tl.queue
+		if tl.playingQueue {
+			queue = queue[1:]
+		}
+
+		for i := 0; i < len(queue) && len(tracks) < MaxTracksInContext; i++ {
+			tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), queue[i], "queue"))
+		}
+	}
+
 	iter := tl.tracks.iterHere()
 	for len(tracks) < MaxTracksInContext && iter.next() {
 		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item, "context"))
 	}
 
 	if err := iter.error(); err != nil {
@@ -99,17 +113,32 @@ func (tl *List) NextTracks() []*connectpb.ProvidedTrack {
 }
 
 func (tl *List) Index() *connectpb.ContextIndex {
+	if tl.playingQueue {
+		return &connectpb.ContextIndex{}
+	}
+
 	curr := tl.tracks.get()
 	return &connectpb.ContextIndex{Page: uint32(curr.pageIdx), Track: uint32(curr.itemIdx)}
 }
 
 func (tl *List) current() *connectpb.ContextTrack {
+	if tl.playingQueue {
+		return tl.queue[0]
+	}
+
 	curr := tl.tracks.get()
 	return curr.item
 }
 
 func (tl *List) CurrentTrack() *connectpb.ProvidedTrack {
-	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), tl.current())
+	var provider string
+	if tl.playingQueue {
+		provider = "queue"
+	} else {
+		provider = "context"
+	}
+
+	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), tl.current(), provider)
 }
 
 func (tl *List) GoStart() bool {
@@ -122,6 +151,17 @@ func (tl *List) GoStart() bool {
 }
 
 func (tl *List) GoNext() bool {
+	if tl.playingQueue {
+		tl.queue = tl.queue[1:]
+	}
+
+	if len(tl.queue) > 0 {
+		tl.playingQueue = true
+		return true
+	}
+
+	tl.playingQueue = false
+
 	iter := tl.tracks.iterHere()
 	if iter.next() {
 		tl.tracks.move(iter)
@@ -136,6 +176,10 @@ func (tl *List) GoNext() bool {
 }
 
 func (tl *List) GoPrev() bool {
+	if tl.playingQueue {
+		tl.playingQueue = false
+	}
+
 	iter := tl.tracks.iterHere()
 	if iter.prev() {
 		tl.tracks.move(iter)
@@ -147,6 +191,28 @@ func (tl *List) GoPrev() bool {
 	}
 
 	return false
+}
+
+func (tl *List) AddToQueue(track *connectpb.ContextTrack) {
+	track.Metadata["is_queued"] = "true"
+	tl.queue = append(tl.queue, track)
+}
+
+func (tl *List) SetQueue(_ []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
+	tl.queue = nil
+
+	// I don't know if this good enough, but it surely saves us a lot of complicated code
+	for _, track := range next {
+		if queued, ok := track.Metadata["is_queued"]; !ok || queued != "true" {
+			continue
+		}
+
+		tl.queue = append(tl.queue, track)
+	}
+}
+
+func (tl *List) SetPlayingQueue(val bool) {
+	tl.playingQueue = len(tl.queue) > 0 && val
 }
 
 func (tl *List) ToggleShuffle(shuffle bool) error {

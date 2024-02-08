@@ -158,11 +158,8 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			p.state.player.ContextMetadata[k] = v
 		}
 
-		// queue
-		// TODO: transfer queue
-
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
-		currentTrack := librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
+		currentTrack := librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack, "context")
 		if err := ctxTracks.TrySeek(tracks.ProvidedTrackComparator(contextSpotType, currentTrack)); err != nil {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
@@ -171,6 +168,12 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		if err := ctxTracks.ToggleShuffle(transferState.Options.ShufflingContext); err != nil {
 			return fmt.Errorf("failed shuffling context")
 		}
+
+		// add all tracks from queue
+		for _, track := range transferState.Queue.Tracks {
+			ctxTracks.AddToQueue(track)
+		}
+		ctxTracks.SetPlayingQueue(true)
 
 		p.state.tracks = ctxTracks
 		p.state.player.Track = ctxTracks.CurrentTrack()
@@ -254,6 +257,18 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		return nil
 	case "set_shuffling_context":
 		p.setShufflingContext(req.Command.Value.(bool))
+		return nil
+	case "set_queue":
+		p.state.tracks.SetQueue(req.Command.PrevTracks, req.Command.NextTracks)
+		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.updateState()
+		return nil
+	case "add_to_queue":
+		p.state.tracks.AddToQueue(req.Command.Track)
+		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.updateState()
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)

@@ -44,14 +44,17 @@ type RequestPayload struct {
 	TargetAliasId  string `json:"target_alias_id"`
 	SentByDeviceId string `json:"sent_by_device_id"`
 	Command        struct {
-		Endpoint      string                `json:"endpoint"`
-		SessionId     string                `json:"session_id"`
-		Data          []byte                `json:"data"`
-		Value         interface{}           `json:"value"`
-		Position      int64                 `json:"position"`
-		Relative      string                `json:"relative"`
-		Context       *connectpb.Context    `json:"context"`
-		PlayOrigin    *connectpb.PlayOrigin `json:"play_origin"`
+		Endpoint      string                    `json:"endpoint"`
+		SessionId     string                    `json:"session_id"`
+		Data          []byte                    `json:"data"`
+		Value         interface{}               `json:"value"`
+		Position      int64                     `json:"position"`
+		Relative      string                    `json:"relative"`
+		Context       *connectpb.Context        `json:"context"`
+		PlayOrigin    *connectpb.PlayOrigin     `json:"play_origin"`
+		Track         *connectpb.ContextTrack   `json:"track"`
+		PrevTracks    []*connectpb.ContextTrack `json:"prev_tracks"`
+		NextTracks    []*connectpb.ContextTrack `json:"next_tracks"`
 		LoggingParams struct {
 			CommandInitiatedTime int64    `json:"command_initiated_time"`
 			PageInstanceIds      []string `json:"page_instance_ids"`
