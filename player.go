@@ -5,7 +5,10 @@ import (
 	metadatapb "go-librespot/proto/spotify/metadata"
 )
 
-var ErrMediaRestricted = errors.New("media is restricted")
+var (
+	ErrMediaRestricted    = errors.New("media is restricted")
+	ErrNoSupportedFormats = errors.New("no supported formats")
+)
 
 type Media struct {
 	track   *metadatapb.Track

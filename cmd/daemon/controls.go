@@ -160,7 +160,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 
 	stream, err := p.player.NewStream(spotId, *p.app.cfg.Bitrate, trackPosition, paused)
 	if err != nil {
-		return fmt.Errorf("failed creating stream: %w", err)
+		return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
 	}
 
 	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", stream.Media.Name(), spotId.Uri(), paused, trackPosition, stream.Media.Duration())

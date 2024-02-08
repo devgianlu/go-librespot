@@ -74,6 +74,10 @@ func (id SpotifyId) Uri() string {
 	return fmt.Sprintf("spotify:%s:%s", id.Type(), id.Base62())
 }
 
+func (id SpotifyId) String() string {
+	return id.Uri()
+}
+
 func GidToBase62(id []byte) string {
 	s := new(big.Int).SetBytes(id).Text(62)
 	return strings.Repeat("0", 22-len(s)) + s

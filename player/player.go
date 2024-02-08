@@ -261,7 +261,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 
 		file = selectBestMediaFormat(trackMeta.File, bitrate)
 		if file == nil {
-			return nil, fmt.Errorf("no playable formats for %s", spotId.Uri())
+			return nil, librespot.ErrNoSupportedFormats
 		}
 	} else if spotId.Type() == librespot.SpotifyIdTypeEpisode {
 		episodeMeta, err := p.sp.MetadataForEpisode(spotId)
@@ -276,7 +276,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 
 		file = selectBestMediaFormat(episodeMeta.Audio, bitrate)
 		if file == nil {
-			return nil, fmt.Errorf("no playable formats for %s", spotId.Uri())
+			return nil, librespot.ErrNoSupportedFormats
 		}
 	} else {
 		return nil, fmt.Errorf("unsupported spotify type: %s", spotId.Type())
