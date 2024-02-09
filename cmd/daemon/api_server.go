@@ -270,7 +270,7 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -278,13 +278,13 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/player/play", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
 		var data ApiRequestDataPlay
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -292,7 +292,7 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/player/resume", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -300,7 +300,7 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/player/pause", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -308,7 +308,7 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/player/next", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -316,7 +316,7 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/player/prev", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -324,7 +324,7 @@ func (s *ApiServer) serve() {
 	})
 	m.HandleFunc("/player/seek", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 
@@ -332,7 +332,7 @@ func (s *ApiServer) serve() {
 			Position int64 `json:"position"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
@@ -346,74 +346,78 @@ func (s *ApiServer) serve() {
 				Volume uint32 `json:"volume"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
+				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
 			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data.Volume}, w)
 		} else {
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})
 	m.HandleFunc("/player/repeat_context", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			var data struct {
-				Repeat bool `json:"repeat_context"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingContext, Data: data.Repeat}, w)
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+
+		var data struct {
+			Repeat bool `json:"repeat_context"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingContext, Data: data.Repeat}, w)
 	})
 	m.HandleFunc("/player/repeat_track", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			var data struct {
-				Repeat bool `json:"repeat_track"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingTrack, Data: data.Repeat}, w)
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+
+		var data struct {
+			Repeat bool `json:"repeat_track"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingTrack, Data: data.Repeat}, w)
 	})
 	m.HandleFunc("/player/shuffle_context", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			var data struct {
-				Shuffle bool `json:"shuffle_context"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.Shuffle}, w)
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+
+		var data struct {
+			Shuffle bool `json:"shuffle_context"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.Shuffle}, w)
 	})
 	m.HandleFunc("/player/add_to_queue", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "POST" {
-			var data struct {
-				Uri string `json:"uri"`
-			}
-			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
 		}
+
+		var data struct {
+			Uri string `json:"uri"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, nil)
