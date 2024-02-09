@@ -179,61 +179,59 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	return nil
 }
 
-func (p *AppPlayer) setRepeatingContext(val bool) {
-	if val == p.state.player.Options.RepeatingContext {
-		return
+func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
+	var requiresUpdate bool
+	if repeatingContext != nil && *repeatingContext != p.state.player.Options.RepeatingContext {
+		p.state.player.Options.RepeatingContext = *repeatingContext
+
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeRepeatContext,
+			Data: ApiEventDataRepeatContext{
+				Value: *repeatingContext,
+			},
+		})
+
+		requiresUpdate = true
 	}
 
-	p.state.player.Options.RepeatingContext = val
-	p.updateState()
+	if repeatingTrack != nil && *repeatingTrack != p.state.player.Options.RepeatingTrack {
+		p.state.player.Options.RepeatingTrack = *repeatingTrack
 
-	p.app.server.Emit(&ApiEvent{
-		Type: ApiEventTypeRepeatContext,
-		Data: ApiEventDataRepeatContext{
-			Value: val,
-		},
-	})
-}
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeRepeatTrack,
+			Data: ApiEventDataRepeatTrack{
+				Value: *repeatingTrack,
+			},
+		})
 
-func (p *AppPlayer) setRepeatingTrack(val bool) {
-	if val == p.state.player.Options.RepeatingTrack {
-		return
+		requiresUpdate = true
 	}
 
-	p.state.player.Options.RepeatingTrack = val
-	p.updateState()
+	if shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
+		if err := p.state.tracks.ToggleShuffle(*shufflingContext); err != nil {
+			log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
+			return
+		}
 
-	p.app.server.Emit(&ApiEvent{
-		Type: ApiEventTypeRepeatTrack,
-		Data: ApiEventDataRepeatTrack{
-			Value: val,
-		},
-	})
-}
+		p.state.player.Options.ShufflingContext = *shufflingContext
+		p.state.player.Track = p.state.tracks.CurrentTrack()
+		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.state.player.Index = p.state.tracks.Index()
 
-func (p *AppPlayer) setShufflingContext(val bool) {
-	if val == p.state.player.Options.ShufflingContext {
-		return
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeShuffleContext,
+			Data: ApiEventDataShuffleContext{
+				Value: *shufflingContext,
+			},
+		})
+
+		requiresUpdate = true
 	}
 
-	if err := p.state.tracks.ToggleShuffle(val); err != nil {
-		log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", val)
-		return
+	if requiresUpdate {
+		p.updateState()
 	}
-
-	p.state.player.Options.ShufflingContext = val
-	p.state.player.Track = p.state.tracks.CurrentTrack()
-	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks()
-	p.state.player.Index = p.state.tracks.Index()
-	p.updateState()
-
-	p.app.server.Emit(&ApiEvent{
-		Type: ApiEventTypeShuffleContext,
-		Data: ApiEventDataShuffleContext{
-			Value: val,
-		},
-	})
 }
 
 func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {

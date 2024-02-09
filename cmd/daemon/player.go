@@ -250,13 +250,19 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.updateState()
 		return nil
 	case "set_repeating_context":
-		p.setRepeatingContext(req.Command.Value.(bool))
+		val := req.Command.Value.(bool)
+		p.setOptions(&val, nil, nil)
 		return nil
 	case "set_repeating_track":
-		p.setRepeatingTrack(req.Command.Value.(bool))
+		val := req.Command.Value.(bool)
+		p.setOptions(nil, &val, nil)
 		return nil
 	case "set_shuffling_context":
-		p.setShufflingContext(req.Command.Value.(bool))
+		val := req.Command.Value.(bool)
+		p.setOptions(nil, nil, &val)
+		return nil
+	case "set_options":
+		p.setOptions(req.Command.RepeatingContext, req.Command.RepeatingTrack, req.Command.ShufflingContext)
 		return nil
 	case "set_queue":
 		p.setQueue(req.Command.PrevTracks, req.Command.NextTracks)
@@ -355,13 +361,16 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		p.updateVolume(vol * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
-		p.setRepeatingContext(req.Data.(bool))
+		val := req.Data.(bool)
+		p.setOptions(&val, nil, nil)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingTrack:
-		p.setRepeatingTrack(req.Data.(bool))
+		val := req.Data.(bool)
+		p.setOptions(nil, &val, nil)
 		return nil, nil
 	case ApiRequestTypeSetShufflingContext:
-		p.setShufflingContext(req.Data.(bool))
+		val := req.Data.(bool)
+		p.setOptions(nil, nil, &val)
 		return nil, nil
 	case ApiRequestTypeAddToQueue:
 		p.addToQueue(&connectpb.ContextTrack{Uri: req.Data.(string)})

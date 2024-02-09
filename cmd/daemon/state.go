@@ -88,13 +88,13 @@ func (p *AppPlayer) initState() {
 				SupportsPlaylistV2:         true,
 				IsControllable:             true,
 				SupportsExternalEpisodes:   false, // TODO: support external episodes
-				SupportsSetBackendMetadata: false,
+				SupportsSetBackendMetadata: true,
 				SupportsTransferCommand:    true,
 				SupportsCommandRequest:     true,
 				IsVoiceEnabled:             false,
 				NeedsFullPlayerState:       false,
 				SupportsGzipPushes:         true,
-				SupportsSetOptionsCommand:  false,
+				SupportsSetOptionsCommand:  true,
 				SupportsHifi:               nil, // TODO: nice to have?
 				ConnectCapabilities:        "",
 			},
