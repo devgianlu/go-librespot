@@ -259,16 +259,10 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.setShufflingContext(req.Command.Value.(bool))
 		return nil
 	case "set_queue":
-		p.state.tracks.SetQueue(req.Command.PrevTracks, req.Command.NextTracks)
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
-		p.updateState()
+		p.setQueue(req.Command.PrevTracks, req.Command.NextTracks)
 		return nil
 	case "add_to_queue":
-		p.state.tracks.AddToQueue(req.Command.Track)
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
-		p.updateState()
+		p.addToQueue(req.Command.Track)
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)

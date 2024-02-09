@@ -236,6 +236,20 @@ func (p *AppPlayer) setShufflingContext(val bool) {
 	})
 }
 
+func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
+	p.state.tracks.AddToQueue(track)
+	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+	p.state.player.NextTracks = p.state.tracks.NextTracks()
+	p.updateState()
+}
+
+func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
+	p.state.tracks.SetQueue(prev, next)
+	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+	p.state.player.NextTracks = p.state.tracks.NextTracks()
+	p.updateState()
+}
+
 func (p *AppPlayer) play() error {
 	if p.stream == nil {
 		return fmt.Errorf("no stream")
