@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  version: 0.0.8
+  version: 0.0.13
   title: go-librespot API
   description: go-librespot daemon API
 
@@ -233,6 +233,22 @@ paths:
                 shuffle_context:
                   description: Whether shuffling context should be enabled
                   type: boolean
+                  required: true
+      responses:
+        200:
+          description: Successful response
+  /player/add_to_queue:
+    post:
+      description: Add a track to the queue
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uri:
+                  description: The URI for the track that should be added
+                  type: string
                   required: true
       responses:
         200:

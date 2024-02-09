@@ -363,6 +363,9 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeSetShufflingContext:
 		p.setShufflingContext(req.Data.(bool))
 		return nil, nil
+	case ApiRequestTypeAddToQueue:
+		p.addToQueue(&connectpb.ContextTrack{Uri: req.Data.(string)})
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}

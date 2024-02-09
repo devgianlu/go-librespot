@@ -45,6 +45,7 @@ const (
 	ApiRequestTypeSetRepeatingContext ApiRequestType = "repeating_context"
 	ApiRequestTypeSetRepeatingTrack   ApiRequestType = "repeating_track"
 	ApiRequestTypeSetShufflingContext ApiRequestType = "shuffling_context"
+	ApiRequestTypeAddToQueue          ApiRequestType = "add_to_queue"
 )
 
 type ApiEventType string
@@ -395,6 +396,21 @@ func (s *ApiServer) serve() {
 			}
 
 			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.Shuffle}, w)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	})
+	m.HandleFunc("/player/add_to_queue", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			var data struct {
+				Uri string `json:"uri"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
 		} else {
 			w.WriteHeader(http.StatusBadRequest)
 		}
