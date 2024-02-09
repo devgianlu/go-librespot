@@ -173,7 +173,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		for _, track := range transferState.Queue.Tracks {
 			ctxTracks.AddToQueue(track)
 		}
-		ctxTracks.SetPlayingQueue(true)
+		ctxTracks.SetPlayingQueue(transferState.Queue.IsPlayingQueue)
 
 		p.state.tracks = ctxTracks
 		p.state.player.Track = ctxTracks.CurrentTrack()
