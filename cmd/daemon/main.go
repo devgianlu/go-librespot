@@ -99,7 +99,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 }
 
 func (app *App) Zeroconf() error {
-	return app.withAppPlayer(nil)
+	return app.withAppPlayer(func() (*AppPlayer, error) { return nil, nil })
 }
 
 func (app *App) SpotifyToken(username, token string) error {
@@ -143,37 +143,40 @@ func (app *App) withCredentials(creds any) (err error) {
 		log.Debugf("stored credentials not found")
 	}
 
-	var appPlayer *AppPlayer
-	if len(storedCredentials) > 0 {
-		appPlayer, err = app.newAppPlayer(session.StoredCredentials{Username: username, Data: storedCredentials})
-		if err != nil {
-			return err
-		}
-	} else {
-		appPlayer, err = app.newAppPlayer(creds)
-		if err != nil {
-			return err
-		}
+	return app.withAppPlayer(func() (*AppPlayer, error) {
+		if len(storedCredentials) > 0 {
+			return app.newAppPlayer(session.StoredCredentials{Username: username, Data: storedCredentials})
+		} else {
+			appPlayer, err := app.newAppPlayer(creds)
+			if err != nil {
+				return nil, err
+			}
 
-		if content, err := json.Marshal(&storedCredentialsFile{
-			Username: appPlayer.sess.Username(),
-			Data:     appPlayer.sess.StoredCredentials(),
-		}); err != nil {
-			return fmt.Errorf("failed marshalling stored credentials: %w", err)
-		} else if err := os.WriteFile(app.cfg.CredentialsPath, content, 0600); err != nil {
-			return fmt.Errorf("failed writing stored credentials file: %w", err)
+			// store credentials outside this context in case we get called again
+			storedCredentials = appPlayer.sess.StoredCredentials()
+
+			if content, err := json.Marshal(&storedCredentialsFile{
+				Username: appPlayer.sess.Username(),
+				Data:     appPlayer.sess.StoredCredentials(),
+			}); err != nil {
+				return nil, fmt.Errorf("failed marshalling stored credentials: %w", err)
+			} else if err := os.WriteFile(app.cfg.CredentialsPath, content, 0600); err != nil {
+				return nil, fmt.Errorf("failed writing stored credentials file: %w", err)
+			}
+
+			log.Debugf("stored credentials for %s", appPlayer.sess.Username())
+			return appPlayer, nil
 		}
-
-		log.Debugf("stored credentials for %s", appPlayer.sess.Username())
-	}
-
-	return app.withAppPlayer(appPlayer)
+	})
 }
 
-func (app *App) withAppPlayer(appPlayer *AppPlayer) (err error) {
+func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err error) {
 	// if zeroconf is disabled, there is not much we need to do
 	if !app.cfg.ZeroconfEnabled {
-		if appPlayer == nil {
+		appPlayer, err := appPlayerFunc()
+		if err != nil {
+			return err
+		} else if appPlayer == nil {
 			panic("zeroconf is disabled and no credentials are present")
 		}
 
@@ -192,21 +195,22 @@ func (app *App) withAppPlayer(appPlayer *AppPlayer) (err error) {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
 
-	var currentPlayer *AppPlayer
 	var apiCh chan ApiRequest
 
+	currentPlayer, err := appPlayerFunc()
+	if err != nil {
+		return err
+	}
+
 	// set current player to the provided one if we have it
-	if appPlayer != nil {
-		log.Debugf("initializing zeroconf with provided player, username: %s", appPlayer.sess.Username())
+	if currentPlayer != nil {
+		log.Debugf("initializing zeroconf session, username: %s", currentPlayer.sess.Username())
 
-		// first create the channel and then assign the current session
 		apiCh = make(chan ApiRequest)
-		currentPlayer = appPlayer
-
-		go appPlayer.Run(apiCh)
+		go currentPlayer.Run(apiCh)
 
 		// let zeroconf know that we already have a user
-		z.SetCurrentUser(appPlayer.sess.Username())
+		z.SetCurrentUser(currentPlayer.sess.Username())
 	}
 
 	// forward API requests to proper channel only if a session is present
@@ -241,8 +245,26 @@ func (app *App) withAppPlayer(appPlayer *AppPlayer) (err error) {
 				// close the channel after setting the current session to nil
 				close(apiCh)
 
-				// unset the zeroconf user
-				z.SetCurrentUser("")
+				// restore the session if there is one.
+				// we will restore the session even if it's for the same user, but it shouldn't be an issue
+				newAppPlayer, err := appPlayerFunc()
+				if err != nil {
+					log.WithError(err).Errorf("failed restoring session after logout")
+				} else if newAppPlayer == nil {
+					// unset the zeroconf user
+					z.SetCurrentUser("")
+				} else {
+					// first create the channel and then assign the current session
+					apiCh = make(chan ApiRequest)
+					currentPlayer = newAppPlayer
+
+					go newAppPlayer.Run(apiCh)
+
+					// let zeroconf know that we already have a user
+					z.SetCurrentUser(newAppPlayer.sess.Username())
+
+					log.Debugf("restored session after logout, username: %s", currentPlayer.sess.Username())
+				}
 			}
 		}
 	}()
