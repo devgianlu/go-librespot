@@ -163,6 +163,16 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == 503 {
+		log.Debugf("storage resolve returned service unavailable, retring...")
+		_ = resp.Body.Close()
+
+		resp, err = c.request("GET", path, nil, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("invalid status code from storage resolve: %d", resp.StatusCode)
 	}
