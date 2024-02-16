@@ -29,6 +29,8 @@ func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *
 		return nil, fmt.Errorf("failed initializing context resolver: %w", err)
 	}
 
+	log.Debugf("resolved context %s", tl.ctx.Uri())
+
 	tl.tracks = newPagedList[*connectpb.ContextTrack](tl.ctx)
 	return tl, nil
 }
