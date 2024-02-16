@@ -83,6 +83,7 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 
 	p.state.player.ContextUri = ctx.Uri
 	p.state.player.ContextUrl = ctx.Url
+	p.state.player.Restrictions = ctx.Restrictions
 	p.state.player.ContextRestrictions = ctx.Restrictions
 
 	if p.state.player.ContextMetadata == nil {
