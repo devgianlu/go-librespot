@@ -341,22 +341,19 @@ func (p *AppPlayer) skipPrev() error {
 }
 
 func (p *AppPlayer) skipNext() error {
-	if p.state.tracks != nil {
-		log.Debug("skip next track")
-		p.state.tracks.GoNext()
-
-		p.state.player.Track = p.state.tracks.CurrentTrack()
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
-		p.state.player.Index = p.state.tracks.Index()
+	hasNextTrack, err := p.advanceNext(true)
+	if err != nil {
+		return fmt.Errorf("failed skipping to next track: %w", err)
 	}
 
-	p.state.player.Timestamp = time.Now().UnixMilli()
-	p.state.player.PositionAsOfTimestamp = 0
-
-	// load current track into stream
-	if err := p.loadCurrentTrack(p.state.player.IsPaused); err != nil {
-		return fmt.Errorf("failed loading current track (skip next): %w", err)
+	// if no track to be played, just stop
+	if !hasNextTrack {
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeStopped,
+			Data: ApiEventDataStopped{
+				PlayOrigin: p.state.playOrigin(),
+			},
+		})
 	}
 
 	return nil
@@ -374,8 +371,13 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 			hasNextTrack = p.state.tracks.GoNext()
 
 			// if we could not get the next track we probably ended the context
-			if !hasNextTrack && p.state.player.Options.RepeatingContext {
+			if !hasNextTrack {
 				hasNextTrack = p.state.tracks.GoStart()
+
+				// if repeating is disabled move to the first track, but do not start it
+				if !p.state.player.Options.RepeatingContext {
+					hasNextTrack = false
+				}
 			}
 
 			p.state.player.IsPaused = !hasNextTrack
