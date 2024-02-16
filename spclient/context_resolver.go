@@ -117,6 +117,7 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
 		}
 
 		r.ctx.Pages[idx] = newPage
+		page = newPage
 	}
 
 	if len(page.Tracks) == 0 {
