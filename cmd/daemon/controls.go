@@ -7,7 +7,9 @@ import (
 	librespot "go-librespot"
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate"
+	playerpb "go-librespot/proto/spotify/player"
 	"go-librespot/tracks"
+	"google.golang.org/protobuf/proto"
 	"math"
 	"time"
 )
@@ -394,6 +396,31 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
+
+	if !hasNextTrack && p.prodInfo.AutoplayEnabled() {
+		p.state.player.Suppressions = &connectpb.Suppressions{}
+
+		var prevTrackUris []string
+		for _, track := range p.state.tracks.PrevTracks() {
+			prevTrackUris = append(prevTrackUris, track.Uri)
+		}
+
+		ctx, err := p.sess.Spclient().ContextResolveAutoplay(&playerpb.AutoplayContextRequest{
+			ContextUri:     proto.String(p.state.player.ContextUri),
+			RecentTrackUri: prevTrackUris,
+		})
+		if err != nil {
+			log.WithError(err).Warnf("failed resolving station for %s", p.state.player.ContextUri)
+			return false, nil
+		}
+
+		if err := p.loadContext(ctx, func(_ *connectpb.ContextTrack) bool { return true }, false); err != nil {
+			log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
+			return false, nil
+		}
+
+		return true, nil
+	}
 
 	if !hasNextTrack {
 		p.state.player.IsPlaying = false

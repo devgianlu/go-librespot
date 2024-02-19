@@ -133,14 +133,18 @@ func (tl *List) current() *connectpb.ContextTrack {
 }
 
 func (tl *List) CurrentTrack() *connectpb.ProvidedTrack {
+	item := tl.current()
+
 	var provider string
-	if tl.playingQueue {
+	if autoplay, ok := item.Metadata["autoplay.is_autoplay"]; ok && autoplay == "true" {
+		provider = "autoplay"
+	} else if tl.playingQueue {
 		provider = "queue"
 	} else {
 		provider = "context"
 	}
 
-	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), tl.current(), provider)
+	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), item, provider)
 }
 
 func (tl *List) GoStart() bool {
