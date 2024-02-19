@@ -17,27 +17,34 @@ type ContextResolver struct {
 	ctx *connectpb.Context
 }
 
-func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (*ContextResolver, error) {
+func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(ctx.Uri)
-	if len(ctx.Pages) > 0 {
-		return &ContextResolver{sp, typ, ctx}, nil
-	} else {
-		newCtx, err := sp.ContextResolve(ctx.Uri)
+	if len(ctx.Pages) == 0 {
+		ctx, err = sp.ContextResolve(ctx.Uri)
 		if err != nil {
 			return nil, fmt.Errorf("failed resolving context %s: %w", ctx.Uri, err)
-		} else if newCtx.Loading {
-			return nil, fmt.Errorf("context %s is loading", newCtx.Uri)
+		} else if ctx.Loading {
+			return nil, fmt.Errorf("context %s is loading", ctx.Uri)
 		}
 
-		if newCtx.Metadata == nil {
-			newCtx.Metadata = map[string]string{}
+		if ctx.Metadata == nil {
+			ctx.Metadata = map[string]string{}
 		}
 		for key, val := range ctx.Metadata {
-			newCtx.Metadata[key] = val
+			ctx.Metadata[key] = val
 		}
-
-		return &ContextResolver{sp, typ, newCtx}, nil
 	}
+
+	autoplay := strings.HasPrefix(ctx.Uri, "spotify:station:")
+	for _, page := range ctx.Pages {
+		for _, track := range page.Tracks {
+			if autoplay {
+				track.Metadata["autoplay.is_autoplay"] = "true"
+			}
+		}
+	}
+
+	return &ContextResolver{sp, typ, ctx}, nil
 }
 
 func (r *ContextResolver) Type() librespot.SpotifyIdType {

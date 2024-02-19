@@ -11,6 +11,7 @@ import (
 	connectpb "go-librespot/proto/spotify/connectstate"
 	storagepb "go-librespot/proto/spotify/download"
 	metadatapb "go-librespot/proto/spotify/metadata"
+	playerpb "go-librespot/proto/spotify/player"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
@@ -258,6 +259,36 @@ func (c *Spclient) ContextResolve(uri string) (*connectpb.Context, error) {
 
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("invalid status code from context resolve: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var context connectpb.Context
+	if err := json.Unmarshal(respBytes, &context); err != nil {
+		return nil, fmt.Errorf("failed json unmarshalling Context: %w", err)
+	}
+
+	return &context, nil
+}
+
+func (c *Spclient) ContextResolveAutoplay(reqProto *playerpb.AutoplayContextRequest) (*connectpb.Context, error) {
+	reqBody, err := proto.Marshal(reqProto)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling AutoplayContextRequest: %w", err)
+	}
+
+	resp, err := c.request("POST", "/context-resolve/v1/autoplay", nil, nil, reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from context resolve autoplay: %d", resp.StatusCode)
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
