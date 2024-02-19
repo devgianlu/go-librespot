@@ -12,9 +12,14 @@ type ProductInfo struct {
 		Type         string   `xml:"type"`
 		HeadFilesUrl string   `xml:"head-files-url"`
 		ImageUrl     string   `xml:"image-url"`
+		Autoplay     string   `xml:"autoplay"`
 	} `xml:"product"`
 }
 
 func (pi ProductInfo) ImageUrl(fileId string) string {
 	return strings.Replace(pi.Products[0].ImageUrl, "{file_id}", strings.ToLower(fileId), 1)
+}
+
+func (pi ProductInfo) AutoplayEnabled() bool {
+	return pi.Products[0].Autoplay == "1"
 }
