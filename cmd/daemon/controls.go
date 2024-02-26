@@ -53,7 +53,6 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 
 		hasNextTrack, err := p.advanceNext(false)
 		if err != nil {
-			// TODO: move into stopped state
 			log.WithError(err).Error("failed advancing to next track")
 		}
 

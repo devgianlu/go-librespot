@@ -29,7 +29,6 @@ type AppPlayer struct {
 
 	spotConnId string
 
-	// TODO: can this be factored better?
 	prodInfo    *ProductInfo
 	countryCode *string
 

@@ -315,7 +315,6 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("failed initializing chunked reader: %w", err)
 	}
 
-	// TODO: consider decrypting in the HttpChunkedReader
 	decryptedStream, err := audio.NewAesAudioDecryptor(rawStream, audioKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
