@@ -451,6 +451,11 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 		newVal = 0
 	}
 
+	// skip volume update
+	if newVal == p.state.device.Volume {
+		return
+	}
+
 	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
 	p.player.SetVolume(newVal)
 	p.state.device.Volume = newVal
