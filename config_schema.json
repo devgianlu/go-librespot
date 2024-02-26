@@ -134,6 +134,12 @@
           "min": 1,
           "default": 100
         },
+        "initial_volume": {
+          "type": "integer",
+          "description": "Initial volume in steps",
+          "min": 0,
+          "default": 100
+        },
         "normalisation_disabled": {
           "type": "boolean",
           "description": "Whether track/album normalisation should be disabled",

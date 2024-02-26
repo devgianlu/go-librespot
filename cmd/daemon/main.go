@@ -311,6 +311,7 @@ type Config struct {
 	AudioDevice           *string  `yaml:"audio_device"`
 	Bitrate               *int     `yaml:"bitrate"`
 	VolumeSteps           *uint32  `yaml:"volume_steps"`
+	InitialVolume         *uint32  `yaml:"initial_volume"`
 	NormalisationDisabled bool     `yaml:"normalisation_disabled"`
 	NormalisationPregain  *float32 `yaml:"normalisation_pregain"`
 	ExternalVolume        bool     `yaml:"external_volume"`
@@ -365,6 +366,10 @@ func loadConfig(cfg *Config) error {
 	if cfg.VolumeSteps == nil {
 		cfg.VolumeSteps = new(uint32)
 		*cfg.VolumeSteps = 100
+	}
+	if cfg.InitialVolume == nil {
+		cfg.InitialVolume = new(uint32)
+		*cfg.InitialVolume = 100
 	}
 	if cfg.NormalisationPregain == nil {
 		cfg.NormalisationPregain = new(float32)

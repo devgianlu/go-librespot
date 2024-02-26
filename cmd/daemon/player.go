@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"math"
 	"strings"
+	"sync"
 )
 
 type AppPlayer struct {
@@ -23,7 +24,8 @@ type AppPlayer struct {
 	stop   chan struct{}
 	logout chan *AppPlayer
 
-	player *player.Player
+	player            *player.Player
+	initialVolumeOnce sync.Once
 
 	spotConnId string
 
@@ -66,6 +68,11 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 		if err := p.putConnectState(connectpb.PutStateReason_NEW_DEVICE); err != nil {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
+
+		// update initial volume
+		p.initialVolumeOnce.Do(func() {
+			p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
+		})
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/volume") {
 		var setVolCmd connectpb.SetVolumeCommand
 		if err := proto.Unmarshal(msg.Payload, &setVolCmd); err != nil {
