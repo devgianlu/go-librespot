@@ -74,7 +74,7 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 }
 
 func (out *output) alsaError(name string, err C.int) error {
-	if err == -unix.EPIPE {
+	if errors.Is(unix.Errno(-err), unix.EPIPE) {
 		_ = out.Close()
 	}
 
