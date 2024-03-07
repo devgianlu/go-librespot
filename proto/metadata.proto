@@ -297,6 +297,10 @@ message AudioFile {
     AAC_24 = 8;
     AAC_48 = 9;
     FLAC_FLAC = 16;
+    XHE_AAC_24 = 18;
+    XHE_AAC_16 = 19;
+    XHE_AAC_12 = 20;
+    FLAC_FLAC_24BIT = 22;
   }
 }
 
