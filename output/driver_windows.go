@@ -391,6 +391,14 @@ func (out *output) SetVolume(vol float32) {
 	out.volume = vol
 }
 
+func (c *output) Drop() error {
+	return nil
+}
+
+func (c *output) DelayMs() (int64, error) {
+	return 0, nil
+}
+
 func (out *output) WaitDone() <-chan error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
