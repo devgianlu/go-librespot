@@ -82,6 +82,11 @@
               "type": "integer",
               "description": "Which port to bind for the API server",
               "default": 0
+            },
+            "allow_origin": {
+              "type": "string",
+              "description": "The value for the Access-Control-Allow-Origin header",
+              "default": ""
             }
           }
         },

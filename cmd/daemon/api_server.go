@@ -19,6 +19,8 @@ import (
 const timeout = 10 * time.Second
 
 type ApiServer struct {
+	allowOrigin string
+
 	close    bool
 	listener net.Listener
 
@@ -226,8 +228,8 @@ type ApiEventDataShuffleContext struct {
 	Value bool `json:"value"`
 }
 
-func NewApiServer(address string, port int) (_ *ApiServer, err error) {
-	s := &ApiServer{}
+func NewApiServer(address string, port int, allowOrigin string) (_ *ApiServer, err error) {
+	s := &ApiServer{allowOrigin: allowOrigin}
 	s.requests = make(chan ApiRequest)
 
 	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
@@ -260,6 +262,16 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp.data)
+}
+
+func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if len(s.allowOrigin) > 0 {
+			w.Header().Set("Access-Control-Allow-Origin", s.allowOrigin)
+		}
+
+		next.ServeHTTP(w, req)
+	})
 }
 
 func (s *ApiServer) serve() {
@@ -455,7 +467,7 @@ func (s *ApiServer) serve() {
 		}
 	})
 
-	err := http.Serve(s.listener, m)
+	err := http.Serve(s.listener, s.allowOriginMiddleware(m))
 	if s.close {
 		return
 	} else if err != nil {

@@ -316,9 +316,10 @@ type Config struct {
 	ExternalVolume        bool     `yaml:"external_volume"`
 	ZeroconfEnabled       bool     `yaml:"zeroconf_enabled"`
 	Server                struct {
-		Enabled bool   `yaml:"enabled"`
-		Address string `yaml:"address"`
-		Port    int    `yaml:"port"`
+		Enabled     bool   `yaml:"enabled"`
+		Address     string `yaml:"address"`
+		Port        int    `yaml:"port"`
+		AllowOrigin string `yaml:"allow_origin"`
 	} `yaml:"server"`
 	Credentials struct {
 		Type     string `yaml:"type"`
@@ -407,7 +408,7 @@ func main() {
 
 	// create api server if needed
 	if cfg.Server.Enabled {
-		app.server, err = NewApiServer(cfg.Server.Address, cfg.Server.Port)
+		app.server, err = NewApiServer(cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating api server")
 		}
