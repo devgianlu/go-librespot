@@ -226,11 +226,11 @@ type ApiEventDataShuffleContext struct {
 	Value bool `json:"value"`
 }
 
-func NewApiServer(port int) (_ *ApiServer, err error) {
+func NewApiServer(address string, port int) (_ *ApiServer, err error) {
 	s := &ApiServer{}
 	s.requests = make(chan ApiRequest)
 
-	s.listener, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
 	if err != nil {
 		return nil, fmt.Errorf("failed starting api listener: %w", err)
 	}

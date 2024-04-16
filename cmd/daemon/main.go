@@ -307,7 +307,6 @@ type Config struct {
 	DeviceName            *string  `yaml:"device_name"`
 	DeviceType            *string  `yaml:"device_type"`
 	ClientToken           *string  `yaml:"client_token"`
-	ServerPort            *int     `yaml:"server_port"`
 	AudioDevice           *string  `yaml:"audio_device"`
 	Bitrate               *int     `yaml:"bitrate"`
 	VolumeSteps           *uint32  `yaml:"volume_steps"`
@@ -316,7 +315,12 @@ type Config struct {
 	NormalisationPregain  *float32 `yaml:"normalisation_pregain"`
 	ExternalVolume        bool     `yaml:"external_volume"`
 	ZeroconfEnabled       bool     `yaml:"zeroconf_enabled"`
-	Credentials           struct {
+	Server                struct {
+		Enabled bool   `yaml:"enabled"`
+		Address string `yaml:"address"`
+		Port    int    `yaml:"port"`
+	} `yaml:"server"`
+	Credentials struct {
 		Type     string `yaml:"type"`
 		UserPass struct {
 			Username string `yaml:"username"`
@@ -402,8 +406,8 @@ func main() {
 	}
 
 	// create api server if needed
-	if cfg.ServerPort != nil {
-		app.server, err = NewApiServer(*cfg.ServerPort)
+	if cfg.Server.Enabled {
+		app.server, err = NewApiServer(cfg.Server.Address, cfg.Server.Port)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating api server")
 		}

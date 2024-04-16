@@ -65,10 +65,25 @@
           "description": "Which audio device should be used for playback, leave empty for default",
           "default": "default"
         },
-        "server_port": {
-          "type": "integer",
-          "description": "Which port to use for the API server, leave empty to disable",
-          "default": 0
+        "server": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether to enable the API server",
+              "default": false
+            },
+            "address": {
+              "type": "string",
+              "description": "Which address to bind for the API server",
+              "default": ""
+            },
+            "port": {
+              "type": "integer",
+              "description": "Which port to bind for the API server",
+              "default": 0
+            }
+          }
         },
         "zeroconf_enabled": {
           "type": "boolean",

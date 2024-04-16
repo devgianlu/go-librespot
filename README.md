@@ -26,7 +26,13 @@ The new device should appear in your Spotify Connect devices.
 ## API
 
 The daemon offers an API to control and/or monitor playback.
-To enable this features add the `server_port` directive to `config.yml` with the port you'd like to use.
+To enable this features add the following to your `config.yml` file:
+
+```yaml
+server:
+  enabled: true
+  port: 3678
+```
 
 For API documentation see [here](API.md).
 
