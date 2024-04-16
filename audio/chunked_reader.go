@@ -215,7 +215,7 @@ func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
 		}
 
 		// read the chunk data
-		c := chunk[off:]
+		c := chunk[max(off, len(chunk)):]
 		if len(c) > len(p) {
 			// the chunk is bigger than our output buffer, just copy everything and return
 			n += copy(p, c[:len(p)])
