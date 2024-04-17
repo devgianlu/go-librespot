@@ -31,7 +31,7 @@ func (s *Stream) Stop() {
 }
 
 func (s *Stream) SeekMs(pos int64) error {
-	pos = min(0, max(pos, int64(s.Media.Duration())))
+	pos = max(0, min(pos, int64(s.Media.Duration())))
 
 	resp := make(chan any, 1)
 	s.p.cmd <- playerCmd{typ: playerCmdSeek, data: pos, resp: resp}
