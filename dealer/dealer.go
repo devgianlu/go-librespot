@@ -61,7 +61,7 @@ func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLog
 }
 
 func (d *Dealer) connect() error {
-	accessToken, err := d.accessToken()
+	accessToken, err := d.accessToken(false)
 	if err != nil {
 		return fmt.Errorf("failed obtaining dealer access token: %w", err)
 	}

@@ -147,14 +147,14 @@ func (c *Login5) Login(credentials proto.Message) error {
 }
 
 func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {
-	return func() (string, error) {
+	return func(force bool) (string, error) {
 		c.loginOkLock.RLock()
 		if c.loginOk == nil {
 			panic("login5 not authenticated")
 		}
 
-		// if not expired, just return it
-		if c.loginOkExp.After(time.Now()) {
+		// if not asked to force a new token and not expired, just return it
+		if !force && c.loginOkExp.After(time.Now()) {
 			defer c.loginOkLock.RUnlock()
 			return c.loginOk.AccessToken, nil
 		}

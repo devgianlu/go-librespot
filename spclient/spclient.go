@@ -45,11 +45,6 @@ func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5T
 }
 
 func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
-	accessToken, err := c.accessToken()
-	if err != nil {
-		return nil, fmt.Errorf("failed obtaining spclient access token: %w", err)
-	}
-
 	reqUrl := c.baseUrl.JoinPath(path)
 	if query != nil {
 		reqUrl.RawQuery = query.Encode()
@@ -68,7 +63,6 @@ func (c *Spclient) request(method string, path string, query url.Values, header 
 	}
 
 	req.Header.Set("Client-Token", c.clientToken)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
 	if body != nil {
 		req.GetBody = func() (io.ReadCloser, error) {
@@ -77,7 +71,25 @@ func (c *Spclient) request(method string, path string, query url.Values, header 
 		req.Body, _ = req.GetBody()
 	}
 
-	resp, err := backoff.RetryWithData(func() (*http.Response, error) { return c.client.Do(req) }, backoff.NewExponentialBackOff())
+	var forceNewToken bool
+	resp, err := backoff.RetryWithData(func() (*http.Response, error) {
+		accessToken, err := c.accessToken(forceNewToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed obtaining spclient access token: %w", err)
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, err
+		} else if resp.StatusCode == 401 {
+			forceNewToken = true
+			return nil, fmt.Errorf("unauthorized")
+		}
+
+		return resp, nil
+	}, backoff.NewExponentialBackOff())
 	if err != nil {
 		return nil, fmt.Errorf("spclient request failed: %w", err)
 	}
