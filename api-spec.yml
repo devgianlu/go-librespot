@@ -31,6 +31,19 @@ components:
         duration:
           description: Duration in milliseconds
           type: integer
+    play:
+      description: An initiate playback payload
+      type: object
+      properties:
+        uri:
+          description: Spotify URI to start playing
+          type: string
+        skip_to_uri:
+          description: Spotify URI to skip to (when playing playlists)
+          type: string
+        paused:
+          description: Start playback as paused
+          type: boolean
 paths:
   /:
     get:
@@ -96,23 +109,7 @@ paths:
     post:
       description: Starts playing new content
       requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                uri:
-                  description: Spotify URI to start playing
-                  type: string
-                  required: true
-                skip_to_uri:
-                  description: Spotify URI to skip to (when playing playlists)
-                  type: string
-                  required: false
-                paused:
-                  description: Start playback as paused
-                  type: boolean
-                  required: false
+        $ref: '#/components/schemas/play'
       responses:
         200:
           description: Successful response
@@ -148,11 +145,11 @@ paths:
           application/json:
             schema:
               type: object
+              required: [ position ]
               properties:
                 position:
                   description: Seek position in milliseconds
                   type: integer
-                  required: true
       responses:
         200:
           description: Successful response
@@ -180,12 +177,12 @@ paths:
           application/json:
             schema:
               type: object
+              required: [ volume ]
               properties:
                 volume:
                   description: Volume from 0 to max
                   type: number
                   minimum: 0
-                  required: true
       responses:
         200:
           description: Successful response
@@ -197,11 +194,11 @@ paths:
           application/json:
             schema:
               type: object
+              required: [ repeat_context ]
               properties:
                 repeat_context:
                   description: Whether repeating context should be enabled
                   type: boolean
-                  required: true
       responses:
         200:
           description: Successful response
@@ -213,11 +210,11 @@ paths:
           application/json:
             schema:
               type: object
+              required: [ repeat_track ]
               properties:
                 repeat_track:
                   description: Whether repeating track should be enabled
                   type: boolean
-                  required: true
       responses:
         200:
           description: Successful response
@@ -229,11 +226,11 @@ paths:
           application/json:
             schema:
               type: object
+              required: [ shuffle_context ]
               properties:
                 shuffle_context:
                   description: Whether shuffling context should be enabled
                   type: boolean
-                  required: true
       responses:
         200:
           description: Successful response
@@ -245,11 +242,11 @@ paths:
           application/json:
             schema:
               type: object
+              required: [ uri ]
               properties:
                 uri:
                   description: The URI for the track that should be added
                   type: string
-                  required: true
       responses:
         200:
           description: Successful response
