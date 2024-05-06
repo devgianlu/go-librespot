@@ -200,6 +200,10 @@ func (tl *List) GoPrev() bool {
 }
 
 func (tl *List) AddToQueue(track *connectpb.ContextTrack) {
+	if track.Metadata == nil {
+		track.Metadata = make(map[string]string)
+	}
+
 	track.Metadata["is_queued"] = "true"
 	tl.queue = append(tl.queue, track)
 }
