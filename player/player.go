@@ -205,11 +205,13 @@ loop:
 	close(p.cmd)
 
 	// teardown
-	if s, ok := source.(io.Closer); ok {
+	if s, ok := source.(io.Closer); ok && s != nil {
 		_ = s.Close()
 	}
 
-	_ = out.Close()
+	if out != nil {
+		_ = out.Close()
+	}
 }
 
 func (p *Player) HasBeenPlayingFor() time.Duration {
