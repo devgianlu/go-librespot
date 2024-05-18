@@ -90,7 +90,8 @@ func (r *ContextResolver) loadPage(url string) (*connectpb.ContextPage, error) {
 		return nil, fmt.Errorf("failed json unmarshalling ContextPage: %w", err)
 	}
 
-	log.Tracef("fetched new page from %s (has next: %t)", contextPage.PageUrl, len(contextPage.NextPageUrl) > 0)
+	log.WithField("uri", r.Uri()).
+		Tracef("fetched new page from %s (has next: %t)", contextPage.PageUrl, len(contextPage.NextPageUrl) > 0)
 
 	return &contextPage, nil
 }

@@ -48,6 +48,7 @@ type chunkItem struct {
 }
 
 type HttpChunkedReader struct {
+	log    *log.Entry
 	client *http.Client
 
 	// TODO: this url will expire at some point
@@ -59,8 +60,8 @@ type HttpChunkedReader struct {
 	pos int64
 }
 
-func NewHttpChunkedReader(audioUrl string) (_ *HttpChunkedReader, err error) {
-	r := &HttpChunkedReader{client: &http.Client{}}
+func NewHttpChunkedReader(log *log.Entry, audioUrl string) (_ *HttpChunkedReader, err error) {
+	r := &HttpChunkedReader{log: log, client: &http.Client{}}
 
 	r.url, err = url.Parse(audioUrl)
 	if err != nil {
@@ -173,7 +174,7 @@ func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
 	chunk.Broadcast()
 	chunk.L.Unlock()
 
-	log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(chunk.data))
+	r.log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(chunk.data))
 	return data, nil
 }
 

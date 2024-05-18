@@ -329,7 +329,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
 
-	log.Debugf("selected format %s for %s", file.Format.String(), spotId.Uri())
+	log.WithField("uri", spotId.Uri()).Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
 
 	audioKey, err := p.audioKey.Request(spotId.Id(), file.FileId)
 	if err != nil {
@@ -357,7 +357,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("unknown storage resolve result: %s", storageResolve.Result)
 	}
 
-	rawStream, err := audio.NewHttpChunkedReader(trackUrl)
+	rawStream, err := audio.NewHttpChunkedReader(log.WithField("uri", spotId.String()), trackUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing chunked reader: %w", err)
 	}

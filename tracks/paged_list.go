@@ -65,13 +65,15 @@ func (i *pagedListInterator[T]) get() pagedListItem[T] {
 }
 
 type pagedList[T any] struct {
+	log *log.Entry
+
 	pages librespot.PageResolver[T]
 	list  []pagedListItem[T]
 	pos   int
 }
 
-func newPagedList[T any](pages librespot.PageResolver[T]) *pagedList[T] {
-	return &pagedList[T]{pages: pages, list: nil, pos: -1}
+func newPagedList[T any](log *log.Entry, pages librespot.PageResolver[T]) *pagedList[T] {
+	return &pagedList[T]{log: log, pages: pages, list: nil, pos: -1}
 }
 
 func (l *pagedList[T]) iterHere() *pagedListInterator[T] {
@@ -190,7 +192,7 @@ func (l *pagedList[T]) fetchNextPage() (int, error) {
 		l.list = append(l.list, pagedListItem[T]{item, pageIdx, trackIdx})
 	}
 
-	log.Tracef("fetched new page %d with %d items (list: %d)", pageIdx, len(items), len(l.list))
+	l.log.Tracef("fetched new page %d with %d items (list: %d)", pageIdx, len(items), len(l.list))
 	return pageIdx, nil
 }
 

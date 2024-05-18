@@ -1,6 +1,7 @@
 package tracks
 
 import (
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
 	"io"
 	"testing"
@@ -14,8 +15,10 @@ func (d *dummyPageResolver) Page(idx int) ([]int, error) {
 	return d.page(idx)
 }
 
+var dummyLog = log.NewEntry(log.StandardLogger())
+
 func TestPagedListSimpleIteration(t *testing.T) {
-	list := newPagedList[int](&dummyPageResolver{page: func(pageIdx int) ([]int, error) {
+	list := newPagedList[int](dummyLog, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
 		if pageIdx >= 2 {
 			return nil, io.EOF
 		}
@@ -76,7 +79,7 @@ func TestPagedListSimpleIteration(t *testing.T) {
 }
 
 func TestPagedListMoving(t *testing.T) {
-	list := newPagedList[int](&dummyPageResolver{page: func(pageIdx int) ([]int, error) {
+	list := newPagedList[int](dummyLog, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
 		l := make([]int, 5)
 		for i := 0; i < len(l); i++ {
 			l[i] = (i + pageIdx*5) * 100
@@ -119,7 +122,7 @@ func TestPagedListMoving(t *testing.T) {
 }
 
 func TestPagedListShuffle(t *testing.T) {
-	list := newPagedList[int](&dummyPageResolver{page: func(pageIdx int) ([]int, error) {
+	list := newPagedList[int](dummyLog, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
 		if pageIdx >= 10 {
 			return nil, io.EOF
 		}

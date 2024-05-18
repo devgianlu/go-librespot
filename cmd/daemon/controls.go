@@ -11,6 +11,7 @@ import (
 	"go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -25,17 +26,18 @@ func (p *AppPlayer) prefetchNext() {
 		return
 	}
 
-	log.Debugf("prefetching %s %s", nextId.Type(), nextId.Uri())
+	log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
 	var err error
 	p.secondaryStream, err = p.player.NewStream(nextId, *p.app.cfg.Bitrate, 0)
 	if err != nil {
-		log.WithError(err).Warnf("failed prefetching stream for %s", nextId)
+		log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
 		return
 	}
 
-	log.Infof("prefetched track \"%s\" (uri: %s, duration: %dms)",
-		p.primaryStream.Media.Name(), nextId.Uri(), p.primaryStream.Media.Duration())
+	log.WithField("uri", nextId.Uri()).
+		Infof("prefetched %s %s (duration: %dms)", nextId.Type(),
+			strconv.QuoteToGraphic(p.secondaryStream.Media.Name()), p.secondaryStream.Media.Duration())
 }
 
 func (p *AppPlayer) schedulePrefetchNext() {
@@ -185,7 +187,8 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	}
 
 	trackPosition := p.state.trackPosition()
-	log.Debugf("loading %s %s (paused: %t, position: %dms)", spotId.Type(), spotId.Uri(), paused, trackPosition)
+	log.WithField("uri", spotId.Uri()).
+		Debugf("loading %s (paused: %t, position: %dms)", spotId.Type(), paused, trackPosition)
 
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = true
@@ -220,8 +223,10 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
 
-	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms, prefetched: %t)",
-		p.primaryStream.Media.Name(), spotId.Uri(), paused, trackPosition, p.primaryStream.Media.Duration(), prefetched)
+	log.WithField("uri", spotId.Uri()).
+		Infof("loaded %s %s (paused: %t, position: %dms, duration: %dms, prefetched: %t)", spotId.Type(),
+			strconv.QuoteToGraphic(p.primaryStream.Media.Name()), paused, trackPosition, p.primaryStream.Media.Duration(),
+			prefetched)
 
 	p.state.player.Duration = int64(p.primaryStream.Media.Duration())
 	p.state.player.IsPlaying = true
