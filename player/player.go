@@ -283,6 +283,8 @@ func (p *Player) SetStream(source librespot.AudioSource, paused bool) error {
 const DisableCheckMediaRestricted = true
 
 func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
+	log := log.WithField("uri", spotId.Uri())
+
 	var media *librespot.Media
 	var file *metadata.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
@@ -329,7 +331,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
 
-	log.WithField("uri", spotId.Uri()).Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
+	log.Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
 
 	audioKey, err := p.audioKey.Request(spotId.Id(), file.FileId)
 	if err != nil {
@@ -379,7 +381,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		normalisationFactor = 1
 	}
 
-	stream, err := vorbis.New(audioStream, meta, normalisationFactor)
+	stream, err := vorbis.New(log, audioStream, meta, normalisationFactor)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
 	}

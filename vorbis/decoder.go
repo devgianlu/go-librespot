@@ -22,6 +22,8 @@ const (
 type Decoder struct {
 	sync.Mutex
 
+	log *log.Entry
+
 	SampleRate int32
 	Channels   int32
 
@@ -81,8 +83,9 @@ type Info struct {
 }
 
 // New creates and initialises a new OggVorbis decoder for the provided bytestream.
-func New(r librespot.SizedReadAtSeeker, meta *audio.MetadataPage, gain float32) (*Decoder, error) {
+func New(log *log.Entry, r librespot.SizedReadAtSeeker, meta *audio.MetadataPage, gain float32) (*Decoder, error) {
 	d := &Decoder{
+		log:      log,
 		input:    r,
 		meta:     meta,
 		gain:     gain,
@@ -295,7 +298,7 @@ func (d *Decoder) safeSynthesisPcmout() (ret int32) {
 func (d *Decoder) readNextPage() (err error) {
 	for {
 		if ret := vorbis.OggSyncPageout(&d.syncState, &d.page); ret < 0 {
-			log.Debugf("vorbis: corrupt or missing data in bitstream")
+			d.log.Debugf("vorbis: corrupt or missing data in bitstream")
 			continue
 		} else if ret == 0 {
 			// need more data
@@ -379,7 +382,7 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 		return fmt.Errorf("failed reading page: %w", err)
 	}
 
-	log.Tracef("seek to %dms (diff: %dms, samples: %d, bytes: %d)", pos, pos-d.PositionMs(), posSamples, posBytes)
+	d.log.Tracef("seek to %dms (diff: %dms, samples: %d, bytes: %d)", pos, pos-d.PositionMs(), posSamples, posBytes)
 	return nil
 }
 
