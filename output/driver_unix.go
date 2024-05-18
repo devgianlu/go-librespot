@@ -188,7 +188,7 @@ func (out *output) Pause() error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
-	if out.closed {
+	if out.closed || out.paused {
 		return nil
 	}
 
@@ -219,7 +219,7 @@ func (out *output) Resume() error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
-	if out.closed {
+	if out.closed || !out.paused {
 		return nil
 	}
 
