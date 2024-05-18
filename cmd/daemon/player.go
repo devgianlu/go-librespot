@@ -15,6 +15,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"time"
 )
 
 type AppPlayer struct {
@@ -35,6 +36,8 @@ type AppPlayer struct {
 	state           *State
 	primaryStream   *player.Stream
 	secondaryStream *player.Stream
+
+	prefetchTimer *time.Timer
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -105,6 +108,8 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 		if err := p.putConnectState(connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
 			return fmt.Errorf("failed inactive state put: %w", err)
 		}
+
+		p.schedulePrefetchNext()
 
 		if p.app.cfg.ZeroconfEnabled {
 			p.logout <- p

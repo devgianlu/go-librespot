@@ -156,6 +156,19 @@ func (tl *List) GoStart() bool {
 	return true
 }
 
+func (tl *List) PeekNext() *connectpb.ContextTrack {
+	if tl.playingQueue && len(tl.queue) > 1 {
+		return tl.queue[1]
+	}
+
+	iter := tl.tracks.iterHere()
+	if iter.next() {
+		return iter.get().item
+	}
+
+	return nil
+}
+
 func (tl *List) GoNext() bool {
 	if tl.playingQueue {
 		tl.queue = tl.queue[1:]

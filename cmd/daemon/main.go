@@ -13,6 +13,7 @@ import (
 	"go-librespot/zeroconf"
 	"golang.org/x/exp/rand"
 	"gopkg.in/yaml.v3"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -73,6 +74,9 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		logout:      app.logoutCh,
 		countryCode: new(string),
 	}
+
+	// start a dummy timer for prefetching next media
+	appPlayer.prefetchTimer = time.AfterFunc(time.Duration(math.MaxInt64), appPlayer.prefetchNext)
 
 	if appPlayer.sess, err = session.NewSessionFromOptions(&session.Options{
 		DeviceType:  app.deviceType,

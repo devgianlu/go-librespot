@@ -14,6 +14,48 @@ import (
 	"time"
 )
 
+func (p *AppPlayer) prefetchNext() {
+	next := p.state.tracks.PeekNext()
+	if next == nil {
+		return
+	}
+
+	nextId := librespot.SpotifyIdFromUri(next.Uri)
+	if p.secondaryStream != nil && p.secondaryStream.Is(nextId) {
+		return
+	}
+
+	log.Debugf("prefetching %s %s", nextId.Type(), nextId.Uri())
+
+	var err error
+	p.secondaryStream, err = p.player.NewStream(nextId, *p.app.cfg.Bitrate, 0)
+	if err != nil {
+		log.WithError(err).Warnf("failed prefetching stream for %s", nextId)
+		return
+	}
+
+	log.Infof("prefetched track \"%s\" (uri: %s, duration: %dms)",
+		p.primaryStream.Media.Name(), nextId.Uri(), p.primaryStream.Media.Duration())
+}
+
+func (p *AppPlayer) schedulePrefetchNext() {
+	if p.state.player.IsPaused || p.primaryStream == nil {
+		p.prefetchTimer.Reset(time.Duration(math.MaxInt64))
+		return
+	}
+
+	untilTrackEnd := time.Duration(p.primaryStream.Media.Duration()-int32(p.player.PositionMs())) * time.Millisecond
+	untilTrackEnd -= 30 * time.Second
+	if untilTrackEnd < 10*time.Second {
+		p.prefetchTimer.Reset(time.Duration(math.MaxInt64))
+
+		go p.prefetchNext()
+	} else {
+		p.prefetchTimer.Reset(untilTrackEnd)
+		log.Tracef("scheduling prefetch in %.0fs", untilTrackEnd.Seconds())
+	}
+}
+
 func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlaying:
@@ -185,6 +227,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false
 	p.updateState()
+	p.schedulePrefetchNext()
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeMetadata,
@@ -253,6 +296,7 @@ func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
 	p.updateState()
+	p.schedulePrefetchNext()
 }
 
 func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
@@ -260,6 +304,7 @@ func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.C
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
 	p.updateState()
+	p.schedulePrefetchNext()
 }
 
 func (p *AppPlayer) play() error {
@@ -283,6 +328,8 @@ func (p *AppPlayer) play() error {
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.player.IsPaused = false
 	p.updateState()
+	p.schedulePrefetchNext()
+
 	return nil
 }
 
@@ -300,6 +347,8 @@ func (p *AppPlayer) pause() error {
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.player.IsPaused = true
 	p.updateState()
+	p.schedulePrefetchNext()
+
 	return nil
 }
 
@@ -318,6 +367,7 @@ func (p *AppPlayer) seek(position int64) error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = position
 	p.updateState()
+	p.schedulePrefetchNext()
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
