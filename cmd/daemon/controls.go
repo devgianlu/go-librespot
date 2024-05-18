@@ -134,10 +134,8 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 }
 
 func (p *AppPlayer) loadCurrentTrack(paused bool) error {
-	if p.stream != nil {
-		p.stream.Stop()
-		p.stream = nil
-	}
+	p.player.Stop()
+	p.stream = nil
 
 	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
 	if spotId.Type() != librespot.SpotifyIdTypeTrack && spotId.Type() != librespot.SpotifyIdTypeEpisode {
@@ -160,9 +158,13 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		},
 	})
 
-	stream, err := p.player.NewStream(spotId, *p.app.cfg.Bitrate, trackPosition, paused)
+	stream, err := p.player.NewStream(spotId, *p.app.cfg.Bitrate, trackPosition)
 	if err != nil {
 		return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
+	}
+
+	if err = p.player.SetStream(stream.Source, paused); err != nil {
+		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
 
 	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", stream.Media.Name(), spotId.Uri(), paused, trackPosition, stream.Media.Duration())
@@ -256,13 +258,15 @@ func (p *AppPlayer) play() error {
 	}
 
 	// seek before play to ensure we are at the correct stream position
-	if err := p.stream.SeekMs(p.state.trackPosition()); err != nil {
+	seekPos := p.state.trackPosition()
+	seekPos = max(0, min(seekPos, int64(p.stream.Media.Duration())))
+	if err := p.player.SeekMs(seekPos); err != nil {
 		return fmt.Errorf("failed seeking before play: %w", err)
 	}
 
-	p.stream.Play()
+	p.player.Play()
 
-	streamPos := p.stream.PositionMs()
+	streamPos := p.player.PositionMs()
 	log.Debugf("resume track at %dms", streamPos)
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
@@ -277,10 +281,10 @@ func (p *AppPlayer) pause() error {
 		return fmt.Errorf("no stream")
 	}
 
-	streamPos := p.stream.PositionMs()
+	streamPos := p.player.PositionMs()
 	log.Debugf("pause track at %dms", streamPos)
 
-	p.stream.Pause()
+	p.player.Pause()
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
@@ -294,8 +298,10 @@ func (p *AppPlayer) seek(position int64) error {
 		return fmt.Errorf("no stream")
 	}
 
+	position = max(0, min(position, int64(p.stream.Media.Duration())))
+
 	log.Debugf("seek track to %dms", position)
-	if err := p.stream.SeekMs(position); err != nil {
+	if err := p.player.SeekMs(position); err != nil {
 		return err
 	}
 
@@ -317,7 +323,7 @@ func (p *AppPlayer) seek(position int64) error {
 }
 
 func (p *AppPlayer) skipPrev() error {
-	if p.stream.PositionMs() > 3000 {
+	if p.player.PositionMs() > 3000 {
 		return p.seek(0)
 	}
 

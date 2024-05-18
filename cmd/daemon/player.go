@@ -96,10 +96,8 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return nil
 		}
 
-		if p.stream != nil {
-			p.stream.Stop()
-			p.stream = nil
-		}
+		p.player.Stop()
+		p.stream = nil
 
 		p.state.reset()
 		if err := p.putConnectState(connectpb.PutStateReason_BECAME_INACTIVE); err != nil {

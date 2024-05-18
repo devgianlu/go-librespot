@@ -235,9 +235,54 @@ func (p *Player) SetVolume(val uint32) {
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 
+func (p *Player) Play() {
+	resp := make(chan any, 1)
+	p.cmd <- playerCmd{typ: playerCmdPlay, resp: resp}
+	<-resp
+}
+
+func (p *Player) Pause() {
+	resp := make(chan any, 1)
+	p.cmd <- playerCmd{typ: playerCmdPause, resp: resp}
+	<-resp
+}
+
+func (p *Player) Stop() {
+	resp := make(chan any, 1)
+	p.cmd <- playerCmd{typ: playerCmdStop, resp: resp}
+	<-resp
+}
+
+func (p *Player) SeekMs(pos int64) error {
+	resp := make(chan any, 1)
+	p.cmd <- playerCmd{typ: playerCmdSeek, data: pos, resp: resp}
+	if err := <-resp; err != nil {
+		return err.(error)
+	}
+
+	return nil
+}
+
+func (p *Player) PositionMs() int64 {
+	resp := make(chan any, 1)
+	p.cmd <- playerCmd{typ: playerCmdPosition, resp: resp}
+	pos := <-resp
+	return pos.(int64)
+}
+
+func (p *Player) SetStream(source librespot.AudioSource, paused bool) error {
+	resp := make(chan any)
+	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source, paused}, resp: resp}
+	if err := <-resp; err != nil {
+		return err.(error)
+	}
+
+	return nil
+}
+
 const DisableCheckMediaRestricted = true
 
-func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPosition int64, paused bool) (*Stream, error) {
+func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	var media *librespot.Media
 	var file *metadata.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
@@ -349,11 +394,5 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("failed seeking stream: %w", err)
 	}
 
-	resp := make(chan any)
-	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: stream, paused: paused}, resp: resp}
-	if err := <-resp; err != nil {
-		return nil, err.(error)
-	}
-
-	return &Stream{p: p, Media: media, File: file}, nil
+	return &Stream{Source: stream, Media: media, File: file}, nil
 }
