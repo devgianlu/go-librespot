@@ -135,7 +135,7 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 
 func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	p.player.Stop()
-	p.stream = nil
+	p.primaryStream = nil
 
 	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
 	if spotId.Type() != librespot.SpotifyIdTypeTrack && spotId.Type() != librespot.SpotifyIdTypeEpisode {
@@ -158,28 +158,38 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		},
 	})
 
-	stream, err := p.player.NewStream(spotId, *p.app.cfg.Bitrate, trackPosition)
-	if err != nil {
-		return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
+	var prefetched bool
+	if p.secondaryStream != nil && p.secondaryStream.Is(spotId) {
+		p.primaryStream = p.secondaryStream
+		p.secondaryStream = nil
+		prefetched = true
+	} else {
+		p.secondaryStream = nil
+		prefetched = false
+
+		var err error
+		p.primaryStream, err = p.player.NewStream(spotId, *p.app.cfg.Bitrate, trackPosition)
+		if err != nil {
+			return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
+		}
 	}
 
-	if err = p.player.SetStream(stream.Source, paused); err != nil {
+	if err := p.player.SetStream(p.primaryStream.Source, paused); err != nil {
 		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
 
-	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms)", stream.Media.Name(), spotId.Uri(), paused, trackPosition, stream.Media.Duration())
+	log.Infof("loaded track \"%s\" (uri: %s, paused: %t, position: %dms, duration: %dms, prefetched: %t)",
+		p.primaryStream.Media.Name(), spotId.Uri(), paused, trackPosition, p.primaryStream.Media.Duration(), prefetched)
 
-	p.state.player.Duration = int64(stream.Media.Duration())
+	p.state.player.Duration = int64(p.primaryStream.Media.Duration())
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false
 	p.updateState()
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeMetadata,
-		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(stream.Media, p.prodInfo, trackPosition)),
+		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, trackPosition)),
 	})
-
-	p.stream = stream
 	return nil
 }
 
@@ -253,13 +263,13 @@ func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.C
 }
 
 func (p *AppPlayer) play() error {
-	if p.stream == nil {
-		return fmt.Errorf("no stream")
+	if p.primaryStream == nil {
+		return fmt.Errorf("no primary stream")
 	}
 
 	// seek before play to ensure we are at the correct stream position
 	seekPos := p.state.trackPosition()
-	seekPos = max(0, min(seekPos, int64(p.stream.Media.Duration())))
+	seekPos = max(0, min(seekPos, int64(p.primaryStream.Media.Duration())))
 	if err := p.player.SeekMs(seekPos); err != nil {
 		return fmt.Errorf("failed seeking before play: %w", err)
 	}
@@ -277,8 +287,8 @@ func (p *AppPlayer) play() error {
 }
 
 func (p *AppPlayer) pause() error {
-	if p.stream == nil {
-		return fmt.Errorf("no stream")
+	if p.primaryStream == nil {
+		return fmt.Errorf("no primary stream")
 	}
 
 	streamPos := p.player.PositionMs()
@@ -294,11 +304,11 @@ func (p *AppPlayer) pause() error {
 }
 
 func (p *AppPlayer) seek(position int64) error {
-	if p.stream == nil {
-		return fmt.Errorf("no stream")
+	if p.primaryStream == nil {
+		return fmt.Errorf("no primary stream")
 	}
 
-	position = max(0, min(position, int64(p.stream.Media.Duration())))
+	position = max(0, min(position, int64(p.primaryStream.Media.Duration())))
 
 	log.Debugf("seek track to %dms", position)
 	if err := p.player.SeekMs(position); err != nil {
@@ -314,7 +324,7 @@ func (p *AppPlayer) seek(position int64) error {
 		Data: ApiEventDataSeek{
 			Uri:        p.state.player.Track.Uri,
 			Position:   int(position),
-			Duration:   int(p.stream.Media.Duration()),
+			Duration:   int(p.primaryStream.Media.Duration()),
 			PlayOrigin: p.state.playOrigin(),
 		},
 	})

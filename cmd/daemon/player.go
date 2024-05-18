@@ -32,8 +32,9 @@ type AppPlayer struct {
 	prodInfo    *ProductInfo
 	countryCode *string
 
-	state  *State
-	stream *player.Stream
+	state           *State
+	primaryStream   *player.Stream
+	secondaryStream *player.Stream
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -97,7 +98,8 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 		}
 
 		p.player.Stop()
-		p.stream = nil
+		p.primaryStream = nil
+		p.secondaryStream = nil
 
 		p.state.reset()
 		if err := p.putConnectState(connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
@@ -308,8 +310,8 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			PlayOrigin:     p.state.player.PlayOrigin.FeatureIdentifier,
 		}
 
-		if p.stream != nil && p.prodInfo != nil {
-			resp.Track = NewApiResponseStatusTrack(p.stream.Media, p.prodInfo, p.state.trackPosition())
+		if p.primaryStream != nil && p.prodInfo != nil {
+			resp.Track = NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, p.state.trackPosition())
 		}
 
 		return resp, nil
