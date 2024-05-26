@@ -35,6 +35,8 @@ func (p *AppPlayer) prefetchNext() {
 		return
 	}
 
+	p.player.SetSecondaryStream(p.secondaryStream.Source)
+
 	log.WithField("uri", nextId.Uri()).
 		Infof("prefetched %s %s (duration: %dms)", nextId.Type(),
 			strconv.QuoteToGraphic(p.secondaryStream.Media.Name()), p.secondaryStream.Media.Duration())
@@ -219,7 +221,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		}
 	}
 
-	if err := p.player.SetStream(p.primaryStream.Source, paused); err != nil {
+	if err := p.player.SetPrimaryStream(p.primaryStream.Source, paused); err != nil {
 		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
 

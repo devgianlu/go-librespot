@@ -26,7 +26,6 @@ type output struct {
 	sampleRate int
 	device     string
 	reader     librespot.Float32Reader
-	done       chan error
 
 	cond *sync.Cond
 
@@ -36,38 +35,29 @@ type output struct {
 	volume   float32
 	paused   bool
 	closed   bool
-	eof      bool
 	released bool
+
+	err chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initiallyPaused bool, initialVolume float32) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initialVolume float32) (*output, error) {
 	out := &output{
 		reader:     reader,
 		channels:   channels,
 		sampleRate: sampleRate,
 		device:     device,
 		volume:     initialVolume,
+		err:        make(chan error, 1),
 		cond:       sync.NewCond(&sync.Mutex{}),
-		done:       make(chan error, 1),
 	}
 
 	if err := out.openAndSetup(); err != nil {
 		return nil, err
 	}
 
-	if initiallyPaused {
-		_ = out.Pause()
-	}
-
 	go func() {
-		err := out.loop()
+		out.err <- out.loop()
 		_ = out.Close()
-
-		if err != nil {
-			out.done <- err
-		} else {
-			out.done <- nil
-		}
 	}()
 
 	return out, nil
@@ -139,15 +129,18 @@ func (out *output) loop() error {
 
 	for {
 		n, err := out.reader.Read(floats)
-		if errors.Is(err, io.EOF) {
-			out.eof = true
-
+		if errors.Is(err, io.EOF) || errors.Is(err, librespot.ErrDrainReader) {
 			// drain pcm ignoring errors
 			out.cond.L.Lock()
 			C.snd_pcm_drain(out.handle)
 			out.cond.L.Unlock()
 
-			return nil
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+
+			out.reader.Drained()
+			continue
 		} else if err != nil {
 			return fmt.Errorf("failed reading source: %w", err)
 		}
@@ -291,22 +284,11 @@ func (out *output) SetVolume(vol float32) {
 	out.volume = vol
 }
 
-func (out *output) WaitDone() <-chan error {
+func (out *output) Error() <-chan error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
-	if out.closed {
-		return nil
-	}
-
-	return out.done
-}
-
-func (out *output) IsEOF() bool {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	return out.eof
+	return out.err
 }
 
 func (out *output) Close() error {

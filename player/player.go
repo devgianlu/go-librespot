@@ -10,7 +10,6 @@ import (
 	"go-librespot/proto/spotify/metadata"
 	"go-librespot/spclient"
 	"go-librespot/vorbis"
-	"io"
 	"time"
 )
 
@@ -27,7 +26,7 @@ type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 
-	newOutput func(source librespot.Float32Reader, paused bool, volume float32) (*output.Output, error)
+	newOutput func(source librespot.Float32Reader, volume float32) (*output.Output, error)
 
 	cmd chan playerCmd
 	ev  chan Event
@@ -58,8 +57,9 @@ type playerCmd struct {
 }
 
 type playerCmdDataSet struct {
-	source librespot.AudioSource
-	paused bool
+	source  librespot.AudioSource
+	primary bool
+	paused  bool
 }
 
 func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device string, volumeSteps uint32, externalVolume bool) (*Player, error) {
@@ -69,14 +69,13 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 		normalisationEnabled: normalisationEnabled,
 		normalisationPregain: normalisationPregain,
 		countryCode:          countryCode,
-		newOutput: func(reader librespot.Float32Reader, paused bool, volume float32) (*output.Output, error) {
+		newOutput: func(reader librespot.Float32Reader, volume float32) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Reader:          reader,
-				SampleRate:      SampleRate,
-				ChannelCount:    Channels,
-				Device:          device,
-				InitiallyPaused: paused,
-				InitialVolume:   volume,
+				Reader:        reader,
+				SampleRate:    SampleRate,
+				ChannelCount:  Channels,
+				Device:        device,
+				InitialVolume: volume,
 			})
 		},
 		externalVolume: externalVolume,
@@ -91,13 +90,15 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 }
 
 func (p *Player) manageLoop() {
-	var volume float32
+	// currently available output device
 	var out *output.Output
-	var source librespot.AudioSource
-	var done <-chan error
+	outErr := make(<-chan error)
 
 	// initial volume is 1
-	volume = 1
+	volume := float32(1)
+
+	// init main source
+	source := NewSwitchingAudioSource()
 
 loop:
 	for {
@@ -105,29 +106,41 @@ loop:
 		case cmd := <-p.cmd:
 			switch cmd.typ {
 			case playerCmdSet:
-				if out != nil {
-					_ = out.Close()
+				data := cmd.data.(playerCmdDataSet)
+				if !data.primary {
+					source.SetSecondary(data.source)
+					cmd.resp <- nil
+					break
 				}
 
-				data := cmd.data.(playerCmdDataSet)
-				source = data.source
-
-				var err error
-				out, err = p.newOutput(source, data.paused, volume)
-				if err != nil {
-					source = nil
-					cmd.resp <- err
-				} else {
-					done = out.WaitDone()
-					p.startedPlaying = time.Now()
-
-					cmd.resp <- nil
-
-					if data.paused {
-						p.ev <- Event{Type: EventTypePaused}
-					} else {
-						p.ev <- Event{Type: EventTypePlaying}
+				// create a new output device if needed
+				if out == nil {
+					var err error
+					out, err = p.newOutput(source, volume)
+					if err != nil {
+						cmd.resp <- err
+						break
 					}
+
+					outErr = out.Error()
+					log.Debugf("created new output device")
+				}
+
+				// set source
+				source.SetPrimary(data.source)
+				if data.paused {
+					_ = out.Pause()
+				} else {
+					_ = out.Resume()
+				}
+
+				p.startedPlaying = time.Now()
+				cmd.resp <- nil
+
+				if data.paused {
+					p.ev <- Event{Type: EventTypePaused}
+				} else {
+					p.ev <- Event{Type: EventTypePlaying}
 				}
 			case playerCmdPlay:
 				if out != nil {
@@ -150,15 +163,17 @@ loop:
 			case playerCmdStop:
 				if out != nil {
 					_ = out.Close()
+					out = nil
+					outErr = make(<-chan error)
 				}
 
 				cmd.resp <- struct{}{}
 				p.ev <- Event{Type: EventTypeStopped}
 			case playerCmdSeek:
-				if source != nil && out != nil {
+				if out != nil {
 					if err := source.SetPositionMs(cmd.data.(int64)); err != nil {
 						cmd.resp <- err
-					} else if err := out.Drop(); err != nil {
+					} else if err = out.Drop(); err != nil {
 						cmd.resp <- err
 					} else {
 						cmd.resp <- nil
@@ -167,7 +182,7 @@ loop:
 					cmd.resp <- nil
 				}
 			case playerCmdPosition:
-				if source != nil && out != nil {
+				if out != nil {
 					delay, err := out.DelayMs()
 					if err != nil {
 						log.WithError(err).Warnf("failed getting output device delay")
@@ -190,27 +205,28 @@ loop:
 			default:
 				panic("unknown player command")
 			}
-		case err := <-done:
+		case err := <-outErr:
 			if err != nil {
-				log.WithError(err).Errorf("playback failed")
+				log.WithError(err).Errorf("output device failed")
+
+				_ = out.Close()
+				out = nil
+				outErr = make(<-chan error)
 			}
 
-			done = nil
-			if err != nil || out.IsEOF() {
-				p.ev <- Event{Type: EventTypeNotPlaying}
-			}
+			p.ev <- Event{Type: EventTypeStopped}
+		case <-source.Done():
+			p.ev <- Event{Type: EventTypeNotPlaying}
 		}
 	}
 
 	close(p.cmd)
 
-	// teardown
-	if s, ok := source.(io.Closer); ok && s != nil {
-		_ = s.Close()
-	}
+	_ = source.Close()
 
 	if out != nil {
 		_ = out.Close()
+		out = nil
 	}
 }
 
@@ -270,14 +286,20 @@ func (p *Player) PositionMs() int64 {
 	return pos.(int64)
 }
 
-func (p *Player) SetStream(source librespot.AudioSource, paused bool) error {
+func (p *Player) SetPrimaryStream(source librespot.AudioSource, paused bool) error {
 	resp := make(chan any)
-	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source, paused}, resp: resp}
+	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: source, primary: true, paused: paused}, resp: resp}
 	if err := <-resp; err != nil {
 		return err.(error)
 	}
 
 	return nil
+}
+
+func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
+	resp := make(chan any)
+	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: source, primary: false}, resp: resp}
+	<-resp
 }
 
 const DisableCheckMediaRestricted = true

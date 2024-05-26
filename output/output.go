@@ -34,15 +34,12 @@ type NewOutputOptions struct {
 	// This feature is support only for the unix driver.
 	Device string
 
-	// InitiallyPaused specifies whether the output device should be paused from the start.
-	InitiallyPaused bool
-
 	// InitialVolume specifies the initial output volume.
 	InitialVolume float32
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.InitiallyPaused, options.InitialVolume)
+	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.InitialVolume)
 	if err != nil {
 		return nil, err
 	}
@@ -75,14 +72,9 @@ func (c *Output) SetVolume(vol float32) {
 	c.output.SetVolume(vol)
 }
 
-// WaitDone waits for the playback loop to exit.
-func (c *Output) WaitDone() <-chan error {
-	return c.output.WaitDone()
-}
-
-// IsEOF returns whether the reader reached EOF.
-func (c *Output) IsEOF() bool {
-	return c.output.IsEOF()
+// Error returns the error that stopped the device (if any).
+func (c *Output) Error() <-chan error {
+	return c.output.Error()
 }
 
 // Close closes the output.
