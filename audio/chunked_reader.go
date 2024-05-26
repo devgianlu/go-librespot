@@ -2,6 +2,7 @@ package audio
 
 import (
 	"fmt"
+	"github.com/cenkalti/backoff/v4"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const (
@@ -75,9 +77,6 @@ func NewHttpChunkedReader(log *log.Entry, audioUrl string) (_ *HttpChunkedReader
 	}
 
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusPartialContent {
-		return nil, fmt.Errorf("invalid first chunk response status: %s", resp.Status)
-	}
 
 	// parse the Content-Range header with the complete content length
 	_, _, r.len, err = parseContentRange(resp)
@@ -108,14 +107,26 @@ func NewHttpChunkedReader(log *log.Entry, audioUrl string) (_ *HttpChunkedReader
 }
 
 func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
-	return r.client.Do(&http.Request{
-		Method: "GET",
-		URL:    r.url,
-		Header: http.Header{
-			"User-Agent": []string{librespot.UserAgent()},
-			"Range":      []string{fmt.Sprintf("bytes=%d-%d", idx*DefaultChunkSize, (idx+1)*DefaultChunkSize-1)},
-		},
-	})
+	return backoff.RetryWithData(func() (*http.Response, error) {
+		resp, err := r.client.Do(&http.Request{
+			Method: "GET",
+			URL:    r.url,
+			Header: http.Header{
+				"User-Agent": []string{librespot.UserAgent()},
+				"Range":      []string{fmt.Sprintf("bytes=%d-%d", idx*DefaultChunkSize, (idx+1)*DefaultChunkSize-1)},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.StatusCode != http.StatusPartialContent {
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("invalid first chunk response status: %s", resp.Status)
+		}
+
+		return resp, nil
+	}, backoff.NewConstantBackOff(1*time.Second))
 }
 
 func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
