@@ -29,8 +29,8 @@ type output struct {
 
 	cond *sync.Cond
 
-	handle   *C.snd_pcm_t
-	canPause bool
+	pcmHandle *C.snd_pcm_t
+	canPause  bool
 
 	volume   float32
 	paused   bool
@@ -74,7 +74,7 @@ func (out *output) alsaError(name string, err C.int) error {
 func (out *output) openAndSetup() error {
 	cdevice := C.CString(out.device)
 	defer C.free(unsafe.Pointer(cdevice))
-	if err := C.snd_pcm_open(&out.handle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
+	if err := C.snd_pcm_open(&out.pcmHandle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
 		return out.alsaError("snd_pcm_open", err)
 	}
 
@@ -82,32 +82,32 @@ func (out *output) openAndSetup() error {
 	C.snd_pcm_hw_params_malloc(&params)
 	defer C.free(unsafe.Pointer(params))
 
-	if err := C.snd_pcm_hw_params_any(out.handle, params); err < 0 {
+	if err := C.snd_pcm_hw_params_any(out.pcmHandle, params); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_any", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_access(out.handle, params, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
+	if err := C.snd_pcm_hw_params_set_access(out.pcmHandle, params, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_access", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_format(out.handle, params, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
+	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, params, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_format", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_channels(out.handle, params, C.unsigned(out.channels)); err < 0 {
+	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, params, C.unsigned(out.channels)); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_channels", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_rate_resample(out.handle, params, 1); err < 0 {
+	if err := C.snd_pcm_hw_params_set_rate_resample(out.pcmHandle, params, 1); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_rate_resample", err)
 	}
 
 	sr := C.unsigned(out.sampleRate)
-	if err := C.snd_pcm_hw_params_set_rate_near(out.handle, params, &sr, nil); err < 0 {
+	if err := C.snd_pcm_hw_params_set_rate_near(out.pcmHandle, params, &sr, nil); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_rate_near", err)
 	}
 
-	if err := C.snd_pcm_hw_params(out.handle, params); err < 0 {
+	if err := C.snd_pcm_hw_params(out.pcmHandle, params); err < 0 {
 		return out.alsaError("snd_pcm_hw_params", err)
 	}
 
@@ -132,7 +132,7 @@ func (out *output) loop() error {
 		if errors.Is(err, io.EOF) || errors.Is(err, librespot.ErrDrainReader) {
 			// drain pcm ignoring errors
 			out.cond.L.Lock()
-			C.snd_pcm_drain(out.handle)
+			C.snd_pcm_drain(out.pcmHandle)
 			out.cond.L.Unlock()
 
 			if errors.Is(err, io.EOF) {
@@ -163,8 +163,8 @@ func (out *output) loop() error {
 			return nil
 		}
 
-		if nn := C.snd_pcm_writei(out.handle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
-			nn = C.long(C.snd_pcm_recover(out.handle, C.int(nn), 1))
+		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
+			nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
 			if nn < 0 {
 				out.cond.L.Unlock()
 				return out.alsaError("snd_pcm_recover", C.int(nn))
@@ -187,18 +187,18 @@ func (out *output) Pause() error {
 
 	if ReleasePcmOnPause {
 		if !out.released {
-			if err := C.snd_pcm_close(out.handle); err < 0 {
+			if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
 				return out.alsaError("snd_pcm_close", err)
 			}
 		}
 
 		out.released = true
 	} else if out.canPause {
-		if C.snd_pcm_state(out.handle) != C.SND_PCM_STATE_RUNNING {
+		if C.snd_pcm_state(out.pcmHandle) != C.SND_PCM_STATE_RUNNING {
 			return nil
 		}
 
-		if err := C.snd_pcm_pause(out.handle, 1); err < 0 {
+		if err := C.snd_pcm_pause(out.pcmHandle, 1); err < 0 {
 			return out.alsaError("snd_pcm_pause", err)
 		}
 	}
@@ -225,11 +225,11 @@ func (out *output) Resume() error {
 
 		out.released = false
 	} else if out.canPause {
-		if C.snd_pcm_state(out.handle) != C.SND_PCM_STATE_PAUSED {
+		if C.snd_pcm_state(out.pcmHandle) != C.SND_PCM_STATE_PAUSED {
 			return nil
 		}
 
-		if err := C.snd_pcm_pause(out.handle, 0); err < 0 {
+		if err := C.snd_pcm_pause(out.pcmHandle, 0); err < 0 {
 			return out.alsaError("snd_pcm_pause", err)
 		}
 	}
@@ -248,12 +248,12 @@ func (out *output) Drop() error {
 		return nil
 	}
 
-	if err := C.snd_pcm_drop(out.handle); err < 0 {
+	if err := C.snd_pcm_drop(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_drop", err)
 	}
 
 	// since we are not actually stopping the stream, prepare it again
-	if err := C.snd_pcm_prepare(out.handle); err < 0 {
+	if err := C.snd_pcm_prepare(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_prepare", err)
 	}
 
@@ -269,7 +269,7 @@ func (out *output) DelayMs() (int64, error) {
 	}
 
 	var frames C.snd_pcm_sframes_t
-	if err := C.snd_pcm_delay(out.handle, &frames); err < 0 {
+	if err := C.snd_pcm_delay(out.pcmHandle, &frames); err < 0 {
 		return 0, out.alsaError("snd_pcm_delay", err)
 	}
 
@@ -300,7 +300,7 @@ func (out *output) Close() error {
 		return nil
 	}
 
-	if err := C.snd_pcm_close(out.handle); err < 0 {
+	if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_close", err)
 	}
 
