@@ -26,6 +26,7 @@ type output struct {
 	channels   int
 	sampleRate int
 	device     string
+	mixer      string
 	reader     librespot.Float32Reader
 
 	cond *sync.Cond
@@ -47,12 +48,13 @@ type output struct {
 	err chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initialVolume float32) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, initialVolume float32) (*output, error) {
 	out := &output{
 		reader:     reader,
 		channels:   channels,
 		sampleRate: sampleRate,
 		device:     device,
+		mixer:      mixer,
 		volume:     initialVolume,
 		err:        make(chan error, 1),
 		cond:       sync.NewCond(&sync.Mutex{}),
@@ -141,13 +143,18 @@ func (out *output) openAndSetup() error {
 }
 
 func (out *output) openAndSetupMixer() error {
+	if len(out.mixer) == 0 {
+		out.mixerEnabled = false
+		return nil
+	}
+
 	if err := C.snd_mixer_open(&out.mixerHandle, 0); err < 0 {
 		return out.alsaError("snd_mixer_open", err)
 	}
 
-	cdevice := C.CString(out.device)
-	defer C.free(unsafe.Pointer(cdevice))
-	if err := C.snd_mixer_attach(out.mixerHandle, cdevice); err < 0 {
+	cmixer := C.CString(out.mixer)
+	defer C.free(unsafe.Pointer(cmixer))
+	if err := C.snd_mixer_attach(out.mixerHandle, cmixer); err < 0 {
 		return out.alsaError("snd_mixer_attach", err)
 	}
 

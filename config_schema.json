@@ -65,6 +65,11 @@
           "description": "Which audio device should be used for playback, leave empty for default",
           "default": "default"
         },
+        "mixer_device": {
+          "type": "string",
+          "description": "Which audio mixer should be used for volume control, leave empty for default",
+          "default": "default"
+        },
         "server": {
           "type": "object",
           "properties": {

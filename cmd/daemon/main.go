@@ -93,7 +93,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	if appPlayer.player, err = player.NewPlayer(
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, *app.cfg.NormalisationPregain,
-		appPlayer.countryCode, *app.cfg.AudioDevice,
+		appPlayer.countryCode, *app.cfg.AudioDevice, *app.cfg.MixerDevice,
 		*app.cfg.VolumeSteps, app.cfg.ExternalVolume,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
@@ -312,6 +312,7 @@ type Config struct {
 	DeviceType            *string  `yaml:"device_type"`
 	ClientToken           *string  `yaml:"client_token"`
 	AudioDevice           *string  `yaml:"audio_device"`
+	MixerDevice           *string  `yaml:"mixer_device"`
 	Bitrate               *int     `yaml:"bitrate"`
 	VolumeSteps           *uint32  `yaml:"volume_steps"`
 	InitialVolume         *uint32  `yaml:"initial_volume"`
@@ -367,6 +368,10 @@ func loadConfig(cfg *Config) error {
 	if cfg.AudioDevice == nil {
 		cfg.AudioDevice = new(string)
 		*cfg.AudioDevice = "default"
+	}
+	if cfg.MixerDevice == nil {
+		cfg.MixerDevice = new(string)
+		*cfg.MixerDevice = "default"
 	}
 	if cfg.Bitrate == nil {
 		cfg.Bitrate = new(int)

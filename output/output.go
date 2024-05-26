@@ -34,12 +34,17 @@ type NewOutputOptions struct {
 	// This feature is support only for the unix driver.
 	Device string
 
+	// Mixer specifies the audio mixer name.
+	//
+	// This feature is support only for the unix driver.
+	Mixer string
+
 	// InitialVolume specifies the initial output volume.
 	InitialVolume float32
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.InitialVolume)
+	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.InitialVolume)
 	if err != nil {
 		return nil, err
 	}
