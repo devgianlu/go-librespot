@@ -9,6 +9,7 @@ import "C"
 import (
 	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	"golang.org/x/sys/unix"
 	"io"
@@ -32,6 +33,12 @@ type output struct {
 	pcmHandle *C.snd_pcm_t
 	canPause  bool
 
+	mixerEnabled    bool
+	mixerHandle     *C.snd_mixer_t
+	mixerElemHandle *C.snd_mixer_elem_t
+	mixerMinVolume  C.long
+	mixerMaxVolume  C.long
+
 	volume   float32
 	paused   bool
 	closed   bool
@@ -53,6 +60,15 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 
 	if err := out.openAndSetup(); err != nil {
 		return nil, err
+	}
+
+	if err := out.openAndSetupMixer(); err != nil {
+		if uintptr(unsafe.Pointer(out.mixerHandle)) != 0 {
+			C.snd_mixer_close(out.mixerHandle)
+		}
+
+		out.mixerEnabled = false
+		log.WithError(err).Warnf("failed setting up output device mixer")
 	}
 
 	go func() {
@@ -124,6 +140,52 @@ func (out *output) openAndSetup() error {
 	return nil
 }
 
+func (out *output) openAndSetupMixer() error {
+	if err := C.snd_mixer_open(&out.mixerHandle, 0); err < 0 {
+		return out.alsaError("snd_mixer_open", err)
+	}
+
+	cdevice := C.CString(out.device)
+	defer C.free(unsafe.Pointer(cdevice))
+	if err := C.snd_mixer_attach(out.mixerHandle, cdevice); err < 0 {
+		return out.alsaError("snd_mixer_attach", err)
+	}
+
+	if err := C.snd_mixer_selem_register(out.mixerHandle, nil, nil); err < 0 {
+		return out.alsaError("snd_mixer_selem_register", err)
+	}
+
+	if err := C.snd_mixer_load(out.mixerHandle); err < 0 {
+		return out.alsaError("snd_mixer_load", err)
+	}
+
+	var sid *C.snd_mixer_selem_id_t
+	if err := C.snd_mixer_selem_id_malloc(&sid); err < 0 {
+		return out.alsaError("snd_mixer_selem_id_malloc", err)
+	}
+	defer C.free(unsafe.Pointer(sid))
+
+	C.snd_mixer_selem_id_set_index(sid, 0)
+	C.snd_mixer_selem_id_set_name(sid, C.CString("Master"))
+
+	if out.mixerElemHandle = C.snd_mixer_find_selem(out.mixerHandle, sid); uintptr(unsafe.Pointer(out.mixerElemHandle)) == 0 {
+		return fmt.Errorf("mixer simple element not found")
+	}
+
+	if err := C.snd_mixer_selem_get_playback_volume_range(out.mixerElemHandle, &out.mixerMinVolume, &out.mixerMaxVolume); err < 0 {
+		return out.alsaError("snd_mixer_selem_get_playback_volume_range", err)
+	}
+
+	// set initial volume and verify it actually works
+	mixerVolume := out.volume*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
+	if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
+		return out.alsaError("snd_mixer_selem_set_playback_volume_all", err)
+	}
+
+	out.mixerEnabled = true
+	return nil
+}
+
 func (out *output) loop() error {
 	floats := make([]float32, out.channels*16*1024)
 
@@ -149,8 +211,10 @@ func (out *output) loop() error {
 			return fmt.Errorf("invalid read amount: %d", n)
 		}
 
-		for i := 0; i < n; i++ {
-			floats[i] *= out.volume
+		if !out.mixerEnabled {
+			for i := 0; i < n; i++ {
+				floats[i] *= out.volume
+			}
 		}
 
 		out.cond.L.Lock()
@@ -282,6 +346,13 @@ func (out *output) SetVolume(vol float32) {
 	}
 
 	out.volume = vol
+
+	if out.mixerEnabled {
+		mixerVolume := vol*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
+		if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
+			log.WithError(out.alsaError("snd_mixer_selem_set_playback_volume_all", err)).Warnf("failed setting output device mixer volume")
+		}
+	}
 }
 
 func (out *output) Error() <-chan error {
@@ -302,6 +373,12 @@ func (out *output) Close() error {
 
 	if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_close", err)
+	}
+
+	if out.mixerEnabled {
+		if err := C.snd_mixer_close(out.mixerHandle); err < 0 {
+			return out.alsaError("snd_mixer_close", err)
+		}
 	}
 
 	out.closed = true
