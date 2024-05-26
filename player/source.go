@@ -10,7 +10,7 @@ import (
 type SwitchingAudioSource struct {
 	source map[bool]librespot.AudioSource
 	which  bool
-	mu     sync.RWMutex
+	cond   *sync.Cond
 
 	done chan struct{}
 }
@@ -18,20 +18,23 @@ type SwitchingAudioSource struct {
 func NewSwitchingAudioSource() *SwitchingAudioSource {
 	return &SwitchingAudioSource{
 		source: map[bool]librespot.AudioSource{},
+		cond:   sync.NewCond(&sync.Mutex{}),
 		done:   make(chan struct{}, 1),
 	}
 }
 
 func (s *SwitchingAudioSource) SetPrimary(source librespot.AudioSource) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 	s.source[s.which] = source
+	s.cond.Broadcast()
 }
 
 func (s *SwitchingAudioSource) SetSecondary(source librespot.AudioSource) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 	s.source[!s.which] = source
+	s.cond.Broadcast()
 }
 
 func (s *SwitchingAudioSource) Done() <-chan struct{} {
@@ -39,8 +42,12 @@ func (s *SwitchingAudioSource) Done() <-chan struct{} {
 }
 
 func (s *SwitchingAudioSource) Read(p []float32) (n int, err error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+
+	for s.source[s.which] == nil {
+		s.cond.Wait()
+	}
 
 	n, err = s.source[s.which].Read(p)
 	if errors.Is(err, io.EOF) {
@@ -59,8 +66,8 @@ func (s *SwitchingAudioSource) Read(p []float32) (n int, err error) {
 }
 
 func (s *SwitchingAudioSource) Drained() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
 
 	// notify this source is done
 	s.done <- struct{}{}
@@ -71,14 +78,24 @@ func (s *SwitchingAudioSource) Drained() {
 }
 
 func (s *SwitchingAudioSource) SetPositionMs(pos int64) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+
+	for s.source[s.which] == nil {
+		s.cond.Wait()
+	}
+
 	return s.source[s.which].SetPositionMs(pos)
 }
 
 func (s *SwitchingAudioSource) PositionMs() int64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+
+	for s.source[s.which] == nil {
+		s.cond.Wait()
+	}
+
 	return s.source[s.which].PositionMs()
 }
 
