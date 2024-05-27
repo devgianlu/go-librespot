@@ -209,12 +209,14 @@ loop:
 		case err := <-outErr:
 			if err != nil {
 				log.WithError(err).Errorf("output device failed")
-
-				_ = out.Close()
-				out = nil
-				outErr = make(<-chan error)
 			}
 
+			// the current output device has exited, clean it up
+			_ = out.Close()
+			out = nil
+			outErr = make(<-chan error)
+
+			p.ev <- Event{Type: EventTypeNotPlaying}
 			p.ev <- Event{Type: EventTypeStopped}
 		case <-source.Done():
 			p.ev <- Event{Type: EventTypeNotPlaying}
