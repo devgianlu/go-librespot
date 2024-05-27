@@ -41,10 +41,12 @@ type NewOutputOptions struct {
 
 	// InitialVolume specifies the initial output volume.
 	InitialVolume float32
+
+	ExternalVolumeUpdate chan float32
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.InitialVolume)
+	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.InitialVolume, options.ExternalVolumeUpdate)
 	if err != nil {
 		return nil, err
 	}

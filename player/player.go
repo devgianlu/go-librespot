@@ -62,7 +62,7 @@ type playerCmdDataSet struct {
 	paused  bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, volumeSteps uint32, externalVolume bool) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, volumeSteps uint32, externalVolume bool, externalVolumeUpdate chan float32) (*Player, error) {
 	p := &Player{
 		sp:                   sp,
 		audioKey:             audioKey,
@@ -71,12 +71,13 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 		countryCode:          countryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Reader:        reader,
-				SampleRate:    SampleRate,
-				ChannelCount:  Channels,
-				Device:        device,
-				Mixer:         mixer,
-				InitialVolume: volume,
+				Reader:               reader,
+				SampleRate:           SampleRate,
+				ChannelCount:         Channels,
+				Device:               device,
+				Mixer:                mixer,
+				InitialVolume:        volume,
+				ExternalVolumeUpdate: externalVolumeUpdate,
 			})
 		},
 		externalVolume: externalVolume,

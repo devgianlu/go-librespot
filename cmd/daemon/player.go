@@ -25,8 +25,9 @@ type AppPlayer struct {
 	stop   chan struct{}
 	logout chan *AppPlayer
 
-	player            *player.Player
-	initialVolumeOnce sync.Once
+	player               *player.Player
+	initialVolumeOnce    sync.Once
+	externalVolumeUpdate chan float32
 
 	spotConnId string
 

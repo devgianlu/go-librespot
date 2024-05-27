@@ -69,10 +69,11 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
-		app:         app,
-		stop:        make(chan struct{}, 1),
-		logout:      app.logoutCh,
-		countryCode: new(string),
+		app:                  app,
+		stop:                 make(chan struct{}, 1),
+		logout:               app.logoutCh,
+		countryCode:          new(string),
+		externalVolumeUpdate: make(chan float32, 1),
 	}
 
 	// start a dummy timer for prefetching next media
@@ -94,9 +95,28 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, *app.cfg.NormalisationPregain,
 		appPlayer.countryCode, *app.cfg.AudioDevice, *app.cfg.MixerDevice,
-		*app.cfg.VolumeSteps, app.cfg.ExternalVolume,
+		*app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
+	}
+
+	// only update the "spotify volume", when external volume is enabled
+	// try to keep synchronized with the device volume
+	if app.cfg.ExternalVolume {
+		// listen on external volume changes (for example the alsa driver)
+		go func() {
+			for {
+				v, ok := <-appPlayer.externalVolumeUpdate
+				if !ok {
+					break
+				}
+
+				appPlayer.updateVolume(uint32(v * player.MaxStateVolume))
+
+				// prevent "too many requests"
+				time.Sleep(2 * time.Second)
+			}
+		}()
 	}
 
 	return appPlayer, nil
