@@ -28,13 +28,17 @@ type output struct {
 	channels   int
 	sampleRate int
 	device     string
-	mixer      string
 	reader     librespot.Float32Reader
 
 	cond *sync.Cond
 
 	pcmHandle *C.snd_pcm_t
 	canPause  bool
+
+	externalVolume bool
+
+	mixer   string
+	control string
 
 	mixerEnabled    bool
 	mixerHandle     *C.snd_mixer_t
@@ -51,16 +55,18 @@ type output struct {
 	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, initialVolume float32, externalVolumeUpdate chan float32) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate chan float32) (*output, error) {
 	out := &output{
 		reader:               reader,
 		channels:             channels,
 		sampleRate:           sampleRate,
 		device:               device,
 		mixer:                mixer,
+		control:              control,
 		volume:               initialVolume,
 		err:                  make(chan error, 1),
 		cond:                 sync.NewCond(&sync.Mutex{}),
+		externalVolume:       externalVolume,
 		externalVolumeUpdate: externalVolumeUpdate,
 	}
 
@@ -177,7 +183,7 @@ func (out *output) openAndSetupMixer() error {
 	defer C.free(unsafe.Pointer(sid))
 
 	C.snd_mixer_selem_id_set_index(sid, 0)
-	C.snd_mixer_selem_id_set_name(sid, C.CString("Master")) // todo: this needs to be a configurable option
+	C.snd_mixer_selem_id_set_name(sid, C.CString(out.control))
 
 	if out.mixerElemHandle = C.snd_mixer_find_selem(out.mixerHandle, sid); uintptr(unsafe.Pointer(out.mixerElemHandle)) == 0 {
 		return fmt.Errorf("mixer simple element not found")
@@ -187,10 +193,21 @@ func (out *output) openAndSetupMixer() error {
 		return out.alsaError("snd_mixer_selem_get_playback_volume_range", err)
 	}
 
-	// set initial volume and verify it actually works
-	mixerVolume := out.volume*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
-	if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
-		return out.alsaError("snd_mixer_selem_set_playback_volume_all", err)
+	if out.externalVolume {
+
+		// get current volume from the mixer, and set the spotify volume accordingly
+		var volume C.long
+		C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
+		out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
+
+		out.externalVolumeUpdate <- out.volume
+	} else {
+
+		// set initial volume and verify it actually works
+		mixerVolume := out.volume*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
+		if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
+			return out.alsaError("snd_mixer_selem_set_playback_volume_all", err)
+		}
 	}
 
 	// set callback and initialize private

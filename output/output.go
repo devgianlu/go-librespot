@@ -38,15 +38,22 @@ type NewOutputOptions struct {
 	//
 	// This feature is support only for the unix driver.
 	Mixer string
+	// Control specifies the mixer control name
+	//
+	// This only works in combination with Mixer
+	Control string
 
 	// InitialVolume specifies the initial output volume.
 	InitialVolume float32
+
+	// ExternalVolume specifies, if the volume is controlled outside of the app.
+	ExternalVolume bool
 
 	ExternalVolumeUpdate chan float32
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.InitialVolume, options.ExternalVolumeUpdate)
+	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.ExternalVolumeUpdate)
 	if err != nil {
 		return nil, err
 	}

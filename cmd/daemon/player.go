@@ -73,10 +73,12 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
 
-		// update initial volume
-		p.initialVolumeOnce.Do(func() {
-			p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
-		})
+		if !p.app.cfg.ExternalVolume {
+			// update initial volume
+			p.initialVolumeOnce.Do(func() {
+				p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
+			})
+		}
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/volume") {
 		var setVolCmd connectpb.SetVolumeCommand
 		if err := proto.Unmarshal(msg.Payload, &setVolCmd); err != nil {
