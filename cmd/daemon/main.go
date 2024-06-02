@@ -7,6 +7,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/apresolve"
+	"go-librespot/output"
 	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	"go-librespot/session"
@@ -73,7 +74,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		stop:                 make(chan struct{}, 1),
 		logout:               app.logoutCh,
 		countryCode:          new(string),
-		externalVolumeUpdate: make(chan float32, 1),
+		externalVolumeUpdate: output.NewRingBuffer[float32](1),
 	}
 
 	// start a dummy timer for prefetching next media
@@ -106,7 +107,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		// listen on external volume changes (for example the alsa driver)
 		go func() {
 			for {
-				v, ok := <-appPlayer.externalVolumeUpdate
+				v, ok := appPlayer.externalVolumeUpdate.Get()
 				if !ok {
 					break
 				}

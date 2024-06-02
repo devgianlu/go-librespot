@@ -51,11 +51,11 @@ type output struct {
 	closed   bool
 	released bool
 
-	externalVolumeUpdate chan float32
+	externalVolumeUpdate RingBuffer[float32]
 	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate chan float32) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate RingBuffer[float32]) (*output, error) {
 	out := &output{
 		reader:               reader,
 		channels:             channels,
@@ -200,7 +200,7 @@ func (out *output) openAndSetupMixer() error {
 		C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
 		out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
 
-		out.externalVolumeUpdate <- out.volume
+		out.externalVolumeUpdate.Put(out.volume)
 	} else {
 
 		// set initial volume and verify it actually works
@@ -248,11 +248,7 @@ func (out *output) waitForMixerEvents() {
 				continue
 			}
 
-			// only keep the most recent volume value in the channel
-			if len(out.externalVolumeUpdate) > 0 {
-				_ = <-out.externalVolumeUpdate
-			}
-			out.externalVolumeUpdate <- priv
+			out.externalVolumeUpdate.Put(priv)
 		}
 	}
 }

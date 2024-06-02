@@ -7,6 +7,7 @@ import (
 	librespot "go-librespot"
 	"go-librespot/ap"
 	"go-librespot/dealer"
+	"go-librespot/output"
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate"
 	"go-librespot/session"
@@ -27,7 +28,7 @@ type AppPlayer struct {
 
 	player               *player.Player
 	initialVolumeOnce    sync.Once
-	externalVolumeUpdate chan float32
+	externalVolumeUpdate output.RingBuffer[float32]
 
 	spotConnId string
 
