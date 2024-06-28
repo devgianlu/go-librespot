@@ -135,6 +135,9 @@ loop:
 					_ = out.Resume()
 				}
 
+				// when setting the primary stream just drop everything
+				_ = out.Drop()
+
 				p.startedPlaying = time.Now()
 				cmd.resp <- nil
 

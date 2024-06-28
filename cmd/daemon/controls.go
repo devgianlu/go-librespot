@@ -180,7 +180,6 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 }
 
 func (p *AppPlayer) loadCurrentTrack(paused bool) error {
-	p.player.Stop()
 	p.primaryStream = nil
 
 	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
