@@ -169,6 +169,8 @@ loop:
 					_ = out.Close()
 					out = nil
 					outErr = make(<-chan error)
+
+					log.Tracef("closed output device because of stop command")
 				}
 
 				cmd.resp <- struct{}{}
@@ -219,7 +221,8 @@ loop:
 			out = nil
 			outErr = make(<-chan error)
 
-			p.ev <- Event{Type: EventTypeNotPlaying}
+			log.Tracef("cleared closed output device")
+
 			p.ev <- Event{Type: EventTypeStopped}
 		case <-source.Done():
 			p.ev <- Event{Type: EventTypeNotPlaying}

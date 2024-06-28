@@ -112,7 +112,12 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			})
 		}
 	case player.EventTypeStopped:
-		// do nothing
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeStopped,
+			Data: ApiEventDataStopped{
+				PlayOrigin: p.state.playOrigin(),
+			},
+		})
 	default:
 		panic("unhandled player event")
 	}
