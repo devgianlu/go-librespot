@@ -231,7 +231,10 @@ func (out *output) waitForMixerEvents() {
 		if res >= 0 {
 			res = C.snd_mixer_handle_events(out.mixerHandle)
 			if res <= 0 {
-				// todo add warning
+				errStrPtr := C.snd_strerror(res)
+				log.Warnf("Error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+
+				// no need to free the errStrPtr, because it doesn't point into heap
 				continue
 			}
 
@@ -244,11 +247,14 @@ func (out *output) waitForMixerEvents() {
 				continue
 			}
 			if priv == out.volume {
-				log.Debugf("volume repeated. skipping event (volume=%f)\n", priv)
+				log.Debugf("skipping ALSA mixer event, volume already updated: %.2f\n", priv)
 				continue
 			}
 
 			out.externalVolumeUpdate.Put(priv)
+		} else {
+			errStrPtr := C.snd_strerror(res)
+			log.Warnf("Error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
 		}
 	}
 }
@@ -304,7 +310,7 @@ func (out *output) loop() error {
 			return fmt.Errorf("invalid read amount: %d", n)
 		}
 
-		if !out.mixerEnabled {
+		if !out.mixerEnabled && !out.externalVolume {
 			for i := 0; i < n; i++ {
 				floats[i] *= out.volume
 			}
@@ -440,11 +446,12 @@ func (out *output) SetVolume(vol float32) {
 
 	out.volume = vol
 
-	if out.mixerEnabled {
+	if out.mixerEnabled && !out.externalVolume {
 		placeholder := C.float(-1)
 		C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&placeholder))
 
 		mixerVolume := vol*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
+		log.Debugf("updating alsa mixer volume to %.02f\n", mixerVolume)
 		if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
 			log.WithError(out.alsaError("snd_mixer_selem_set_playback_volume_all", err)).Warnf("failed setting output device mixer volume")
 		}

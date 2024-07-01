@@ -198,11 +198,9 @@ loop:
 					cmd.resp <- int64(0)
 				}
 			case playerCmdVolume:
-				if !p.externalVolume {
-					volume = cmd.data.(float32)
-					if out != nil {
-						out.SetVolume(volume)
-					}
+				volume = cmd.data.(float32)
+				if out != nil {
+					out.SetVolume(volume)
 				}
 			case playerCmdClose:
 				break loop

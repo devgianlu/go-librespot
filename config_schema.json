@@ -68,11 +68,11 @@
         "mixer_device": {
           "type": "string",
           "description": "Which audio mixer should be used for volume control, leave empty to disable mixer control",
-          "default": "default"
+          "default": ""
         },
         "mixer_control_name": {
           "type": "string",
-          "description": "Which control should be used, leave empty for default'. Only useful in combination with 'mixer_device'",
+          "description": "Which control should be used, leave empty for default. Only useful in combination with 'mixer_device'",
           "default": "Master"
         },
         "server": {
