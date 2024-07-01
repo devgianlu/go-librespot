@@ -112,7 +112,12 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			})
 		}
 	case player.EventTypeStopped:
-		// do nothing
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeStopped,
+			Data: ApiEventDataStopped{
+				PlayOrigin: p.state.playOrigin(),
+			},
+		})
 	default:
 		panic("unhandled player event")
 	}
@@ -180,7 +185,6 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 }
 
 func (p *AppPlayer) loadCurrentTrack(paused bool) error {
-	p.player.Stop()
 	p.primaryStream = nil
 
 	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
