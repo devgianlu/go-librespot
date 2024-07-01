@@ -101,9 +101,9 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
 
-	// only update the "spotify volume", when external volume is enabled
+	// only update the "spotify volume", when external volume is enabled or a mixer is defined
 	// try to keep synchronized with the device volume
-	if app.cfg.ExternalVolume {
+	if app.cfg.ExternalVolume || len(*app.cfg.MixerDevice) > 0 {
 		// listen on external volume changes (for example the alsa driver)
 		go func() {
 			for {

@@ -193,22 +193,12 @@ func (out *output) openAndSetupMixer() error {
 		return out.alsaError("snd_mixer_selem_get_playback_volume_range", err)
 	}
 
-	if out.externalVolume {
+	// get current volume from the mixer, and set the spotify volume accordingly
+	var volume C.long
+	C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
+	out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
 
-		// get current volume from the mixer, and set the spotify volume accordingly
-		var volume C.long
-		C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
-		out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
-
-		out.externalVolumeUpdate.Put(out.volume)
-	} else {
-
-		// set initial volume and verify it actually works
-		mixerVolume := out.volume*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
-		if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
-			return out.alsaError("snd_mixer_selem_set_playback_volume_all", err)
-		}
-	}
+	out.externalVolumeUpdate.Put(out.volume)
 
 	// set callback and initialize private
 	var cb C.snd_mixer_elem_callback_t = (C.snd_mixer_elem_callback_t)(C.alsaMixerCallback)
