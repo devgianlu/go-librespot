@@ -222,7 +222,7 @@ func (out *output) waitForMixerEvents() {
 			res = C.snd_mixer_handle_events(out.mixerHandle)
 			if res <= 0 {
 				errStrPtr := C.snd_strerror(res)
-				log.Warnf("Error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+				log.Warnf("error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
 
 				// no need to free the errStrPtr, because it doesn't point into heap
 				continue
@@ -237,14 +237,14 @@ func (out *output) waitForMixerEvents() {
 				continue
 			}
 			if priv == out.volume {
-				log.Debugf("skipping ALSA mixer event, volume already updated: %.2f\n", priv)
+				log.Debugf("skipping alsa mixer event, volume already updated: %.2f\n", priv)
 				continue
 			}
 
 			out.externalVolumeUpdate.Put(priv)
 		} else {
 			errStrPtr := C.snd_strerror(res)
-			log.Warnf("Error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+			log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
 		}
 	}
 }
