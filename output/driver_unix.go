@@ -5,6 +5,8 @@ package output
 // #cgo pkg-config: alsa
 //
 // #include <alsa/asoundlib.h>
+// extern int alsaMixerCallback(snd_mixer_elem_t*, unsigned int);
+//
 import "C"
 import (
 	"errors"
@@ -26,13 +28,17 @@ type output struct {
 	channels   int
 	sampleRate int
 	device     string
-	mixer      string
 	reader     librespot.Float32Reader
 
 	cond *sync.Cond
 
 	pcmHandle *C.snd_pcm_t
 	canPause  bool
+
+	externalVolume bool
+
+	mixer   string
+	control string
 
 	mixerEnabled    bool
 	mixerHandle     *C.snd_mixer_t
@@ -45,19 +51,23 @@ type output struct {
 	closed   bool
 	released bool
 
-	err chan error
+	externalVolumeUpdate RingBuffer[float32]
+	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, initialVolume float32) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate RingBuffer[float32]) (*output, error) {
 	out := &output{
-		reader:     reader,
-		channels:   channels,
-		sampleRate: sampleRate,
-		device:     device,
-		mixer:      mixer,
-		volume:     initialVolume,
-		err:        make(chan error, 1),
-		cond:       sync.NewCond(&sync.Mutex{}),
+		reader:               reader,
+		channels:             channels,
+		sampleRate:           sampleRate,
+		device:               device,
+		mixer:                mixer,
+		control:              control,
+		volume:               initialVolume,
+		err:                  make(chan error, 1),
+		cond:                 sync.NewCond(&sync.Mutex{}),
+		externalVolume:       externalVolume,
+		externalVolumeUpdate: externalVolumeUpdate,
 	}
 
 	if err := out.openAndSetup(); err != nil {
@@ -173,7 +183,7 @@ func (out *output) openAndSetupMixer() error {
 	defer C.free(unsafe.Pointer(sid))
 
 	C.snd_mixer_selem_id_set_index(sid, 0)
-	C.snd_mixer_selem_id_set_name(sid, C.CString("Master"))
+	C.snd_mixer_selem_id_set_name(sid, C.CString(out.control))
 
 	if out.mixerElemHandle = C.snd_mixer_find_selem(out.mixerHandle, sid); uintptr(unsafe.Pointer(out.mixerElemHandle)) == 0 {
 		return fmt.Errorf("mixer simple element not found")
@@ -183,14 +193,86 @@ func (out *output) openAndSetupMixer() error {
 		return out.alsaError("snd_mixer_selem_get_playback_volume_range", err)
 	}
 
-	// set initial volume and verify it actually works
-	mixerVolume := out.volume*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
-	if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
-		return out.alsaError("snd_mixer_selem_set_playback_volume_all", err)
-	}
+	// get current volume from the mixer, and set the spotify volume accordingly
+	var volume C.long
+	C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
+	out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
+
+	out.externalVolumeUpdate.Put(out.volume)
+
+	// set callback and initialize private
+	var cb C.snd_mixer_elem_callback_t = (C.snd_mixer_elem_callback_t)(C.alsaMixerCallback)
+	C.snd_mixer_elem_set_callback(out.mixerElemHandle, cb)
+	C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
+
+	go out.waitForMixerEvents()
 
 	out.mixerEnabled = true
 	return nil
+}
+
+func (out *output) waitForMixerEvents() {
+	for !out.closed {
+		var res = C.snd_mixer_wait(out.mixerHandle, -1)
+		if out.closed {
+			// if we reach here, the playing context has probably changed
+			break
+		}
+		if res >= 0 {
+			res = C.snd_mixer_handle_events(out.mixerHandle)
+			if res <= 0 {
+				errStrPtr := C.snd_strerror(res)
+				log.Warnf("error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+
+				// no need to free the errStrPtr, because it doesn't point into heap
+				continue
+			}
+
+			var priv = float32(*(*C.float)(C.snd_mixer_elem_get_callback_private(out.mixerElemHandle)))
+			if priv < 0 {
+				// volume update came from spotify, so no need to tell spotify about it
+				// reset the private, but discard the event
+				C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
+
+				continue
+			}
+			if priv == out.volume {
+				log.Debugf("skipping alsa mixer event, volume already updated: %.2f\n", priv)
+				continue
+			}
+
+			out.externalVolumeUpdate.Put(priv)
+		} else {
+			errStrPtr := C.snd_strerror(res)
+			log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+		}
+	}
+}
+
+/*
+The mixer callback private is used to pass the detected volume from c back to go code.
+
+A private value between zero and one (inclusive) means, that the volume changed to that percentage of the maximum volume.
+
+A private value less than zero means, that the volume update was initiated by spotify instead of the alsa mixer.
+*/
+//export alsaMixerCallback
+func alsaMixerCallback(elem *C.snd_mixer_elem_t, _ C.uint) C.int {
+	if float32(*(*C.float)(C.snd_mixer_elem_get_callback_private(elem))) < 0 {
+		// the volume update came from spotify, so there is no need to tell spotify about it
+		return 0
+	}
+
+	var val C.long
+	var minVol C.long
+	var maxVol C.long
+	C.snd_mixer_selem_get_playback_volume(elem, C.SND_MIXER_SCHN_MONO, &val)
+	C.snd_mixer_selem_get_playback_volume_range(elem, &minVol, &maxVol)
+
+	var normalizedVolume = C.float(float32(val-minVol) / float32(maxVol-minVol))
+	C.snd_mixer_elem_set_callback_private(elem, unsafe.Pointer(&normalizedVolume))
+
+	return 0
 }
 
 func (out *output) loop() error {
@@ -218,7 +300,7 @@ func (out *output) loop() error {
 			return fmt.Errorf("invalid read amount: %d", n)
 		}
 
-		if !out.mixerEnabled {
+		if !out.mixerEnabled && !out.externalVolume {
 			for i := 0; i < n; i++ {
 				floats[i] *= out.volume
 			}
@@ -354,8 +436,12 @@ func (out *output) SetVolume(vol float32) {
 
 	out.volume = vol
 
-	if out.mixerEnabled {
+	if out.mixerEnabled && !out.externalVolume {
+		placeholder := C.float(-1)
+		C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&placeholder))
+
 		mixerVolume := vol*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
+		log.Debugf("updating alsa mixer volume to %.02f\n", mixerVolume)
 		if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
 			log.WithError(out.alsaError("snd_mixer_selem_set_playback_volume_all", err)).Warnf("failed setting output device mixer volume")
 		}

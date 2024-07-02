@@ -62,7 +62,7 @@ type playerCmdDataSet struct {
 	paused  bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, volumeSteps uint32, externalVolume bool) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, control string, volumeSteps uint32, externalVolume bool, externalVolumeUpdate output.RingBuffer[float32]) (*Player, error) {
 	p := &Player{
 		sp:                   sp,
 		audioKey:             audioKey,
@@ -71,12 +71,15 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 		countryCode:          countryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Reader:        reader,
-				SampleRate:    SampleRate,
-				ChannelCount:  Channels,
-				Device:        device,
-				Mixer:         mixer,
-				InitialVolume: volume,
+				Reader:               reader,
+				SampleRate:           SampleRate,
+				ChannelCount:         Channels,
+				Device:               device,
+				Mixer:                mixer,
+				Control:              control,
+				InitialVolume:        volume,
+				ExternalVolume:       externalVolume,
+				ExternalVolumeUpdate: externalVolumeUpdate,
 			})
 		},
 		externalVolume: externalVolume,
@@ -200,11 +203,9 @@ loop:
 					cmd.resp <- int64(0)
 				}
 			case playerCmdVolume:
-				if !p.externalVolume {
-					volume = cmd.data.(float32)
-					if out != nil {
-						out.SetVolume(volume)
-					}
+				volume = cmd.data.(float32)
+				if out != nil {
+					out.SetVolume(volume)
 				}
 			case playerCmdClose:
 				break loop

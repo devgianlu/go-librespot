@@ -7,6 +7,7 @@ import (
 	librespot "go-librespot"
 	"go-librespot/ap"
 	"go-librespot/dealer"
+	"go-librespot/output"
 	"go-librespot/player"
 	connectpb "go-librespot/proto/spotify/connectstate"
 	"go-librespot/session"
@@ -25,8 +26,9 @@ type AppPlayer struct {
 	stop   chan struct{}
 	logout chan *AppPlayer
 
-	player            *player.Player
-	initialVolumeOnce sync.Once
+	player               *player.Player
+	initialVolumeOnce    sync.Once
+	externalVolumeUpdate output.RingBuffer[float32]
 
 	spotConnId string
 
@@ -72,10 +74,12 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
 
-		// update initial volume
-		p.initialVolumeOnce.Do(func() {
-			p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
-		})
+		if !p.app.cfg.ExternalVolume && len(*p.app.cfg.MixerDevice) != 0 {
+			// update initial volume
+			p.initialVolumeOnce.Do(func() {
+				p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
+			})
+		}
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/volume") {
 		var setVolCmd connectpb.SetVolumeCommand
 		if err := proto.Unmarshal(msg.Payload, &setVolCmd); err != nil {

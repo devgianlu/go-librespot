@@ -7,6 +7,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"go-librespot/apresolve"
+	"go-librespot/output"
 	"go-librespot/player"
 	devicespb "go-librespot/proto/spotify/connectstate/devices"
 	"go-librespot/session"
@@ -69,10 +70,11 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
-		app:         app,
-		stop:        make(chan struct{}, 1),
-		logout:      app.logoutCh,
-		countryCode: new(string),
+		app:                  app,
+		stop:                 make(chan struct{}, 1),
+		logout:               app.logoutCh,
+		countryCode:          new(string),
+		externalVolumeUpdate: output.NewRingBuffer[float32](1),
 	}
 
 	// start a dummy timer for prefetching next media
@@ -93,10 +95,29 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	if appPlayer.player, err = player.NewPlayer(
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, *app.cfg.NormalisationPregain,
-		appPlayer.countryCode, *app.cfg.AudioDevice, *app.cfg.MixerDevice,
-		*app.cfg.VolumeSteps, app.cfg.ExternalVolume,
+		appPlayer.countryCode, *app.cfg.AudioDevice, *app.cfg.MixerDevice, *app.cfg.MixerControlName,
+		*app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
+	}
+
+	// only update the "spotify volume", when external volume is enabled or a mixer is defined
+	// try to keep synchronized with the device volume
+	if app.cfg.ExternalVolume || len(*app.cfg.MixerDevice) > 0 {
+		// listen on external volume changes (for example the alsa driver)
+		go func() {
+			for {
+				v, ok := appPlayer.externalVolumeUpdate.Get()
+				if !ok {
+					break
+				}
+
+				appPlayer.updateVolume(uint32(v * player.MaxStateVolume))
+
+				// prevent "too many requests"
+				time.Sleep(2 * time.Second)
+			}
+		}()
 	}
 
 	return appPlayer, nil
@@ -313,6 +334,7 @@ type Config struct {
 	ClientToken           *string  `yaml:"client_token"`
 	AudioDevice           *string  `yaml:"audio_device"`
 	MixerDevice           *string  `yaml:"mixer_device"`
+	MixerControlName      *string  `yaml:"mixer_control_name"`
 	Bitrate               *int     `yaml:"bitrate"`
 	VolumeSteps           *uint32  `yaml:"volume_steps"`
 	InitialVolume         *uint32  `yaml:"initial_volume"`
@@ -371,7 +393,11 @@ func loadConfig(cfg *Config) error {
 	}
 	if cfg.MixerDevice == nil {
 		cfg.MixerDevice = new(string)
-		*cfg.MixerDevice = "default"
+		*cfg.MixerDevice = ""
+	}
+	if cfg.MixerControlName == nil {
+		cfg.MixerControlName = new(string)
+		*cfg.MixerControlName = "Master"
 	}
 	if cfg.Bitrate == nil {
 		cfg.Bitrate = new(int)
