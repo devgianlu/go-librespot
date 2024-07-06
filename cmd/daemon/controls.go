@@ -184,6 +184,7 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 
 	return nil
 }
+
 func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	p.primaryStream = nil
 
@@ -240,15 +241,10 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	p.updateState()
 	p.schedulePrefetchNext()
 
-	// Check for nil pointers before calling NewApiResponseStatusTrack
-	if p.primaryStream != nil && p.primaryStream.Media != nil && p.prodInfo != nil {
-		p.app.server.Emit(&ApiEvent{
-			Type: ApiEventTypeMetadata,
-			Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, trackPosition)),
-		})
-	} else {
-		log.Warn("NewApiResponseStatusTrack: primaryStream.Media or prodInfo is nil")
-	}
+	p.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeMetadata,
+		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, trackPosition)),
+	})
 
 	// Fetch Album Metadata if available
 	if p.primaryStream.Media.IsTrack() {
@@ -380,11 +376,6 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										}
 									}
 
-									hasLyrics := false
-									if trackDetail.HasLyrics != nil {
-										hasLyrics = *trackDetail.HasLyrics
-									}
-
 									response.Tracks = append(response.Tracks, TrackDetailResponse{
 										Name:     "",
 										Duration: 0,
@@ -392,7 +383,8 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										Artists:  artists,
 										ImageUrl: highestResImageUrl,
 										TrackNumber: 0,
-										HasLyrics: hasLyrics,
+										HasLyrics: trackDetail.HasLyrics,
+
 									})
 									if trackDetail.Name != nil {
 										response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
@@ -420,7 +412,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 						}
 					}
 				}
-
+				
 				for i, image := range album.CoverGroup.Image {
 					if image != nil {
 						response.CoverGroup.Image[i] = ImageResponse{
@@ -447,7 +439,6 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 
 	return nil
 }
-
 
 func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
 	var requiresUpdate bool
