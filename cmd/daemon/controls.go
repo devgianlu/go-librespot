@@ -383,7 +383,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										Artists:  artists,
 										ImageUrl: highestResImageUrl,
 										TrackNumber: 0,
-										HasLyrics: trackDetail.HasLyrics,
+										HasLyrics: *trackDetail.HasLyrics,
 
 									})
 									if trackDetail.Name != nil {
@@ -412,7 +412,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 						}
 					}
 				}
-				
+
 				for i, image := range album.CoverGroup.Image {
 					if image != nil {
 						response.CoverGroup.Image[i] = ImageResponse{
