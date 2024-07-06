@@ -114,10 +114,11 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 
 		var albumCoverId string
 		if len(track.Album.Cover) > 0 {
-			albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
+			albumCoverId = hex.EncodeToString(track.Album.Cover[len(track.Album.Cover)-1].FileId)
 		} else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
-			albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
+			albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[len(track.Album.CoverGroup.Image)-1].FileId)
 		}
+
 
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
@@ -133,11 +134,12 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 		}
 	} else {
 		episode := media.Episode()
-
+	
 		var albumCoverId string
 		if len(episode.CoverImage.Image) > 0 {
-			albumCoverId = hex.EncodeToString(episode.CoverImage.Image[0].FileId)
+			albumCoverId = hex.EncodeToString(episode.CoverImage.Image[len(episode.CoverImage.Image)-1].FileId)
 		}
+
 
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
