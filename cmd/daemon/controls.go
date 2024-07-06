@@ -184,7 +184,6 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 
 	return nil
 }
-
 func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	p.primaryStream = nil
 
@@ -241,10 +240,15 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	p.updateState()
 	p.schedulePrefetchNext()
 
-	p.app.server.Emit(&ApiEvent{
-		Type: ApiEventTypeMetadata,
-		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, trackPosition)),
-	})
+	// Check for nil pointers before calling NewApiResponseStatusTrack
+	if p.primaryStream != nil && p.primaryStream.Media != nil && p.prodInfo != nil {
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeMetadata,
+			Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, trackPosition)),
+		})
+	} else {
+		log.Warn("NewApiResponseStatusTrack: primaryStream.Media or prodInfo is nil")
+	}
 
 	// Fetch Album Metadata if available
 	if p.primaryStream.Media.IsTrack() {
@@ -375,6 +379,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 											artists = append(artists, *artist.Name)
 										}
 									}
+
 									hasLyrics := false
 									if trackDetail.HasLyrics != nil {
 										hasLyrics = *trackDetail.HasLyrics
@@ -388,7 +393,6 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										ImageUrl: highestResImageUrl,
 										TrackNumber: 0,
 										HasLyrics: hasLyrics,
-
 									})
 									if trackDetail.Name != nil {
 										response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
@@ -443,6 +447,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 
 	return nil
 }
+
 
 func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
 	var requiresUpdate bool
