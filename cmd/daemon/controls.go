@@ -383,6 +383,8 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										Artists:  artists,
 										ImageUrl: highestResImageUrl,
 										TrackNumber: 0,
+										HasLyrics: trackDetail.HasLyrics,
+
 									})
 									if trackDetail.Name != nil {
 										response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
@@ -410,6 +412,9 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 						}
 					}
 				}
+
+				// Add has lyrics to the album metadata
+				response.HasLyrics = false
 
 				for i, image := range album.CoverGroup.Image {
 					if image != nil {

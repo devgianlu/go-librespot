@@ -652,6 +652,7 @@ type TrackDetailResponse struct {
 	Artists     []string `json:"artists"`
 	ImageUrl    string   `json:"image_url"`
 	TrackNumber int      `json:"track_number"`
+	HasLyrics bool `json:"has_lyrics"`
 }
 
 
