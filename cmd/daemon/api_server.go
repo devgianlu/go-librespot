@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -118,7 +119,6 @@ type ApiResponseStatusTrack struct {
 	OriginalTitle         string   `json:"original_title"`
 }
 
-
 type ApiResponseAlbumTrack struct {
 	Uri           string   `json:"uri"`
 	Name          string   `json:"name"`
@@ -149,7 +149,7 @@ func NewApiResponseAlbumTracks(album *metadatapb.Album, prodInfo *ProductInfo) [
 				Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
 				Name:          *track.Name,
 				ArtistNames:   artists,
-				AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+				AlbumCoverUrl: albumCoverId,
 				Duration:      int(*track.Duration),
 				TrackNumber:   int(*track.Number),
 				DiscNumber:    int(*disc.Number),
@@ -160,8 +160,8 @@ func NewApiResponseAlbumTracks(album *metadatapb.Album, prodInfo *ProductInfo) [
 	return tracks
 }
 
-func NewApiResponseStatusTrack(media *player.Media, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
-	if media == nil || prodInfo == nil {
+func NewApiResponseStatusTrack(media *player.Media, position int64) *ApiResponseStatusTrack {
+	if media == nil {
 		return nil
 	}
 
@@ -192,7 +192,6 @@ func NewApiResponseStatusTrack(media *player.Media, prodInfo *ProductInfo, posit
 		OriginalTitle:         media.OriginalTitle(),
 	}
 }
-
 
 type ApiResponseStatus struct {
 	Username       string                  `json:"username"`
@@ -338,21 +337,19 @@ func (s *ApiServer) serve() {
 			log.Debug("Method not allowed")
 			return
 		}
-	
+
 		uri := r.URL.Query().Get("uri")
 		if uri == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			log.Debug("Bad request: Missing URI")
 			return
 		}
-	
+
 		log.Debugf("Fetching album details for URI: %s", uri)
 		data := ApiRequestDataAlbum{Uri: uri}
 		req := ApiRequest{Type: ApiRequestTypeGetAlbumDetails, Data: data}
 		s.handleRequest(req, w)
 	})
-	
-	
 
 	m.HandleFunc("/player/play", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
@@ -536,10 +533,11 @@ func (s *ApiServer) serve() {
 	err := http.Serve(s.listener, s.allowOriginMiddleware(m))
 	if s.close {
 		return
+	} else
 	} else if err != nil {
 		log.WithError(err).Fatal("failed serving api")
 	}
-}
+
 
 func (s *ApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
