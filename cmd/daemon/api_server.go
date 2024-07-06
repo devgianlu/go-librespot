@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -119,6 +118,7 @@ type ApiResponseStatusTrack struct {
 	OriginalTitle         string   `json:"original_title"`
 }
 
+
 type ApiResponseAlbumTrack struct {
 	Uri           string   `json:"uri"`
 	Name          string   `json:"name"`
@@ -128,7 +128,6 @@ type ApiResponseAlbumTrack struct {
 	TrackNumber   int      `json:"track_number"`
 	DiscNumber    int      `json:"disc_number"`
 }
-
 
 func NewApiResponseAlbumTracks(album *metadatapb.Album, prodInfo *ProductInfo) []*ApiResponseAlbumTrack {
 	var albumCoverId string
@@ -161,9 +160,6 @@ func NewApiResponseAlbumTracks(album *metadatapb.Album, prodInfo *ProductInfo) [
 	return tracks
 }
 
-
-
-
 func NewApiResponseStatusTrack(media *player.Media, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
 	if media == nil || prodInfo == nil {
 		return nil
@@ -175,21 +171,28 @@ func NewApiResponseStatusTrack(media *player.Media, prodInfo *ProductInfo, posit
 	}
 
 	return &ApiResponseStatusTrack{
-		URI:          media.Uri(),
-		Name:         media.Name(),
-		Artists:      media.ArtistNames(),
-		Album:        media.AlbumName(),
-		AlbumArt:     media.CoverImage(),
-		Duration:     media.Duration(),
-		Position:     position,
-		IsEpisode:    media.IsEpisode(),
-		IsTrack:      media.IsTrack(),
-		HasLyrics:    hasLyrics,
-		ProdCountry:  prodInfo.Country,
-		ProdDeviceID: prodInfo.DeviceId,
-		ProdDeviceType: prodInfo.DeviceType,
+		Uri:                   media.Uri(),
+		Name:                  media.Name(),
+		ArtistNames:           media.ArtistNames(),
+		AlbumName:             media.AlbumName(),
+		AlbumCoverUrl:         media.CoverImage(),
+		Position:              position,
+		Duration:              media.Duration(),
+		ReleaseDate:           media.ReleaseDate(),
+		TrackNumber:           media.TrackNumber(),
+		DiscNumber:            media.DiscNumber(),
+		Popularity:            media.Popularity(),
+		ExternalIDs:           media.ExternalIDs(),
+		FileFormats:           media.FileFormats(),
+		PreviewFormats:        media.PreviewFormats(),
+		EarliestLiveTimestamp: media.EarliestLiveTimestamp(),
+		HasLyrics:             hasLyrics,
+		Licensor:              media.Licensor(),
+		LanguageOfPerformance: media.LanguageOfPerformance(),
+		OriginalTitle:         media.OriginalTitle(),
 	}
 }
+
 
 type ApiResponseStatus struct {
 	Username       string                  `json:"username"`
@@ -303,7 +306,6 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	_ = json.NewEncoder(w).Encode(resp.data)
 	log.Debug("Request handled successfully")
 }
-
 
 func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
