@@ -533,11 +533,9 @@ func (s *ApiServer) serve() {
 	err := http.Serve(s.listener, s.allowOriginMiddleware(m))
 	if s.close {
 		return
-	} else
 	} else if err != nil {
 		log.WithError(err).Fatal("failed serving api")
 	}
-
 
 func (s *ApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
