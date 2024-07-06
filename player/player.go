@@ -198,7 +198,7 @@ loop:
 						delay = 0
 					}
 
-					cmd.resp <- source.PositionMs() - delay
+						cmd.resp <- source.PositionMs() - delay
 				} else {
 					cmd.resp <- int64(0)
 				}
