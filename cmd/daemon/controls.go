@@ -355,40 +355,40 @@ if p.primaryStream.Media.IsTrack() {
 						for j, track := range disc.Track {
 							if track != nil {
 								response.Disc[i].Track[j] = TrackResponse{
-									Gid: hex.EncodeToString(track.Gid),
+									Gid:    hex.EncodeToString(track.Gid),
 									Number: 0,
 								}
 								if track.Number != nil {
 									response.Disc[i].Track[j].Number = int(*track.Number)
 								}
-
+				
 								trackDetail, err := p.sess.Spclient().MetadataForTrack(librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid))
 								if err != nil {
 									log.WithError(err).Warn("failed getting track metadata")
-									return nil
+									continue
 								}
-
+				
 								if trackDetail != nil {
 									var artists []string
 									for _, artist := range trackDetail.Artist {
 										if artist != nil && artist.Name != nil {
 											artists = append(artists, *artist.Name)
 										}
-									
-									
+									}
+				
 									hasLyrics := false
 									if trackDetail.HasLyrics != nil {
 										hasLyrics = *trackDetail.HasLyrics
-									}}
-
+									}
+				
 									response.Tracks = append(response.Tracks, TrackDetailResponse{
-										Name:     "",
-										Duration: 0,
-										URI:      librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
-										Artists:  artists,
-										ImageUrl: highestResImageUrl,
+										Name:        "",
+										Duration:    0,
+										URI:         librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
+										Artists:     artists,
+										ImageUrl:    highestResImageUrl,
 										TrackNumber: 0,
-										HasLyrics: hasLyrics,
+										HasLyrics:   hasLyrics,
 									})
 									if trackDetail.Name != nil {
 										response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
@@ -404,6 +404,7 @@ if p.primaryStream.Media.IsTrack() {
 						}
 					}
 				}
+				
 
 				for i, copyright := range album.Copyright {
 					if copyright != nil {
