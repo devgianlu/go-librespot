@@ -247,26 +247,26 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 	})
 
 	// Fetch Album Metadata if available
-	if p.primaryStream.Media.IsTrack() {
-		track := p.primaryStream.Media.Track()
-		if track.Album != nil && track.Album.Gid != nil {
-			albumId := librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeAlbum, track.Album.Gid)
-			album, err := p.sess.Spclient().MetadataForAlbum(albumId)
-			if err != nil {
-				log.WithError(err).Warn("failed fetching album details")
-			} else {
-				if album == nil {
-					log.Warn("Album metadata is nil")
-					return nil
-				}
-
-				var highestResImageUrl string
-				if album.CoverGroup != nil && len(album.CoverGroup.Image) > 0 {
-					highestResImage := album.CoverGroup.Image[len(album.CoverGroup.Image)-1]
-					if highestResImage != nil && highestResImage.FileId != nil {
-						highestResImageUrl = fmt.Sprintf("https://i.scdn.co/image/%s", hex.EncodeToString(highestResImage.FileId))
-					}
-				}
+// Fetch Album Metadata if available
+if p.primaryStream.Media.IsTrack() {
+    track := p.primaryStream.Media.Track()
+    if track.Album != nil && track.Album.Gid != nil {
+        albumId := librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeAlbum, track.Album.Gid)
+        album, err := p.sess.Spclient().MetadataForAlbum(albumId)
+        if err != nil {
+            log.WithError(err).Warn("failed fetching album details")
+        } else {
+            if album == nil {
+                log.Warn("Album metadata is nil")
+                return nil
+            }
+			var highestResImageUrl string
+            if album.CoverGroup != nil && len(album.CoverGroup.Image) > 0 {
+                highestResImage := album.CoverGroup.Image[len(album.CoverGroup.Image)-1]
+                if highestResImage != nil && highestResImage.FileId != nil {
+                    highestResImageUrl = fmt.Sprintf("https://i.scdn.co/image/%s", hex.EncodeToString(highestResImage.FileId))
+                }
+            }
 
 				response := AlbumResponse{
 					Gid:          hex.EncodeToString(album.Gid),
@@ -374,7 +374,12 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										if artist != nil && artist.Name != nil {
 											artists = append(artists, *artist.Name)
 										}
-									}
+									
+									
+									hasLyrics := false
+									if trackDetail.HasLyrics != nil {
+										hasLyrics = *trackDetail.HasLyrics
+									}}
 
 									response.Tracks = append(response.Tracks, TrackDetailResponse{
 										Name:     "",
@@ -383,8 +388,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										Artists:  artists,
 										ImageUrl: highestResImageUrl,
 										TrackNumber: 0,
-										HasLyrics: *trackDetail.HasLyrics,
-
+										HasLyrics: hasLyrics,
 									})
 									if trackDetail.Name != nil {
 										response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
@@ -432,7 +436,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 				p.app.server.Emit(&ApiEvent{
 					Type: ApiEventTypeAlbumMetadata,
 					Data: response,
-				})
+				})	
 			}
 		}
 	}
