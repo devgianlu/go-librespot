@@ -536,6 +536,7 @@ func (s *ApiServer) serve() {
 	} else if err != nil {
 		log.WithError(err).Fatal("failed serving api")
 	}
+}
 
 func (s *ApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
