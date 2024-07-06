@@ -413,9 +413,6 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 					}
 				}
 
-				// Add has lyrics to the album metadata
-				response.HasLyrics = false
-
 				for i, image := range album.CoverGroup.Image {
 					if image != nil {
 						response.CoverGroup.Image[i] = ImageResponse{
