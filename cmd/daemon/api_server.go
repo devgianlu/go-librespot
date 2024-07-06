@@ -8,6 +8,7 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
+	metadatapb "go-librespot/proto/spotify/metadata"
 	"net"
 	"net/http"
 	"nhooyr.io/websocket"
@@ -48,6 +49,7 @@ const (
 	ApiRequestTypeSetRepeatingTrack   ApiRequestType = "repeating_track"
 	ApiRequestTypeSetShufflingContext ApiRequestType = "shuffling_context"
 	ApiRequestTypeAddToQueue          ApiRequestType = "add_to_queue"
+	ApiRequestTypeGetAlbumDetails     ApiRequestType = "get_album_details"
 )
 
 type ApiEventType string
@@ -66,6 +68,7 @@ const (
 	ApiEventTypeRepeatTrack    ApiEventType = "repeat_track"
 	ApiEventTypeRepeatContext  ApiEventType = "repeat_context"
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
+	ApiEventTypeAlbumMetadata  ApiEventType = "album_metadata"
 )
 
 type ApiRequest struct {
@@ -85,23 +88,81 @@ type ApiRequestDataPlay struct {
 	Paused    bool   `json:"paused"`
 }
 
+type ApiRequestDataAlbum struct {
+	Uri string `json:"uri"`
+}
+
 type apiResponse struct {
 	data any
 	err  error
 }
 
 type ApiResponseStatusTrack struct {
+	Uri                   string   `json:"uri"`
+	Name                  string   `json:"name"`
+	ArtistNames           []string `json:"artist_names"`
+	AlbumName             string   `json:"album_name"`
+	AlbumCoverUrl         string   `json:"album_cover_url"`
+	Position              int64    `json:"position"`
+	Duration              int      `json:"duration"`
+	ReleaseDate           string   `json:"release_date"`
+	TrackNumber           int      `json:"track_number"`
+	DiscNumber            int      `json:"disc_number"`
+	Popularity            int      `json:"popularity"`
+	ExternalIDs           []string `json:"external_ids"`
+	FileFormats           []string `json:"file_formats"`
+	PreviewFormats        []string `json:"preview_formats"`
+	EarliestLiveTimestamp int64    `json:"earliest_live_timestamp"`
+	HasLyrics             bool     `json:"has_lyrics"`
+	Licensor              string   `json:"licensor"`
+	LanguageOfPerformance []string `json:"language_of_performance"`
+	OriginalTitle         string   `json:"original_title"`
+}
+
+type ApiResponseAlbumTrack struct {
 	Uri           string   `json:"uri"`
 	Name          string   `json:"name"`
 	ArtistNames   []string `json:"artist_names"`
-	AlbumName     string   `json:"album_name"`
 	AlbumCoverUrl string   `json:"album_cover_url"`
-	Position      int64    `json:"position"`
 	Duration      int      `json:"duration"`
-	ReleaseDate   string   `json:"release_date"`
 	TrackNumber   int      `json:"track_number"`
 	DiscNumber    int      `json:"disc_number"`
 }
+
+
+func NewApiResponseAlbumTracks(album *metadatapb.Album, prodInfo *ProductInfo) []*ApiResponseAlbumTrack {
+	var albumCoverId string
+	if len(album.CoverGroup.Image) > 0 {
+		albumCoverId = hex.EncodeToString(album.CoverGroup.Image[len(album.CoverGroup.Image)-1].FileId)
+	}
+
+	var tracks []*ApiResponseAlbumTrack
+	for _, disc := range album.Disc {
+		for _, track := range disc.Track {
+			var artists []string
+			for _, artist := range track.Artist {
+				if artist.Name != nil {
+					artists = append(artists, *artist.Name)
+				}
+			}
+
+			tracks = append(tracks, &ApiResponseAlbumTrack{
+				Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
+				Name:          *track.Name,
+				ArtistNames:   artists,
+				AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+				Duration:      int(*track.Duration),
+				TrackNumber:   int(*track.Number),
+				DiscNumber:    int(*disc.Number),
+			})
+		}
+	}
+
+	return tracks
+}
+
+
+
 
 func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
 	if media.IsTrack() {
@@ -114,11 +175,10 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 
 		var albumCoverId string
 		if len(track.Album.Cover) > 0 {
-			albumCoverId = hex.EncodeToString(track.Album.Cover[len(track.Album.Cover)-1].FileId)
+			albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
 		} else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
-			albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[len(track.Album.CoverGroup.Image)-1].FileId)
+			albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
 		}
-
 
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
@@ -134,12 +194,11 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 		}
 	} else {
 		episode := media.Episode()
-	
+
 		var albumCoverId string
 		if len(episode.CoverImage.Image) > 0 {
-			albumCoverId = hex.EncodeToString(episode.CoverImage.Image[len(episode.CoverImage.Image)-1].FileId)
+			albumCoverId = hex.EncodeToString(episode.CoverImage.Image[0].FileId)
 		}
-
 
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
@@ -250,21 +309,25 @@ func NewStubApiServer() (*ApiServer, error) {
 }
 
 func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
+	log.Debugf("Handling request: %v", req.Type)
 	req.resp = make(chan apiResponse, 1)
 	s.requests <- req
 	resp := <-req.resp
 	if errors.Is(resp.err, ErrNoSession) {
 		w.WriteHeader(http.StatusNoContent)
+		log.Debug("No session error")
 		return
 	} else if resp.err != nil {
-		log.WithError(resp.err).Error("failed handling status request")
+		log.WithError(resp.err).Error("failed handling request")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp.data)
+	log.Debug("Request handled successfully")
 }
+
 
 func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -290,6 +353,29 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
 	})
+	m.HandleFunc("/album", func(w http.ResponseWriter, r *http.Request) {
+		log.Debug("Received request for album details")
+		if r.Method != "GET" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			log.Debug("Method not allowed")
+			return
+		}
+	
+		uri := r.URL.Query().Get("uri")
+		if uri == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			log.Debug("Bad request: Missing URI")
+			return
+		}
+	
+		log.Debugf("Fetching album details for URI: %s", uri)
+		data := ApiRequestDataAlbum{Uri: uri}
+		req := ApiRequest{Type: ApiRequestTypeGetAlbumDetails, Data: data}
+		s.handleRequest(req, w)
+	})
+	
+	
+
 	m.HandleFunc("/player/play", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -488,7 +574,6 @@ func (s *ApiServer) Emit(ev *ApiEvent) {
 		err := wsjson.Write(ctx, client, ev)
 		cancel()
 		if err != nil {
-			// purposely do not propagate this to the caller
 			log.WithError(err).Error("failed communicating with websocket client")
 		}
 	}

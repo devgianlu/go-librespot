@@ -232,6 +232,37 @@ func (c *Spclient) MetadataForTrack(track librespot.SpotifyId) (*metadatapb.Trac
 	return &protoResp, nil
 }
 
+func (c *Spclient) MetadataForAlbum(album librespot.SpotifyId) (*metadatapb.Album, error) {
+	if album.Type() != librespot.SpotifyIdTypeAlbum {
+		panic(fmt.Sprintf("invalid type: %s", album.Type()))
+	}
+
+	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/album/%s", album.Hex()), nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from album metadata: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var protoResp metadatapb.Album
+	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling Album: %w", err)
+	}
+
+	return &protoResp, nil
+}
+
+
+
 func (c *Spclient) MetadataForEpisode(episode librespot.SpotifyId) (*metadatapb.Episode, error) {
 	if episode.Type() != librespot.SpotifyIdTypeEpisode {
 		panic(fmt.Sprintf("invalid type: %s", episode.Type()))

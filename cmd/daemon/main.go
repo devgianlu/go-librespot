@@ -422,18 +422,17 @@ func loadConfig(cfg *Config) error {
 func main() {
 	rand.Seed(uint64(time.Now().UnixNano()))
 
+	// Set log level
+	log.SetLevel(log.DebugLevel)
+
 	var cfg Config
 	if err := loadConfig(&cfg); err != nil {
 		log.WithError(err).Fatal("failed loading config")
 	}
 
-	// parse and set log level
-	logLevel, err := log.ParseLevel(*cfg.LogLevel)
-	if err != nil {
-		log.WithError(err).Fatalf("invalid log level: %s", *cfg.LogLevel)
-	} else {
-		log.SetLevel(logLevel)
-	}
+
+	log.SetLevel(log.DebugLevel)
+	
 
 	// create new app
 	app, err := NewApp(&cfg)

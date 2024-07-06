@@ -14,6 +14,8 @@ var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{21,22})$")
 func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 	if strings.HasPrefix(uri, "spotify:episode:") || strings.HasPrefix(uri, "spotify:show:") {
 		return SpotifyIdTypeEpisode
+	} else if strings.HasPrefix(uri, "spotify:album:") {
+		return SpotifyIdTypeAlbum
 	}
 
 	return SpotifyIdTypeTrack
@@ -47,6 +49,7 @@ type SpotifyIdType string
 const (
 	SpotifyIdTypeTrack   SpotifyIdType = "track"
 	SpotifyIdTypeEpisode SpotifyIdType = "episode"
+	SpotifyIdTypeAlbum   SpotifyIdType = "album" // New type added here
 )
 
 type SpotifyId struct {

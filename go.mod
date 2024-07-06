@@ -17,6 +17,7 @@ require (
 
 require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/gen2brain/malgo v0.11.22 // indirect
 	github.com/klauspost/compress v1.10.3 // indirect
 	github.com/miekg/dns v1.1.54 // indirect
 	golang.org/x/mod v0.11.0 // indirect

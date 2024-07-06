@@ -7,6 +7,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e h1:OoETp+L//8ZDtd5BWKaogHQjgA104yF4a2yqjfaG3mE=
 github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e/go.mod h1:m5DMFz6BcaKJwxxPaSh9MxwPzK2GPSt1KRFC8Imf0ik=
+github.com/gen2brain/malgo v0.11.22 h1:fRtTbzVI9CDWnfEJGo/GxKxN7pXtCb0NsAeUVUjZk9U=
+github.com/gen2brain/malgo v0.11.22/go.mod h1:f9TtuN7DVrXMiV/yIceMeWpvanyVzJQMlBecJFVMxww=
 github.com/gin-contrib/sse v0.1.0 h1:Y/yl/+YNO8GZSjAhjMsSuLt29uWRFHdHYUb5lYOV9qE=
 github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm+fLHvGI=
 github.com/gin-gonic/gin v1.6.3 h1:ahKqKTFpO5KTPHxWZjEdPScmYaGtLo8Y4DMHoEsnp14=

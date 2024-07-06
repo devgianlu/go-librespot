@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -244,6 +245,196 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		Type: ApiEventTypeMetadata,
 		Data: ApiEventDataMetadata(*NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, trackPosition)),
 	})
+
+	// Fetch Album Metadata if available
+	if p.primaryStream.Media.IsTrack() {
+		track := p.primaryStream.Media.Track()
+		if track.Album != nil && track.Album.Gid != nil {
+			albumId := librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeAlbum, track.Album.Gid)
+			album, err := p.sess.Spclient().MetadataForAlbum(albumId)
+			if err != nil {
+				log.WithError(err).Warn("failed fetching album details")
+			} else {
+				if album == nil {
+					log.Warn("Album metadata is nil")
+					return nil
+				}
+
+				var highestResImageUrl string
+				if album.CoverGroup != nil && len(album.CoverGroup.Image) > 0 {
+					highestResImage := album.CoverGroup.Image[len(album.CoverGroup.Image)-1]
+					if highestResImage != nil && highestResImage.FileId != nil {
+						highestResImageUrl = fmt.Sprintf("https://i.scdn.co/image/%s", hex.EncodeToString(highestResImage.FileId))
+					}
+				}
+
+				response := AlbumResponse{
+					Gid:          hex.EncodeToString(album.Gid),
+					Name:         "",
+					Artist:       make([]ArtistResponse, len(album.Artist)),
+					Type:         "",
+					Label:        "",
+					Date:         DateResponse{},
+					Popularity:   0,
+					ExternalID:   make([]ExternalIDResponse, len(album.ExternalId)),
+					Disc:         make([]DiscResponse, len(album.Disc)),
+					Copyright:    make([]CopyrightResponse, len(album.Copyright)),
+					CoverGroup:   CoverGroupResponse{Image: make([]ImageResponse, len(album.CoverGroup.Image))},
+					OriginalTitle: "",
+					Tracks:       []TrackDetailResponse{},
+				}
+
+				if album.Name != nil {
+					response.Name = *album.Name
+				}
+				if album.Type != nil {
+					response.Type = album.Type.String()
+				}
+				if album.Label != nil {
+					response.Label = *album.Label
+				}
+				if album.Date != nil {
+					response.Date = DateResponse{
+						Year:  0,
+						Month: 0,
+						Day:   0,
+					}
+					if album.Date.Year != nil {
+						response.Date.Year = *album.Date.Year
+					}
+					if album.Date.Month != nil {
+						response.Date.Month = *album.Date.Month
+					}
+					if album.Date.Day != nil {
+						response.Date.Day = *album.Date.Day
+					}
+				}
+				if album.Popularity != nil {
+					response.Popularity = *album.Popularity
+				}
+				if album.OriginalTitle != nil {
+					response.OriginalTitle = *album.OriginalTitle
+				}
+
+				for i, artist := range album.Artist {
+					if artist != nil {
+						response.Artist[i] = ArtistResponse{
+							Gid:  hex.EncodeToString(artist.Gid),
+							Name: "",
+						}
+						if artist.Name != nil {
+							response.Artist[i].Name = *artist.Name
+						}
+					}
+				}
+
+				for i, externalID := range album.ExternalId {
+					if externalID != nil {
+						response.ExternalID[i] = ExternalIDResponse{
+							Type: "",
+							ID:   "",
+						}
+						if externalID.Type != nil {
+							response.ExternalID[i].Type = *externalID.Type
+						}
+						if externalID.Id != nil {
+							response.ExternalID[i].ID = *externalID.Id
+						}
+					}
+				}
+
+				for i, disc := range album.Disc {
+					if disc != nil {
+						response.Disc[i] = DiscResponse{
+							Number: 0,
+							Track:  make([]TrackResponse, len(disc.Track)),
+						}
+						if disc.Number != nil {
+							response.Disc[i].Number = int(*disc.Number)
+						}
+						for j, track := range disc.Track {
+							if track != nil {
+								response.Disc[i].Track[j] = TrackResponse{
+									Gid: hex.EncodeToString(track.Gid),
+									Number: 0,
+								}
+								if track.Number != nil {
+									response.Disc[i].Track[j].Number = int(*track.Number)
+								}
+
+								trackDetail, err := p.sess.Spclient().MetadataForTrack(librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid))
+								if err != nil {
+									log.WithError(err).Warn("failed getting track metadata")
+									return nil
+								}
+
+								if trackDetail != nil {
+									var artists []string
+									for _, artist := range trackDetail.Artist {
+										if artist != nil && artist.Name != nil {
+											artists = append(artists, *artist.Name)
+										}
+									}
+
+									response.Tracks = append(response.Tracks, TrackDetailResponse{
+										Name:     "",
+										Duration: 0,
+										URI:      librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
+										Artists:  artists,
+										ImageUrl: highestResImageUrl,
+										TrackNumber: 0,
+									})
+									if trackDetail.Name != nil {
+										response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
+									}
+									if trackDetail.Duration != nil {
+										response.Tracks[len(response.Tracks)-1].Duration = int(*trackDetail.Duration)
+									}
+									if trackDetail.Number != nil {
+										response.Tracks[len(response.Tracks)-1].TrackNumber = int(*trackDetail.Number)
+									}
+								}
+							}
+						}
+					}
+				}
+
+				for i, copyright := range album.Copyright {
+					if copyright != nil {
+						response.Copyright[i] = CopyrightResponse{
+							Type: int32(copyright.Type.Number()),
+							Text: "",
+						}
+						if copyright.Text != nil {
+							response.Copyright[i].Text = *copyright.Text
+						}
+					}
+				}
+
+				for i, image := range album.CoverGroup.Image {
+					if image != nil {
+						response.CoverGroup.Image[i] = ImageResponse{
+							FileID: hex.EncodeToString(image.FileId),
+							Size:   int(image.Size.Number()),
+							Width:  0,
+							Height: 0,
+						}
+						if image.Width != nil {
+							response.CoverGroup.Image[i].Width = int(*image.Width)
+						}
+						if image.Height != nil {
+							response.CoverGroup.Image[i].Height = int(*image.Height)
+						}
+					}
+				}
+				p.app.server.Emit(&ApiEvent{
+					Type: ApiEventTypeAlbumMetadata,
+					Data: response,
+				})
+			}
+		}
+	}
+
 	return nil
 }
 
