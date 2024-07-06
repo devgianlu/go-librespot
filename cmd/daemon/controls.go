@@ -375,6 +375,10 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 											artists = append(artists, *artist.Name)
 										}
 									}
+									hasLyrics := false
+									if trackDetail.HasLyrics != nil {
+										hasLyrics = *trackDetail.HasLyrics
+									}
 
 									response.Tracks = append(response.Tracks, TrackDetailResponse{
 										Name:     "",
@@ -383,7 +387,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 										Artists:  artists,
 										ImageUrl: highestResImageUrl,
 										TrackNumber: 0,
-										HasLyrics: *trackDetail.HasLyrics,
+										HasLyrics: hasLyrics,
 
 									})
 									if trackDetail.Name != nil {

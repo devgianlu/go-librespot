@@ -526,6 +526,10 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 									artists = append(artists, *artist.Name)
 								}
 							}
+							hasLyrics := false
+							if trackDetail.HasLyrics != nil {
+								hasLyrics = *trackDetail.HasLyrics
+							}
 	
 							response.Tracks = append(response.Tracks, TrackDetailResponse{
 								Name:     "",
@@ -534,6 +538,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 								Artists:  artists,
 								ImageUrl: highestResImageUrl,
 								TrackNumber: 0,
+								HasLyrics: hasLyrics,
 							})
 							if trackDetail.Name != nil {
 								response.Tracks[len(response.Tracks)-1].Name = *trackDetail.Name
