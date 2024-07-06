@@ -190,7 +190,6 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 			Duration:      int(*track.Duration),
 			ReleaseDate:   track.Album.Date.String(),
 			HasLyrics:     *track.HasLyrics,
-			Licensor:      track.Licensor.Uuid,
 			TrackNumber:   int(*track.Number),
 			DiscNumber:    int(*track.DiscNumber),
 		}
