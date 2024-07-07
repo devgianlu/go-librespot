@@ -184,13 +184,21 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
         if track.HasLyrics != nil {
             hasLyrics = *track.HasLyrics
         }
+		album := track.Album
+		var highestResImageUrl string
+		if album.CoverGroup != nil && len(album.CoverGroup.Image) > 0 {
+			highestResImage := album.CoverGroup.Image[len(album.CoverGroup.Image)-1]
+			if highestResImage != nil && highestResImage.FileId != nil {
+				highestResImageUrl = fmt.Sprintf("https://i.scdn.co/image/%s", hex.EncodeToString(highestResImage.FileId))
+			}
+		}
 
         return &ApiResponseStatusTrack{
             Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
             Name:          *track.Name,
             ArtistNames:   artists,
             AlbumName:     *track.Album.Name,
-            AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+            AlbumCoverUrl: highestResImageUrl,
             Position:      position,
             Duration:      int(*track.Duration),
             ReleaseDate:   track.Album.Date.String(),
