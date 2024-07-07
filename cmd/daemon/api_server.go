@@ -173,12 +173,7 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
             artists = append(artists, *a.Name)
         }
 
-        var albumCoverId string
-        if len(track.Album.Cover) > 0 {
-            albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
-        } else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
-            albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
-        }
+
 
         hasLyrics := false
         if track.HasLyrics != nil {
