@@ -22,6 +22,7 @@ import (
 const (
 	DisableHardwarePause = true // FIXME: should we fix this?
 	ReleasePcmOnPause    = true
+	BufferTimeMicro      = 500_000
 )
 
 type output struct {
@@ -32,8 +33,10 @@ type output struct {
 
 	cond *sync.Cond
 
-	pcmHandle *C.snd_pcm_t
-	canPause  bool
+	pcmHandle  *C.snd_pcm_t
+	canPause   bool
+	periodSize int
+	bufferSize int
 
 	externalVolume bool
 
@@ -106,49 +109,88 @@ func (out *output) openAndSetup() error {
 		return out.alsaError("snd_pcm_open", err)
 	}
 
-	var params *C.snd_pcm_hw_params_t
-	C.snd_pcm_hw_params_malloc(&params)
-	defer C.free(unsafe.Pointer(params))
+	var hwparams *C.snd_pcm_hw_params_t
+	C.snd_pcm_hw_params_malloc(&hwparams)
+	defer C.free(unsafe.Pointer(hwparams))
 
-	if err := C.snd_pcm_hw_params_any(out.pcmHandle, params); err < 0 {
+	if err := C.snd_pcm_hw_params_any(out.pcmHandle, hwparams); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_any", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_access(out.pcmHandle, params, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
+	if err := C.snd_pcm_hw_params_set_access(out.pcmHandle, hwparams, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_access", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, params, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
+	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, hwparams, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_format", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, params, C.unsigned(out.channels)); err < 0 {
+	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, hwparams, C.unsigned(out.channels)); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_channels", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_rate_resample(out.pcmHandle, params, 1); err < 0 {
+	if err := C.snd_pcm_hw_params_set_rate_resample(out.pcmHandle, hwparams, 1); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_rate_resample", err)
 	}
 
 	sr := C.unsigned(out.sampleRate)
-	if err := C.snd_pcm_hw_params_set_rate_near(out.pcmHandle, params, &sr, nil); err < 0 {
+	if err := C.snd_pcm_hw_params_set_rate_near(out.pcmHandle, hwparams, &sr, nil); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_rate_near", err)
 	}
 
-	if err := C.snd_pcm_hw_params(out.pcmHandle, params); err < 0 {
+	bufferTime := C.uint(BufferTimeMicro)
+	if err := C.snd_pcm_hw_params_set_buffer_time_near(out.pcmHandle, hwparams, &bufferTime, nil); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_set_buffer_time_near", err)
+	}
+
+	if err := C.snd_pcm_hw_params(out.pcmHandle, hwparams); err < 0 {
 		return out.alsaError("snd_pcm_hw_params", err)
 	}
 
-	_ = out.logParams(params)
+	_ = out.logParams(hwparams)
 
 	if DisableHardwarePause {
 		out.canPause = false
 	} else {
-		if err := C.snd_pcm_hw_params_can_pause(params); err < 0 {
+		if err := C.snd_pcm_hw_params_can_pause(hwparams); err < 0 {
 			return out.alsaError("snd_pcm_hw_params_can_pause", err)
 		} else {
 			out.canPause = err == 1
 		}
+	}
+
+	var dir C.int
+	var frames C.snd_pcm_uframes_t
+	if err := C.snd_pcm_hw_params_get_period_size(hwparams, &frames, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_period_size", err)
+	} else {
+		out.periodSize = int(frames)
+	}
+
+	if err := C.snd_pcm_hw_params_get_buffer_size(hwparams, &frames); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
+	} else {
+		out.bufferSize = int(frames)
+	}
+
+	var swparams *C.snd_pcm_sw_params_t
+	C.snd_pcm_sw_params_malloc(&swparams)
+	defer C.free(unsafe.Pointer(swparams))
+
+	if err := C.snd_pcm_sw_params_current(out.pcmHandle, swparams); err < 0 {
+		return out.alsaError("snd_pcm_sw_params_current", err)
+	}
+
+	if err := C.snd_pcm_sw_params_set_start_threshold(out.pcmHandle, swparams, C.ulong(out.bufferSize-out.periodSize)); err < 0 {
+		return out.alsaError("snd_pcm_sw_params_set_start_threshold", err)
+	}
+
+	if err := C.snd_pcm_sw_params_set_avail_min(out.pcmHandle, swparams, C.ulong(out.periodSize)); err < 0 {
+		return out.alsaError("snd_pcm_sw_params_set_avail_min", err)
+	}
+
+	if err := C.snd_pcm_sw_params(out.pcmHandle, swparams); err < 0 {
+		return out.alsaError("snd_pcm_sw_params", err)
 	}
 
 	return nil
@@ -317,22 +359,17 @@ func alsaMixerCallback(elem *C.snd_mixer_elem_t, _ C.uint) C.int {
 }
 
 func (out *output) loop() error {
-	floats := make([]float32, out.channels*16*1024)
+	floats := make([]float32, out.channels*out.periodSize)
 
 	for {
 		n, err := out.reader.Read(floats)
-		if errors.Is(err, io.EOF) || errors.Is(err, librespot.ErrDrainReader) {
+		if errors.Is(err, io.EOF) {
 			// drain pcm ignoring errors
 			out.cond.L.Lock()
 			C.snd_pcm_drain(out.pcmHandle)
 			out.cond.L.Unlock()
 
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-
-			out.reader.Drained()
-			continue
+			return nil
 		} else if err != nil {
 			return fmt.Errorf("failed reading source: %w", err)
 		}
