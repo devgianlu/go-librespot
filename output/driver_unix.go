@@ -239,6 +239,38 @@ func (out *output) loop() error {
 
 	for {
 		n, err := out.reader.Read(floats)
+		if n > 0 {
+			if n%out.channels != 0 {
+				return fmt.Errorf("invalid read amount: %d", n)
+			}
+
+			if !out.mixerEnabled && !out.externalVolume {
+				for i := 0; i < n; i++ {
+					floats[i] *= out.volume
+				}
+			}
+
+			out.cond.L.Lock()
+			for !(!out.paused || out.closed || !out.released) {
+				out.cond.Wait()
+			}
+
+			if out.closed {
+				out.cond.L.Unlock()
+				return nil
+			}
+
+			if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
+				nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
+				if nn < 0 {
+					out.cond.L.Unlock()
+					return out.alsaError("snd_pcm_recover", C.int(nn))
+				}
+			}
+
+			out.cond.L.Unlock()
+		}
+
 		if errors.Is(err, io.EOF) {
 			// drain pcm ignoring errors
 			out.cond.L.Lock()
@@ -249,36 +281,6 @@ func (out *output) loop() error {
 		} else if err != nil {
 			return fmt.Errorf("failed reading source: %w", err)
 		}
-
-		if n%out.channels != 0 {
-			return fmt.Errorf("invalid read amount: %d", n)
-		}
-
-		if !out.mixerEnabled && !out.externalVolume {
-			for i := 0; i < n; i++ {
-				floats[i] *= out.volume
-			}
-		}
-
-		out.cond.L.Lock()
-		for !(!out.paused || out.closed || !out.released) {
-			out.cond.Wait()
-		}
-
-		if out.closed {
-			out.cond.L.Unlock()
-			return nil
-		}
-
-		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
-			nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
-			if nn < 0 {
-				out.cond.L.Unlock()
-				return out.alsaError("snd_pcm_recover", C.int(nn))
-			}
-		}
-
-		out.cond.L.Unlock()
 	}
 }
 
