@@ -139,6 +139,8 @@ func (out *output) openAndSetup() error {
 		return out.alsaError("snd_pcm_hw_params", err)
 	}
 
+	_ = out.logParams(params)
+
 	if DisableHardwarePause {
 		out.canPause = false
 	} else {
@@ -148,6 +150,45 @@ func (out *output) openAndSetup() error {
 			out.canPause = err == 1
 		}
 	}
+
+	return nil
+}
+
+func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
+	var dir C.int
+
+	var rate C.uint
+	if err := C.snd_pcm_hw_params_get_rate(params, &rate, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_rate", err)
+	}
+
+	var periodTime C.uint
+	if err := C.snd_pcm_hw_params_get_period_time(params, &periodTime, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_period_time", err)
+	}
+
+	var frames C.snd_pcm_uframes_t
+	if err := C.snd_pcm_hw_params_get_period_size(params, &frames, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_period_size", err)
+	}
+
+	var bufferTime C.uint
+	if err := C.snd_pcm_hw_params_get_buffer_time(params, &bufferTime, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_time", err)
+	}
+
+	var bufferSize C.ulong
+	if err := C.snd_pcm_hw_params_get_buffer_size(params, &bufferSize); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
+	}
+
+	var periods C.uint
+	if err := C.snd_pcm_hw_params_get_periods(params, &periods, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_periods", err)
+	}
+
+	log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames",
+		rate, periodTime, frames, bufferTime, bufferSize, periods)
 
 	return nil
 }
