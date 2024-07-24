@@ -107,7 +107,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		// listen on external volume changes (for example the alsa driver)
 		go func() {
 			for {
-				v, ok := appPlayer.externalVolumeUpdate.Get()
+				v, ok, _ := appPlayer.externalVolumeUpdate.Get()
 				if !ok {
 					break
 				}

@@ -28,7 +28,7 @@ type AppPlayer struct {
 
 	player               *player.Player
 	initialVolumeOnce    sync.Once
-	externalVolumeUpdate output.RingBuffer[float32]
+	externalVolumeUpdate *output.RingBuffer[float32]
 
 	spotConnId string
 

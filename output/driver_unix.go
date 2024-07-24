@@ -53,11 +53,11 @@ type output struct {
 	closed   bool
 	released bool
 
-	externalVolumeUpdate RingBuffer[float32]
+	externalVolumeUpdate *RingBuffer[float32]
 	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate RingBuffer[float32]) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
 	out := &output{
 		reader:               reader,
 		channels:             channels,

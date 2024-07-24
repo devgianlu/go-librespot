@@ -49,7 +49,7 @@ type NewOutputOptions struct {
 	// ExternalVolume specifies, if the volume is controlled outside of the app.
 	ExternalVolume bool
 
-	ExternalVolumeUpdate RingBuffer[float32]
+	ExternalVolumeUpdate *RingBuffer[float32]
 }
 
 func NewOutput(options *NewOutputOptions) (*Output, error) {
@@ -59,29 +59,6 @@ func NewOutput(options *NewOutputOptions) (*Output, error) {
 	}
 
 	return &Output{out}, nil
-}
-
-type RingBuffer[T any] struct {
-	inner chan T
-}
-
-func NewRingBuffer[T any](capacity uint64) RingBuffer[T] {
-	return RingBuffer[T]{
-		inner: make(chan T, capacity),
-	}
-}
-
-func (b RingBuffer[T]) Put(val T) {
-	if len(b.inner) == cap(b.inner) {
-		_ = <-b.inner
-	}
-	b.inner <- val
-}
-
-func (b RingBuffer[T]) Get() (T, bool) {
-	v, ok := <-b.inner
-
-	return v, ok
 }
 
 // Pause pauses the output.

@@ -62,7 +62,7 @@ type playerCmdDataSet struct {
 	paused  bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, control string, volumeSteps uint32, externalVolume bool, externalVolumeUpdate output.RingBuffer[float32]) (*Player, error) {
+func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, control string, volumeSteps uint32, externalVolume bool, externalVolumeUpdate *output.RingBuffer[float32]) (*Player, error) {
 	p := &Player{
 		sp:                   sp,
 		audioKey:             audioKey,
