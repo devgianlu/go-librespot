@@ -74,7 +74,7 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
 
-		if !p.app.cfg.ExternalVolume && len(*p.app.cfg.MixerDevice) != 0 {
+		if !p.app.cfg.ExternalVolume && len(*p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
 			p.initialVolumeOnce.Do(func() {
 				p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
