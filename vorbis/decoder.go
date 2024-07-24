@@ -261,6 +261,7 @@ func (d *Decoder) Read(p []float32) (n int, err error) {
 			copied := copy(p[n:], d.buf)
 			d.buf = d.buf[copied:]
 			n += copied
+			continue
 		}
 
 		// decode another page
