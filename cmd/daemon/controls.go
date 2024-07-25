@@ -275,7 +275,7 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 		requiresUpdate = true
 	}
 
-	if shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
+	if p.state.tracks != nil && shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
 		if err := p.state.tracks.ToggleShuffle(*shufflingContext); err != nil {
 			log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
 			return
@@ -303,6 +303,11 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 }
 
 func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
+	if p.state.tracks == nil {
+		log.Warnf("cannot add to queue without a context")
+		return
+	}
+
 	p.state.tracks.AddToQueue(track)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
@@ -311,6 +316,11 @@ func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
 }
 
 func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
+	if p.state.tracks == nil {
+		log.Warnf("cannot set queue without a context")
+		return
+	}
+
 	p.state.tracks.SetQueue(prev, next)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
