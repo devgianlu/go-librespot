@@ -160,6 +160,8 @@ func (tl *List) GoStart() bool {
 func (tl *List) PeekNext() *connectpb.ContextTrack {
 	if tl.playingQueue && len(tl.queue) > 1 {
 		return tl.queue[1]
+	} else if !tl.playingQueue && len(tl.queue) > 0 {
+		return tl.queue[0]
 	}
 
 	iter := tl.tracks.iterHere()
