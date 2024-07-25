@@ -235,12 +235,17 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "resume":
 		return p.play()
 	case "seek_to":
-		if req.Command.Relative != "beginning" {
+		var position int64
+		if req.Command.Relative == "current" {
+			position = p.player.PositionMs() + req.Command.Position
+		} else if req.Command.Relative == "beginning" {
+			position = req.Command.Position
+		} else {
 			log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
 			return nil
 		}
 
-		if err := p.seek(req.Command.Position); err != nil {
+		if err := p.seek(position); err != nil {
 			return fmt.Errorf("failed seeking stream: %w", err)
 		}
 
