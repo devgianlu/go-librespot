@@ -36,6 +36,7 @@ type output struct {
 	canPause   bool
 	periodSize int
 	bufferSize int
+	samples    *RingBuffer[[]float32]
 
 	externalVolume bool
 
@@ -66,7 +67,7 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 		mixer:                mixer,
 		control:              control,
 		volume:               initialVolume,
-		err:                  make(chan error, 1),
+		err:                  make(chan error, 2),
 		cond:                 sync.NewCond(&sync.Mutex{}),
 		externalVolume:       externalVolume,
 		externalVolumeUpdate: externalVolumeUpdate,
@@ -75,6 +76,9 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	if err := out.setupPcm(); err != nil {
 		return nil, err
 	}
+
+	// this buffer holds multiple period buffers
+	out.samples = NewRingBuffer[[]float32](16)
 
 	if err := out.setupMixer(); err != nil {
 		if uintptr(unsafe.Pointer(out.mixerHandle)) != 0 {
@@ -86,7 +90,12 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	}
 
 	go func() {
-		out.err <- out.loop()
+		out.err <- out.readLoop()
+		_ = out.Close()
+	}()
+
+	go func() {
+		out.err <- out.writeLoop()
 		_ = out.Close()
 	}()
 
@@ -234,53 +243,69 @@ func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
 	return nil
 }
 
-func (out *output) loop() error {
-	floats := make([]float32, out.channels*out.periodSize)
-
+func (out *output) readLoop() error {
 	for {
+		floats := make([]float32, out.channels*out.periodSize)
 		n, err := out.reader.Read(floats)
 		if n > 0 {
-			if n%out.channels != 0 {
-				return fmt.Errorf("invalid read amount: %d", n)
-			}
-
-			if !out.mixerEnabled && !out.externalVolume {
-				for i := 0; i < n; i++ {
-					floats[i] *= out.volume
-				}
-			}
-
-			out.cond.L.Lock()
-			for !(!out.paused || out.closed || !out.released) {
-				out.cond.Wait()
-			}
-
-			if out.closed {
-				out.cond.L.Unlock()
+			floats = floats[:n]
+			if err := out.samples.PutWait(floats); errors.Is(err, ErrBufferClosed) {
 				return nil
+			} else if err != nil {
+				_ = out.samples.Close()
+				return err
 			}
-
-			if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
-				nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
-				if nn < 0 {
-					out.cond.L.Unlock()
-					return out.alsaError("snd_pcm_recover", C.int(nn))
-				}
-			}
-
-			out.cond.L.Unlock()
 		}
 
 		if errors.Is(err, io.EOF) {
-			// drain pcm ignoring errors
+			_ = out.samples.Close()
+			return nil
+		} else if err != nil {
+			_ = out.samples.Close()
+			return err
+		}
+	}
+}
+
+func (out *output) writeLoop() error {
+	for {
+		floats, err := out.samples.GetWait()
+		if errors.Is(err, ErrBufferClosed) {
 			out.cond.L.Lock()
 			C.snd_pcm_drain(out.pcmHandle)
 			out.cond.L.Unlock()
 
 			return nil
 		} else if err != nil {
-			return fmt.Errorf("failed reading source: %w", err)
+			_ = out.samples.Close()
+			return err
 		}
+
+		if !out.mixerEnabled && !out.externalVolume {
+			for i := 0; i < len(floats); i++ {
+				floats[i] *= out.volume
+			}
+		}
+
+		out.cond.L.Lock()
+		for !(!out.paused || out.closed || !out.released) {
+			out.cond.Wait()
+		}
+
+		if out.closed {
+			out.cond.L.Unlock()
+			return nil
+		}
+
+		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(len(floats)/out.channels)); nn < 0 {
+			nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
+			if nn < 0 {
+				out.cond.L.Unlock()
+				return out.alsaError("snd_pcm_recover", C.int(nn))
+			}
+		}
+
+		out.cond.L.Unlock()
 	}
 }
 
@@ -356,6 +381,8 @@ func (out *output) Drop() error {
 	if out.closed || out.released {
 		return nil
 	}
+
+	out.samples.Clear()
 
 	if err := C.snd_pcm_drop(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_drop", err)
