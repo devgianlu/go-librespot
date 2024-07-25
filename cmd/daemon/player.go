@@ -424,7 +424,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 				log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
-				log.Debugf("sending successful reply for delaer request")
+				log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
 		case req := <-apiRecv:
