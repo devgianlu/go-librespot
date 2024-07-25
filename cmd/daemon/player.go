@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	log "github.com/sirupsen/logrus"
@@ -356,8 +357,20 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 
 		var skipTo skipToFunc
 		if len(data.SkipToUri) > 0 {
+			skipToId, err := librespot.SpotifyIdFromUriSafe(data.SkipToUri)
+			if err != nil {
+				log.WithError(err).Warnf("trying to skip to invalid uri: %s", data.SkipToUri)
+				skipToId = nil
+			}
+
 			skipTo = func(track *connectpb.ContextTrack) bool {
-				return data.SkipToUri == track.Uri
+				if len(track.Uri) > 0 {
+					return data.SkipToUri == track.Uri
+				} else if len(track.Gid) > 0 {
+					return bytes.Equal(skipToId.Id(), track.Gid)
+				} else {
+					return false
+				}
 			}
 		}
 
