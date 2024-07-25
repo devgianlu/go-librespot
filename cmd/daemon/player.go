@@ -56,6 +56,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 		}
 
 		p.prodInfo = &prod
+		log.Debugf("autoplay enabled: %t", p.prodInfo.AutoplayEnabled())
 		return nil
 	case ap.PacketTypeCountryCode:
 		*p.countryCode = string(payload)

@@ -51,13 +51,13 @@ func (s *SwitchingAudioSource) Read(p []float32) (n int, err error) {
 
 	n, err = s.source[s.which].Read(p)
 	if errors.Is(err, io.EOF) {
+		// notify this source is done
+		s.done <- struct{}{}
+
 		// if there's no other source just let the EOF through
 		if s.source[!s.which] == nil {
 			return n, err
 		}
-
-		// notify this source is done
-		s.done <- struct{}{}
 
 		// delete current source and switch to the other one
 		delete(s.source, s.which)

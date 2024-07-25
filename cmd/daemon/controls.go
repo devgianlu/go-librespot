@@ -500,6 +500,7 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 			return false, nil
 		}
 
+		log.Debugf("resolved autoplay station: %s", ctx.Uri)
 		if err := p.loadContext(ctx, func(_ *connectpb.ContextTrack) bool { return true }, false); err != nil {
 			log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
 			return false, nil
