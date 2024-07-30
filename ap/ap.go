@@ -93,14 +93,6 @@ func (ap *Accesspoint) init() (err error) {
 	return nil
 }
 
-func (ap *Accesspoint) ConnectUserPass(username, password string) error {
-	return ap.Connect(&pb.LoginCredentials{
-		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
-		Username: proto.String(username),
-		AuthData: []byte(password),
-	})
-}
-
 func (ap *Accesspoint) ConnectSpotifyToken(username, token string) error {
 	return ap.Connect(&pb.LoginCredentials{
 		Typ:      pb.AuthenticationType_AUTHENTICATION_SPOTIFY_TOKEN.Enum(),

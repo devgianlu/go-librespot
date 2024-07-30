@@ -90,8 +90,6 @@ func (c *Login5) Login(credentials proto.Message) error {
 	switch lm := credentials.(type) {
 	case *credentialspb.StoredCredential:
 		req.LoginMethod = &pb.LoginRequest_StoredCredential{StoredCredential: lm}
-	case *credentialspb.Password:
-		req.LoginMethod = &pb.LoginRequest_Password{Password: lm}
 	case *credentialspb.FacebookAccessToken:
 		req.LoginMethod = &pb.LoginRequest_FacebookAccessToken{FacebookAccessToken: lm}
 	case *credentialspb.OneTimeToken:
