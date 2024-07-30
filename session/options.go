@@ -19,9 +19,8 @@ type Options struct {
 	Resolver *apresolve.ApResolver
 }
 
-type UserPassCredentials struct {
-	Username string
-	Password string
+type InteractiveCredentials struct {
+	CallbackPort int
 }
 
 type SpotifyTokenCredentials struct {

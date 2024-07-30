@@ -146,6 +146,28 @@ func (c *Login5) Login(credentials proto.Message) error {
 	}
 }
 
+func (c *Login5) Username() string {
+	c.loginOkLock.RLock()
+	defer c.loginOkLock.RUnlock()
+
+	if c.loginOk == nil {
+		panic("login5 not authenticated")
+	}
+
+	return c.loginOk.Username
+}
+
+func (c *Login5) StoredCredential() []byte {
+	c.loginOkLock.RLock()
+	defer c.loginOkLock.RUnlock()
+
+	if c.loginOk == nil {
+		panic("login5 not authenticated")
+	}
+
+	return c.loginOk.StoredCredential
+}
+
 func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {
 	return func(force bool) (string, error) {
 		c.loginOkLock.RLock()

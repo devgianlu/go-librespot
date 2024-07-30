@@ -112,23 +112,19 @@
               "type": "string",
               "description": "The authentication method",
               "enum": [
-                "user_pass",
+                "interactive",
                 "spotify_token",
                 "zeroconf"
               ],
               "default": "zeroconf"
             },
-            "user_pass": {
+            "interactive": {
               "type": "object",
-              "description": "Authentication with username and password",
+              "description": "Authenticate with the interactive browser UI",
               "properties": {
-                "username": {
-                  "type": "string",
-                  "default": ""
-                },
-                "password": {
-                  "type": "string",
-                  "default": ""
+                "callback_port": {
+                  "type": "integer",
+                  "default": 0
                 }
               }
             },
