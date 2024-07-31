@@ -157,8 +157,13 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// playback
 		p.state.player.Timestamp = transferState.Playback.Timestamp
 		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
-		p.state.player.PlaybackSpeed = transferState.Playback.PlaybackSpeed
 		p.state.player.IsPaused = transferState.Playback.IsPaused
+
+		if playbackSpeed := transferState.Playback.PlaybackSpeed; playbackSpeed != 0 {
+			p.state.player.PlaybackSpeed = playbackSpeed
+		} else {
+			p.state.player.PlaybackSpeed = 1
+		}
 
 		// current session
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
