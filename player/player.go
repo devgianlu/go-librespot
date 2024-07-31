@@ -339,6 +339,8 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 
 				trackMeta.File = append(trackMeta.File, alt.File...)
 			}
+
+			log.Warnf("original track has no formats, alternatives have a total of %d", len(trackMeta.File))
 		}
 
 		file = selectBestMediaFormat(trackMeta.File, bitrate)
