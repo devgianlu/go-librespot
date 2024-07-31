@@ -177,7 +177,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 503 {
-		log.Debugf("storage resolve returned service unavailable, retring...")
+		log.Debugf("storage resolve returned service unavailable, retrying...")
 		_ = resp.Body.Close()
 
 		resp, err = c.request("GET", path, nil, nil, nil)
