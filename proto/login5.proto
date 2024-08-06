@@ -9,7 +9,7 @@ import "login5_challenges_hashcash.proto";
 import "login5_credentials.proto";
 import "login5_identifiers.proto";
 
-option go_package = "go-librespot/proto/spotify/login5/v3";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/login5/v3";
 
 message Challenges {
   repeated Challenge challenges = 1;

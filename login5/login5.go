@@ -3,10 +3,10 @@ package login5
 import (
 	"bytes"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	pb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3"
+	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	pb "go-librespot/proto/spotify/login5/v3"
-	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"

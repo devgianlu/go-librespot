@@ -3,9 +3,9 @@ package vorbis
 import (
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/audio"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	"go-librespot/audio"
 	"io"
 	"strings"
 	"sync"

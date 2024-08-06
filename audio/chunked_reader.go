@@ -3,8 +3,8 @@ package audio
 import (
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
+	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"io"
 	"net/http"
 	"net/url"

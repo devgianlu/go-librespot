@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package spotify.player;
 
-option go_package = "go-librespot/proto/spotify/player";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/player";
 
 message AutoplayContextRequest {
     required string context_uri = 1;

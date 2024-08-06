@@ -1,7 +1,7 @@
 package output
 
 import (
-	librespot "go-librespot"
+	librespot "github.com/devgianlu/go-librespot"
 )
 
 type Output struct {

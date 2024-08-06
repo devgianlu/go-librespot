@@ -57,5 +57,5 @@ To crosscompile for different architectures the `GOOS` and `GOARCH` environment 
 To recompile protobuf definitions use:
 
 ```shell
-protoc --go_out=proto --go_opt module=go-librespot/proto -I proto proto/*.proto
+protoc --go_out=proto --go_opt module=github.com/devgianlu/go-librespot/proto -I proto proto/*.proto
 ```

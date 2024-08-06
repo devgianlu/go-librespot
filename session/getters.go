@@ -1,10 +1,10 @@
 package session
 
 import (
-	"go-librespot/ap"
-	"go-librespot/audio"
-	"go-librespot/dealer"
-	"go-librespot/spclient"
+	"github.com/devgianlu/go-librespot/ap"
+	"github.com/devgianlu/go-librespot/audio"
+	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/spclient"
 )
 
 func (s *Session) Username() string {

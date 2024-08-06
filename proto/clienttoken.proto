@@ -4,7 +4,7 @@ package spotify.clienttoken.http.v0;
 
 import "connectivity.proto";
 
-option go_package = "go-librespot/proto/spotify/clienttoken/http/v0";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/http/v0";
 
 message ClientTokenRequest {
   ClientTokenRequestType request_type = 1;

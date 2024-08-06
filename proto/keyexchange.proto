@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package spotify;
 
-option go_package = "go-librespot/proto/spotify/";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/";
 
 message ClientHello {
     required BuildInfo build_info = 0xa;

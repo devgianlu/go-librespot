@@ -3,7 +3,7 @@ package go_librespot
 import (
 	"encoding/hex"
 	"fmt"
-	connectpb "go-librespot/proto/spotify/connectstate"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"math/big"
 	"regexp"
 	"strings"

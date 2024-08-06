@@ -3,9 +3,9 @@ package spclient
 import (
 	"encoding/json"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	connectpb "go-librespot/proto/spotify/connectstate"
 	"io"
 	"strings"
 )
