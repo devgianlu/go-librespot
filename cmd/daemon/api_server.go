@@ -432,7 +432,12 @@ func (s *ApiServer) serve() {
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
-		c, err := websocket.Accept(w, r, nil)
+		opts := &websocket.AcceptOptions{}
+		if len(s.allowOrigin) > 0 {
+			opts.OriginPatterns = []string{s.allowOrigin}
+		}
+
+		c, err := websocket.Accept(w, r, opts)
 		if err != nil {
 			log.WithError(err).Error("failed accepting websocket connection")
 			w.WriteHeader(http.StatusInternalServerError)
