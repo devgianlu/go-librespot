@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"github.com/devgianlu/go-librespot/apresolve"
@@ -107,8 +108,8 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		// listen on external volume changes (for example the alsa driver)
 		go func() {
 			for {
-				v, ok, _ := appPlayer.externalVolumeUpdate.Get()
-				if !ok {
+				v, err := appPlayer.externalVolumeUpdate.GetWait()
+				if errors.Is(err, output.ErrBufferClosed) {
 					break
 				}
 
