@@ -3,7 +3,12 @@
 package output
 
 //
-// #include <CoreAudio/CoreAudio.h>
+//#cgo LDFLAGS: -framework AudioToolbox -v
+//
+//#include <CoreAudio/CoreAudio.h>
+//#include <AudioToolbox/AudioToolbox.h>
+//
+//extern void audioCallback(void * inUserData, AudioQueueRef inAQ,	AudioQueueBufferRef inBuffer);
 //
 import "C"
 import (
@@ -13,16 +18,15 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	"io"
+	"runtime"
 	"sync"
 	"unsafe"
 )
 
-const (
-	DisableHardwarePause = true // FIXME: should we fix this?
-	ReleasePcmOnPause    = true
-	BufferTimeMicro      = 500_000
-)
-
+type arr[T any] struct {
+	ptr *T
+	ln  uint
+}
 type output struct {
 	channels   int
 	sampleRate int
@@ -31,11 +35,12 @@ type output struct {
 
 	cond *sync.Cond
 
-	pcmHandle  *C.snd_pcm_t
 	canPause   bool
 	periodSize int
 	bufferSize int
-	samples    *RingBuffer[[]float32]
+	samples    *RingBuffer[arr[float32]]
+
+	pin runtime.Pinner
 
 	externalVolume bool
 
@@ -44,11 +49,16 @@ type output struct {
 	closed   bool
 	released bool
 
+	buffers    []C.AudioQueueBufferRef
+	numBuffers int
+
+	audioQueue C.AudioQueueRef
+
 	externalVolumeUpdate *RingBuffer[float32]
 	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
 	out := &output{
 		reader:               reader,
 		channels:             channels,
@@ -61,20 +71,25 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 		externalVolumeUpdate: externalVolumeUpdate,
 	}
 
+	out.numBuffers = 16
+
+	// hideous hack, if it is possible somehow differently, please change this
+	var in = C.calloc(C.ulong(out.numBuffers), C.ulong(unsafe.Sizeof(arr[float32]{})))
+	var f = NewRingBuffer[arr[float32]](uint64(out.numBuffers))
+
+	// replace the inner, with c-memory
+	f.inner = unsafe.Slice((*arr[float32])(in), out.numBuffers)
+	out.samples = f
+
+	out.pin.Pin(f.notFull)
+	out.pin.Pin(f.notEmpty)
+
 	if err := out.setupPcm(); err != nil {
 		return nil, err
 	}
 
-	// this buffer holds multiple period buffers
-	out.samples = NewRingBuffer[[]float32](16)
-
 	go func() {
 		out.err <- out.readLoop()
-		_ = out.Close()
-	}()
-
-	go func() {
-		out.err <- out.writeLoop()
 		_ = out.Close()
 	}()
 
@@ -85,150 +100,74 @@ func (out *output) alsaError(name string, err C.int) error {
 	if errors.Is(unix.Errno(-err), unix.EPIPE) {
 		_ = out.Close()
 	}
-
-	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
+	return errors.New(fmt.Sprintf("%s: %d", name, err))
 }
 
 func (out *output) setupPcm() error {
-	cdevice := C.CString(out.device)
-	defer C.free(unsafe.Pointer(cdevice))
-	if err := C.snd_pcm_open(&out.pcmHandle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
-		return out.alsaError("snd_pcm_open", err)
+	description := C.AudioStreamBasicDescription{
+		mSampleRate:       (C.double)(out.sampleRate),
+		mFormatID:         C.kAudioFormatLinearPCM,
+		mFormatFlags:      C.kAudioFormatFlagIsFloat,
+		mBytesPerPacket:   8,
+		mFramesPerPacket:  1,
+		mBytesPerFrame:    8,
+		mChannelsPerFrame: 2,
+		mBitsPerChannel:   32,
+		mReserved:         0,
 	}
 
-	var hwparams *C.snd_pcm_hw_params_t
-	C.snd_pcm_hw_params_malloc(&hwparams)
-	defer C.free(unsafe.Pointer(hwparams))
+	var cb C.AudioQueueOutputCallback = (C.AudioQueueOutputCallback)(C.audioCallback)
 
-	if err := C.snd_pcm_hw_params_any(out.pcmHandle, hwparams); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_any", err)
+	err := C.AudioQueueNewOutput(&description, cb, (unsafe.Pointer)(out.samples), 0, 0, 0, &out.audioQueue)
+	if err != 0 {
+		return out.alsaError("setupAudioQueue", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_access(out.pcmHandle, hwparams, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_access", err)
+	// todo: somehow get a more clever period size on the hardware here
+	out.periodSize = 4096
+	var bufferSize = out.periodSize * out.channels * 4
+	out.bufferSize = bufferSize
+
+	out.buffers = make([]C.AudioQueueBufferRef, 4)
+
+	for i := 0; i < len(out.buffers); i++ {
+		var allocResult = C.AudioQueueAllocateBuffer(out.audioQueue, C.uint(bufferSize), (*C.AudioQueueBufferRef)(&out.buffers[i]))
+
+		log.Tracef("alloc result %d: %d", i, int(allocResult))
+
+		var buf = out.buffers[i]
+
+		buf.mAudioDataByteSize = buf.mAudioDataBytesCapacity
+
+		var enqResult = C.AudioQueueEnqueueBuffer(out.audioQueue, out.buffers[i], 0, nil)
+		log.Tracef("enqueue buffer %d", int(enqResult))
 	}
 
-	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, hwparams, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_format", err)
-	}
+	var queueStart = C.AudioQueueStart(out.audioQueue, nil)
 
-	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, hwparams, C.unsigned(out.channels)); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_channels", err)
-	}
-
-	if err := C.snd_pcm_hw_params_set_rate_resample(out.pcmHandle, hwparams, 1); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_rate_resample", err)
-	}
-
-	sr := C.unsigned(out.sampleRate)
-	if err := C.snd_pcm_hw_params_set_rate_near(out.pcmHandle, hwparams, &sr, nil); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_rate_near", err)
-	}
-
-	bufferTime := C.uint(BufferTimeMicro)
-	if err := C.snd_pcm_hw_params_set_buffer_time_near(out.pcmHandle, hwparams, &bufferTime, nil); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_buffer_time_near", err)
-	}
-
-	if err := C.snd_pcm_hw_params(out.pcmHandle, hwparams); err < 0 {
-		return out.alsaError("snd_pcm_hw_params", err)
-	}
-
-	_ = out.logParams(hwparams)
-
-	if DisableHardwarePause {
-		out.canPause = false
-	} else {
-		if err := C.snd_pcm_hw_params_can_pause(hwparams); err < 0 {
-			return out.alsaError("snd_pcm_hw_params_can_pause", err)
-		} else {
-			out.canPause = err == 1
-		}
-	}
-
-	var dir C.int
-	var frames C.snd_pcm_uframes_t
-	if err := C.snd_pcm_hw_params_get_period_size(hwparams, &frames, &dir); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_period_size", err)
-	} else {
-		out.periodSize = int(frames)
-	}
-
-	if err := C.snd_pcm_hw_params_get_buffer_size(hwparams, &frames); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
-	} else {
-		out.bufferSize = int(frames)
-	}
-
-	var swparams *C.snd_pcm_sw_params_t
-	C.snd_pcm_sw_params_malloc(&swparams)
-	defer C.free(unsafe.Pointer(swparams))
-
-	if err := C.snd_pcm_sw_params_current(out.pcmHandle, swparams); err < 0 {
-		return out.alsaError("snd_pcm_sw_params_current", err)
-	}
-
-	if err := C.snd_pcm_sw_params_set_start_threshold(out.pcmHandle, swparams, C.ulong(out.bufferSize-out.periodSize)); err < 0 {
-		return out.alsaError("snd_pcm_sw_params_set_start_threshold", err)
-	}
-
-	if err := C.snd_pcm_sw_params_set_avail_min(out.pcmHandle, swparams, C.ulong(out.periodSize)); err < 0 {
-		return out.alsaError("snd_pcm_sw_params_set_avail_min", err)
-	}
-
-	if err := C.snd_pcm_sw_params(out.pcmHandle, swparams); err < 0 {
-		return out.alsaError("snd_pcm_sw_params", err)
-	}
-
+	log.Tracef("pcm setup! %d", int(queueStart))
 	return nil
 }
 
-func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
-	var dir C.int
-
-	var rate C.uint
-	if err := C.snd_pcm_hw_params_get_rate(params, &rate, &dir); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_rate", err)
-	}
-
-	var periodTime C.uint
-	if err := C.snd_pcm_hw_params_get_period_time(params, &periodTime, &dir); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_period_time", err)
-	}
-
-	var frames C.snd_pcm_uframes_t
-	if err := C.snd_pcm_hw_params_get_period_size(params, &frames, &dir); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_period_size", err)
-	}
-
-	var bufferTime C.uint
-	if err := C.snd_pcm_hw_params_get_buffer_time(params, &bufferTime, &dir); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_buffer_time", err)
-	}
-
-	var bufferSize C.ulong
-	if err := C.snd_pcm_hw_params_get_buffer_size(params, &bufferSize); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
-	}
-
-	var periods C.uint
-	if err := C.snd_pcm_hw_params_get_periods(params, &periods, &dir); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_get_periods", err)
-	}
-
-	log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames",
-		rate, periodTime, frames, bufferTime, bufferSize, periods)
-
+func (out *output) logParams(params any) error {
 	return nil
 }
 
 func (out *output) readLoop() error {
 	for {
-		floats := make([]float32, out.channels*out.periodSize)
+		var fts = unsafe.Pointer(C.calloc(C.ulong(out.channels*out.periodSize), C.ulong(unsafe.Sizeof(C.float(0)))))
+
+		floats := unsafe.Slice((*float32)(fts), out.channels*out.periodSize)
+
 		n, err := out.reader.Read(floats)
 		if n > 0 {
 			floats = floats[:n]
-			if err := out.samples.PutWait(floats); errors.Is(err, ErrBufferClosed) {
+			var ar = arr[float32]{
+				ptr: (*float32)(fts),
+				ln:  uint(n),
+			}
+
+			if err := out.samples.PutWait(ar); errors.Is(err, ErrBufferClosed) {
 				return nil
 			} else if err != nil {
 				_ = out.samples.Close()
@@ -246,49 +185,29 @@ func (out *output) readLoop() error {
 	}
 }
 
-func (out *output) writeLoop() error {
-	for {
-		floats, err := out.samples.GetWait()
-		if errors.Is(err, ErrBufferClosed) {
-			out.cond.L.Lock()
-			C.snd_pcm_drain(out.pcmHandle)
-			out.cond.L.Unlock()
+//export audioCallback
+func audioCallback(inUserData unsafe.Pointer, inAq C.AudioQueueRef, inBuffer C.AudioQueueBufferRef) {
+	var out = (*RingBuffer[arr[float32]])(inUserData)
 
-			return nil
-		} else if err != nil {
-			_ = out.samples.Close()
-			return err
-		}
+	samples, err := out.GetWait()
+	if err != nil {
+		log.Tracef("callback err")
+		return
+	}
+	defer C.free(unsafe.Pointer(samples.ptr))
 
-		for i := 0; i < len(floats); i++ {
-			floats[i] *= out.volume
-		}
+	samplesToPush := min(samples.ln, uint(inBuffer.mAudioDataBytesCapacity/4))
+	inBuffer.mAudioDataByteSize = C.uint(samplesToPush * 4)
 
-		out.cond.L.Lock()
-		for !(!out.paused || out.closed || !out.released) {
-			out.cond.Wait()
-		}
+	var mem = inBuffer.mAudioData
+	C.memcpy(mem, unsafe.Pointer(samples.ptr), C.ulong(samplesToPush*4))
 
-		if out.closed {
-			out.cond.L.Unlock()
-			return nil
-		}
-
-		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(len(floats)/out.channels)); nn < 0 {
-			nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
-			if nn < 0 {
-				out.cond.L.Unlock()
-				return out.alsaError("snd_pcm_recover", C.int(nn))
-			}
-		}
-
-		out.cond.L.Unlock()
+	if C.AudioQueueEnqueueBuffer(inAq, inBuffer, 0, nil) != C.OSStatus(0) {
+		log.Tracef("error enqueue")
 	}
 }
 
 func (out *output) Pause() error {
-	// Do not use snd_pcm_drop as this might hang (https://github.com/libsdl-org/SDL/blob/a5c610b0a3857d3138f3f3da1f6dc3172c5ea4a8/src/audio/alsa/SDL_alsa_audio.c#L478).
-
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
@@ -296,23 +215,7 @@ func (out *output) Pause() error {
 		return nil
 	}
 
-	if ReleasePcmOnPause {
-		if !out.released {
-			if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
-				return out.alsaError("snd_pcm_close", err)
-			}
-		}
-
-		out.released = true
-	} else if out.canPause {
-		if C.snd_pcm_state(out.pcmHandle) != C.SND_PCM_STATE_RUNNING {
-			return nil
-		}
-
-		if err := C.snd_pcm_pause(out.pcmHandle, 1); err < 0 {
-			return out.alsaError("snd_pcm_pause", err)
-		}
-	}
+	C.AudioQueuePause(out.audioQueue)
 
 	out.paused = true
 
@@ -327,23 +230,7 @@ func (out *output) Resume() error {
 		return nil
 	}
 
-	if ReleasePcmOnPause {
-		if out.released {
-			if err := out.setupPcm(); err != nil {
-				return err
-			}
-		}
-
-		out.released = false
-	} else if out.canPause {
-		if C.snd_pcm_state(out.pcmHandle) != C.SND_PCM_STATE_PAUSED {
-			return nil
-		}
-
-		if err := C.snd_pcm_pause(out.pcmHandle, 0); err < 0 {
-			return out.alsaError("snd_pcm_pause", err)
-		}
-	}
+	C.AudioQueueStart(out.audioQueue, nil)
 
 	out.paused = false
 	out.cond.Signal()
@@ -360,33 +247,14 @@ func (out *output) Drop() error {
 	}
 
 	out.samples.Clear()
-
-	if err := C.snd_pcm_drop(out.pcmHandle); err < 0 {
-		return out.alsaError("snd_pcm_drop", err)
-	}
-
-	// since we are not actually stopping the stream, prepare it again
-	if err := C.snd_pcm_prepare(out.pcmHandle); err < 0 {
-		return out.alsaError("snd_pcm_prepare", err)
-	}
+	C.AudioQueueFlush(out.audioQueue)
+	out.pin.Unpin()
 
 	return nil
 }
 
 func (out *output) DelayMs() (int64, error) {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	if out.closed || out.released {
-		return 0, nil
-	}
-
-	var frames C.snd_pcm_sframes_t
-	if err := C.snd_pcm_delay(out.pcmHandle, &frames); err < 0 {
-		return 0, out.alsaError("snd_pcm_delay", err)
-	}
-
-	return int64(frames) * 1000 / int64(out.sampleRate), nil
+	panic("not supported")
 }
 
 func (out *output) SetVolume(vol float32) {
@@ -405,6 +273,7 @@ func (out *output) Error() <-chan error {
 }
 
 func (out *output) Close() error {
+	log.Tracef("close")
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
@@ -413,9 +282,10 @@ func (out *output) Close() error {
 		return nil
 	}
 
-	if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
-		return out.alsaError("snd_pcm_close", err)
-	}
+	C.AudioQueueFlush(out.audioQueue)
+	C.AudioQueueDispose(out.audioQueue, 0)
+
+	C.free(unsafe.Pointer(&out.samples.inner[0]))
 
 	out.closed = true
 	out.cond.Signal()
