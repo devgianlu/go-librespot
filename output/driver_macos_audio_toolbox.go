@@ -3,7 +3,7 @@
 package output
 
 //
-//#cgo LDFLAGS: -framework AudioToolbox -v
+//#cgo LDFLAGS: -framework AudioToolbox -v -framework CoreAudio
 //
 //#include <CoreAudio/CoreAudio.h>
 //#include <AudioToolbox/AudioToolbox.h>
@@ -268,16 +268,37 @@ func (out *output) Drop() error {
 }
 
 func (out *output) DelayMs() (int64, error) {
-	var queueTime C.AudioTimeStamp
-	err := C.AudioQueueGetCurrentTime(out.audioQueue, nil, &queueTime, nil)
-	if err != 0 {
-		return 0, out.alsaError("AudioQueueGetCurrentTime", err)
+	// first get default audio output
+	outputDeviceID := C.uint(C.kAudioObjectUnknown)
+	size := C.uint(unsafe.Sizeof(outputDeviceID))
+
+	propertyAddress := C.AudioObjectPropertyAddress{
+		C.kAudioHardwarePropertyDefaultOutputDevice,
+		C.kAudioObjectPropertyScopeGlobal,
+		C.kAudioObjectPropertyElementMaster,
 	}
 
-	// Convert to milliseconds
-	delay := int64((queueTime.mSampleTime / C.Float64(out.sampleRate)) * 1000)
+	status := C.AudioObjectGetPropertyData(C.kAudioObjectSystemObject, &propertyAddress, 0, nil, &size, unsafe.Pointer(&outputDeviceID))
+	if status != 0 {
+		return 0, out.alsaError("delay_ms, get_default_output", status)
+	}
 
-	return delay, nil
+	// after that, query the latency
+	propertyAddress = C.AudioObjectPropertyAddress{
+		C.kAudioDevicePropertyLatency,
+		C.kAudioObjectPropertyScopeOutput,
+		C.kAudioObjectPropertyElementMaster,
+	}
+
+	var latency uint32 = 0
+	size = C.uint(unsafe.Sizeof(latency))
+	status = C.AudioObjectGetPropertyData(outputDeviceID, &propertyAddress, 0, nil, &size, unsafe.Pointer(&latency))
+
+	if status != 0 {
+		return 0, out.alsaError("delay_ms, latency", status)
+	}
+
+	return int64(latency*1000) / int64(out.sampleRate), nil
 }
 
 func (out *output) SetVolume(vol float32) {
