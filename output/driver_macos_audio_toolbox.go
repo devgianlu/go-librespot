@@ -24,8 +24,9 @@ import (
 )
 
 type arr[T any] struct {
-	ptr *T
-	ln  uint
+	ptr   *T
+	ln    uint
+	vlPtr *float32
 }
 type output struct {
 	channels   int
@@ -44,10 +45,11 @@ type output struct {
 
 	externalVolume bool
 
-	volume   float32
-	paused   bool
-	closed   bool
-	released bool
+	volume    float32
+	volumePtr *float32
+	paused    bool
+	closed    bool
+	released  bool
 
 	buffers    []C.AudioQueueBufferRef
 	numBuffers int
@@ -72,6 +74,7 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	}
 
 	out.numBuffers = 16
+	out.volumePtr = &out.volume
 
 	// hideous hack, if it is possible somehow differently, please change this
 	var in = C.calloc(C.ulong(out.numBuffers), C.ulong(unsafe.Sizeof(arr[float32]{})))
@@ -83,6 +86,7 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 
 	out.pin.Pin(f.notFull)
 	out.pin.Pin(f.notEmpty)
+	out.pin.Pin(out.volumePtr)
 
 	if err := out.setupPcm(); err != nil {
 		return nil, err
@@ -163,8 +167,9 @@ func (out *output) readLoop() error {
 		if n > 0 {
 			floats = floats[:n]
 			var ar = arr[float32]{
-				ptr: (*float32)(fts),
-				ln:  uint(n),
+				ptr:   (*float32)(fts),
+				ln:    uint(n),
+				vlPtr: out.volumePtr,
 			}
 
 			if err := out.samples.PutWait(ar); errors.Is(err, ErrBufferClosed) {
@@ -196,11 +201,20 @@ func audioCallback(inUserData unsafe.Pointer, inAq C.AudioQueueRef, inBuffer C.A
 	}
 	defer C.free(unsafe.Pointer(samples.ptr))
 
+	if uint(inBuffer.mAudioDataBytesCapacity/4) < samples.ln {
+		log.Warnf("buffer overrun")
+	}
+
 	samplesToPush := min(samples.ln, uint(inBuffer.mAudioDataBytesCapacity/4))
 	inBuffer.mAudioDataByteSize = C.uint(samplesToPush * 4)
 
 	var mem = inBuffer.mAudioData
 	C.memcpy(mem, unsafe.Pointer(samples.ptr), C.ulong(samplesToPush*4))
+
+	ptr := unsafe.Slice((*float32)(mem), samplesToPush)
+	for i := 0; i < int(samplesToPush); i++ {
+		ptr[i] *= *samples.vlPtr
+	}
 
 	if C.AudioQueueEnqueueBuffer(inAq, inBuffer, 0, nil) != C.OSStatus(0) {
 		log.Tracef("error enqueue")
@@ -254,7 +268,16 @@ func (out *output) Drop() error {
 }
 
 func (out *output) DelayMs() (int64, error) {
-	panic("not supported")
+	var queueTime C.AudioTimeStamp
+	err := C.AudioQueueGetCurrentTime(out.audioQueue, nil, &queueTime, nil)
+	if err != 0 {
+		return 0, out.alsaError("AudioQueueGetCurrentTime", err)
+	}
+
+	// Convert to milliseconds
+	delay := int64((queueTime.mSampleTime / C.Float64(out.sampleRate)) * 1000)
+
+	return delay, nil
 }
 
 func (out *output) SetVolume(vol float32) {
