@@ -284,7 +284,36 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "skip_prev":
 		return p.skipPrev()
 	case "skip_next":
-		// todo: here req.Command.Track.Uri seems to be the track to skip to in the queue context
+		// todo: refactor
+		if req.Command.Track != nil {
+			ctxTracks := p.state.tracks
+
+			err := ctxTracks.TrySeek(
+				func(track *connectpb.ContextTrack) bool {
+					return track.Uri == req.Command.Track.Uri
+				},
+			)
+			if err != nil {
+				return err
+			}
+
+			p.state.player.Timestamp = time.Now().UnixMilli()
+			p.state.player.PositionAsOfTimestamp = 0
+
+			p.state.tracks = ctxTracks
+			p.state.player.Track = ctxTracks.CurrentTrack()
+			p.state.player.PrevTracks = ctxTracks.PrevTracks()
+			p.state.player.NextTracks = ctxTracks.NextTracks()
+			p.state.player.Index = ctxTracks.Index()
+
+			err = p.loadCurrentTrack(p.state.player.IsPaused)
+			if err != nil {
+				return err
+			}
+
+			return nil
+
+		}
 		return p.skipNext()
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
