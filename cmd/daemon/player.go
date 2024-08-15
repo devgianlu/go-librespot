@@ -225,12 +225,35 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.player.Options.RepeatingContext = req.Command.Options.PlayerOptionsOverride.RepeatingContext
 
 		var skipTo skipToFunc
-		if len(req.Command.Options.SkipTo.TrackUri) > 0 || len(req.Command.Options.SkipTo.TrackUid) > 0 {
+		if len(req.Command.Options.SkipTo.TrackUri) > 0 || len(req.Command.Options.SkipTo.TrackUid) > 0 || req.Command.Options.SkipTo.TrackIndex > 0 {
 			skipTo = func(track *connectpb.ContextTrack) bool {
 				if len(req.Command.Options.SkipTo.TrackUid) > 0 && req.Command.Options.SkipTo.TrackUid == track.Uid {
 					return true
 				} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
 					return true
+				} else if req.Command.Options.SkipTo.TrackIndex != 0 {
+					ndxRelative := req.Command.Options.SkipTo.TrackIndex - int(p.state.tracks.Index().Track)
+					var ndxNormalized = -1
+					if ndxRelative < 0 {
+						ndxNormalized += -ndxRelative
+					} else {
+						ndxNormalized += ndxRelative
+					}
+
+					var uri string
+					if ndxRelative < 0 {
+						if len(p.state.tracks.PrevTracks()) <= ndxNormalized {
+							return false
+						}
+						uri = p.state.tracks.PrevTracks()[ndxNormalized].Uri
+					} else {
+						if len(p.state.tracks.NextTracks()) <= ndxNormalized {
+							return false
+						}
+						uri = p.state.tracks.NextTracks()[ndxNormalized].Uri
+					}
+
+					return track.Uri == uri
 				} else {
 					return false
 				}
@@ -261,6 +284,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "skip_prev":
 		return p.skipPrev()
 	case "skip_next":
+		// todo: here req.Command.Track.Uri seems to be the track to skip to in the queue context
 		return p.skipNext()
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
