@@ -300,6 +300,11 @@ func (s *ApiServer) serve() {
 			return
 		}
 
+		if len(data.Uri) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePlay, Data: data}, w)
 	})
 	m.HandleFunc("/player/resume", func(w http.ResponseWriter, r *http.Request) {
@@ -348,6 +353,11 @@ func (s *ApiServer) serve() {
 			return
 		}
 
+		if data.Position < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
 	})
 	m.HandleFunc("/player/volume", func(w http.ResponseWriter, r *http.Request) {
@@ -358,6 +368,11 @@ func (s *ApiServer) serve() {
 				Volume uint32 `json:"volume"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if data.Volume < 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -425,6 +440,11 @@ func (s *ApiServer) serve() {
 			Uri string `json:"uri"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(data.Uri) == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
