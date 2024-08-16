@@ -10,8 +10,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
+	"net/url"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,11 +32,16 @@ type ApiServer struct {
 	clientsLock sync.RWMutex
 }
 
-var ErrNoSession = errors.New("no session")
+var (
+	ErrNoSession        = errors.New("no session")
+	ErrNotFound         = errors.New("not found")
+	ErrMethodNotAllowed = errors.New("method not allowed")
+)
 
 type ApiRequestType string
 
 const (
+	WebApiRequestType                 ApiRequestType = "web_api"
 	ApiRequestTypeStatus              ApiRequestType = "status"
 	ApiRequestTypeResume              ApiRequestType = "resume"
 	ApiRequestTypePause               ApiRequestType = "pause"
@@ -68,11 +75,19 @@ const (
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 )
 
+type WebAPI struct {
+	Method string
+	Path   string
+	Query  url.Values
+}
+
 type ApiRequest struct {
 	Type ApiRequestType
 	Data any
 
 	resp chan apiResponse
+
+	WebAPI WebAPI
 }
 
 func (r *ApiRequest) Reply(data any, err error) {
@@ -251,13 +266,22 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	req.resp = make(chan apiResponse, 1)
 	s.requests <- req
 	resp := <-req.resp
-	if errors.Is(resp.err, ErrNoSession) {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	} else if resp.err != nil {
-		log.WithError(resp.err).Error("failed handling status request")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+
+	if resp.err != nil {
+		switch resp.err {
+		case ErrNoSession:
+			w.WriteHeader(http.StatusNoContent)
+			return
+		case ErrNotFound:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		case ErrNotFound:
+			w.WriteHeader(http.StatusNoContent)
+			return
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -276,6 +300,16 @@ func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
 
 func (s *ApiServer) serve() {
 	m := http.NewServeMux()
+	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleRequest(ApiRequest{
+			Type: WebApiRequestType,
+			WebAPI: WebAPI{
+				Method: r.Method,
+				Path:   strings.TrimPrefix(r.URL.Path, "/web-api/"),
+				Query:  r.URL.Query(),
+			},
+		}, w)
+	}))
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{}"))

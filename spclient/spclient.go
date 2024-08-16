@@ -44,6 +44,61 @@ func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5T
 	}, nil
 }
 
+func (c *Spclient) WebApiRequest(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqPath, err := url.Parse("https://api.spotify.com/")
+	if err != nil {
+		panic("invalid api base url")
+	}
+	reqURL := reqPath.JoinPath(path)
+	if query != nil {
+		reqURL.RawQuery = query.Encode()
+	}
+
+	req := &http.Request{
+		Method: method,
+		URL:    reqURL,
+		Header: http.Header{},
+	}
+
+	if header != nil {
+		for name, values := range header {
+			req.Header[name] = values
+		}
+	}
+
+	if body != nil {
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(body)), nil
+		}
+		req.Body, _ = req.GetBody()
+	}
+
+	var forceNewToken bool
+	resp, err := backoff.RetryWithData(func() (*http.Response, error) {
+		accessToken, err := c.accessToken(forceNewToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed obtaining spclient access token: %w", err)
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
+
+		resp, err := c.client.Do(req)
+		if err != nil {
+			return nil, err
+		} else if resp.StatusCode == 401 {
+			forceNewToken = true
+			return nil, fmt.Errorf("unauthorized")
+		}
+
+		return resp, nil
+	}, backoff.NewExponentialBackOff())
+	if err != nil {
+		return nil, fmt.Errorf("spclient request failed: %w", err)
+	}
+
+	return resp, nil
+}
+
 func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqUrl := c.baseUrl.JoinPath(path)
 	if query != nil {
