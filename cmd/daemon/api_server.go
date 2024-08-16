@@ -279,6 +279,7 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		default:
+			log.WithError(resp.err).Error("failed handling status request")
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
