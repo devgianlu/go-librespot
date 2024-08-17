@@ -322,6 +322,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to send web api request")
 		}
+		defer resp.Body.Close()
 
 		// this is the status we want to return to client not just 500
 		switch resp.StatusCode {
