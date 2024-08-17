@@ -170,6 +170,11 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 	}
 }
 
+type ApiResponseMessage struct {
+	Message    string `json:"message"`
+	StatusCode uint   `json:"status_code"`
+}
+
 type ApiResponseStatus struct {
 	Username       string                  `json:"username"`
 	DeviceId       string                  `json:"device_id"`
