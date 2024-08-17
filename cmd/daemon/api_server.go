@@ -78,12 +78,6 @@ const (
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 )
 
-type ApiRequestDataWebApi struct {
-	Method string
-	Path   string
-	Query  url.Values
-}
-
 type ApiRequest struct {
 	Type ApiRequestType
 	Data any
@@ -93,6 +87,12 @@ type ApiRequest struct {
 
 func (r *ApiRequest) Reply(data any, err error) {
 	r.resp <- apiResponse{data, err}
+}
+
+type ApiRequestDataWebApi struct {
+	Method string
+	Path   string
+	Query  url.Values
 }
 
 type ApiRequestDataPlay struct {
@@ -168,11 +168,6 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 			DiscNumber:    0,
 		}
 	}
-}
-
-type ApiResponseMessage struct {
-	Message    string `json:"message"`
-	StatusCode uint   `json:"status_code"`
 }
 
 type ApiResponseStatus struct {
@@ -274,34 +269,37 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	resp := <-req.resp
 
 	if resp.err != nil {
-		switch resp.err {
-		case ErrNoSession:
+		switch {
+		case errors.Is(resp.err, ErrNoSession):
 			w.WriteHeader(http.StatusNoContent)
 			return
-		case ErrForbidden:
-			log.WithError(resp.err).Error("forbidden")
+		case errors.Is(resp.err, ErrForbidden):
 			w.WriteHeader(http.StatusForbidden)
 			return
-		case ErrNotFound:
-			log.WithError(resp.err).Error("not found")
+		case errors.Is(resp.err, ErrNotFound):
 			w.WriteHeader(http.StatusNotFound)
 			return
-		case ErrMethodNotAllowed:
-			log.WithError(resp.err).Error("method not allowed")
+		case errors.Is(resp.err, ErrMethodNotAllowed):
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
-		case ErrTooManyRequests:
-			log.WithError(resp.err).Error("too many requests")
+		case errors.Is(resp.err, ErrTooManyRequests):
 			w.WriteHeader(http.StatusTooManyRequests)
+			return
 		default:
-			log.WithError(resp.err).Error("failed handling status request")
+			log.WithError(resp.err).Errorf("failed handling request %s", req.Type)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.data)
+	switch respData := resp.data.(type) {
+	case []byte:
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(respData)
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(respData)
+	}
 }
 
 func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
@@ -316,6 +314,10 @@ func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
 
 func (s *ApiServer) serve() {
 	m := http.NewServeMux()
+	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
+	})
 	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.handleRequest(ApiRequest{
 			Type: ApiRequestTypeWebApi,
@@ -326,10 +328,6 @@ func (s *ApiServer) serve() {
 			},
 		}, w)
 	}))
-	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
-	})
 	m.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			w.WriteHeader(http.StatusMethodNotAllowed)

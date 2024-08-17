@@ -322,7 +322,8 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to send web api request: %w", err)
 		}
-		defer resp.Body.Close()
+
+		defer func() { _ = resp.Body.Close() }()
 
 		// this is the status we want to return to client not just 500
 		switch resp.StatusCode {
@@ -338,23 +339,19 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			return nil, ErrTooManyRequests
 		}
 
-		var respJson any
 		// check for content type if not application/json
-		if !strings.Contains(resp.Header.Get("content-type"), "application/json") {
-			respString, err := io.ReadAll(resp.Body)
+		if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+			respBody, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read response body: %w", err)
 			}
-			// convert plain-text into ApiResponseMessage
-			respJson = &ApiResponseMessage{
-				Message:    string(respString),
-				StatusCode: uint(resp.StatusCode),
-			}
-			return respJson, nil
+
+			return respBody, nil
 		}
+
 		// decode and return json
-		err = json.NewDecoder(resp.Body).Decode(&respJson)
-		if err != nil {
+		var respJson any
+		if err = json.NewDecoder(resp.Body).Decode(&respJson); err != nil {
 			return nil, fmt.Errorf("failed to decode response body: %w", err)
 		}
 
