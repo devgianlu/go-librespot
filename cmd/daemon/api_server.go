@@ -34,8 +34,11 @@ type ApiServer struct {
 
 var (
 	ErrNoSession        = errors.New("no session")
+	ErrBadRequest       = errors.New("bad request")
+	ErrForbidden        = errors.New("forbidden")
 	ErrNotFound         = errors.New("not found")
 	ErrMethodNotAllowed = errors.New("method not allowed")
+	ErrTooManyRequests  = errors.New("the app has exceeded its rate limits")
 )
 
 type ApiRequestType string
@@ -86,7 +89,6 @@ type ApiRequest struct {
 	Data any
 
 	resp chan apiResponse
-
 }
 
 func (r *ApiRequest) Reply(data any, err error) {
@@ -271,15 +273,24 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 		case ErrNoSession:
 			w.WriteHeader(http.StatusNoContent)
 			return
+		case ErrForbidden:
+			log.WithError(resp.err).Error("forbidden")
+			w.WriteHeader(http.StatusForbidden)
+			return
 		case ErrNotFound:
+			log.WithError(resp.err).Error("not found")
 			w.WriteHeader(http.StatusNotFound)
 			return
-		case ErrNotFound:
-			w.WriteHeader(http.StatusNoContent)
+		case ErrMethodNotAllowed:
+			log.WithError(resp.err).Error("method not allowed")
+			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
+		case ErrTooManyRequests:
+			log.WithError(resp.err).Error("too many requests")
+			w.WriteHeader(http.StatusTooManyRequests)
 		default:
 			log.WithError(resp.err).Error("failed handling status request")
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
