@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package spotify.download.proto;
 
-option go_package = "go-librespot/proto/spotify/download";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/download";
 
 message StorageResolveResponse {
   Result result = 1;

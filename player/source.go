@@ -2,7 +2,7 @@ package player
 
 import (
 	"errors"
-	librespot "go-librespot"
+	librespot "github.com/devgianlu/go-librespot"
 	"io"
 	"sync"
 )
@@ -51,30 +51,25 @@ func (s *SwitchingAudioSource) Read(p []float32) (n int, err error) {
 
 	n, err = s.source[s.which].Read(p)
 	if errors.Is(err, io.EOF) {
+		// notify this source is done
+		s.done <- struct{}{}
+
 		// if there's no other source just let the EOF through
 		if s.source[!s.which] == nil {
 			return n, err
 		}
 
-		// ask the reader to drain and callback to us when done
-		return n, librespot.ErrDrainReader
+		// delete current source and switch to the other one
+		delete(s.source, s.which)
+		s.which = !s.which
+
+		// ignore the EOF, we have mode data
+		return n, nil
 	} else if err != nil {
 		return n, err
 	}
 
 	return n, nil
-}
-
-func (s *SwitchingAudioSource) Drained() {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-
-	// notify this source is done
-	s.done <- struct{}{}
-
-	// delete current source and switch to the other one
-	delete(s.source, s.which)
-	s.which = !s.which
 }
 
 func (s *SwitchingAudioSource) SetPositionMs(pos int64) error {

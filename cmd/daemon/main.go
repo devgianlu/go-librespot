@@ -3,15 +3,16 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"github.com/devgianlu/go-librespot/apresolve"
+	"github.com/devgianlu/go-librespot/output"
+	"github.com/devgianlu/go-librespot/player"
+	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
+	"github.com/devgianlu/go-librespot/session"
+	"github.com/devgianlu/go-librespot/zeroconf"
 	log "github.com/sirupsen/logrus"
-	"go-librespot/apresolve"
-	"go-librespot/output"
-	"go-librespot/player"
-	devicespb "go-librespot/proto/spotify/connectstate/devices"
-	"go-librespot/session"
-	"go-librespot/zeroconf"
 	"golang.org/x/exp/rand"
 	"gopkg.in/yaml.v3"
 	"math"
@@ -107,8 +108,8 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		// listen on external volume changes (for example the alsa driver)
 		go func() {
 			for {
-				v, ok := appPlayer.externalVolumeUpdate.Get()
-				if !ok {
+				v, err := appPlayer.externalVolumeUpdate.GetWait()
+				if errors.Is(err, output.ErrBufferClosed) {
 					break
 				}
 
@@ -131,8 +132,8 @@ func (app *App) SpotifyToken(username, token string) error {
 	return app.withCredentials(session.SpotifyTokenCredentials{Username: username, Token: token})
 }
 
-func (app *App) UserPass(username, password string) error {
-	return app.withCredentials(session.UserPassCredentials{Username: username, Password: password})
+func (app *App) Interactive(callbackPort int) error {
+	return app.withCredentials(session.InteractiveCredentials{CallbackPort: callbackPort})
 }
 
 type storedCredentialsFile struct {
@@ -141,16 +142,7 @@ type storedCredentialsFile struct {
 }
 
 func (app *App) withCredentials(creds any) (err error) {
-	var username string
-	switch creds := creds.(type) {
-	case session.SpotifyTokenCredentials:
-		username = creds.Username
-	case session.UserPassCredentials:
-		username = creds.Username
-	default:
-		return fmt.Errorf("unsupported credentials for reuse")
-	}
-
+	var storedUsername string
 	var storedCredentials []byte
 	if content, err := os.ReadFile(app.cfg.CredentialsPath); err == nil {
 		var file storedCredentialsFile
@@ -158,19 +150,16 @@ func (app *App) withCredentials(creds any) (err error) {
 			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
 		}
 
+		storedUsername = file.Username
+		storedCredentials = file.Data
 		log.Debugf("stored credentials found for %s", file.Username)
-		if file.Username == username {
-			storedCredentials = file.Data
-		} else {
-			log.Warnf("stored credentials found for wrong username %s != %s", file.Username, username)
-		}
 	} else {
 		log.Debugf("stored credentials not found")
 	}
 
 	return app.withAppPlayer(func() (*AppPlayer, error) {
 		if len(storedCredentials) > 0 {
-			return app.newAppPlayer(session.StoredCredentials{Username: username, Data: storedCredentials})
+			return app.newAppPlayer(session.StoredCredentials{Username: storedUsername, Data: storedCredentials})
 		} else {
 			appPlayer, err := app.newAppPlayer(creds)
 			if err != nil {
@@ -178,6 +167,7 @@ func (app *App) withCredentials(creds any) (err error) {
 			}
 
 			// store credentials outside this context in case we get called again
+			storedUsername = appPlayer.sess.Username()
 			storedCredentials = appPlayer.sess.StoredCredentials()
 
 			if content, err := json.Marshal(&storedCredentialsFile{
@@ -349,11 +339,10 @@ type Config struct {
 		AllowOrigin string `yaml:"allow_origin"`
 	} `yaml:"server"`
 	Credentials struct {
-		Type     string `yaml:"type"`
-		UserPass struct {
-			Username string `yaml:"username"`
-			Password string `yaml:"password"`
-		} `yaml:"user_pass"`
+		Type        string `yaml:"type"`
+		Interactive struct {
+			CallbackPort int `yaml:"callback_port"`
+		} `yaml:"interactive"`
 		SpotifyToken struct {
 			Username    string `yaml:"username"`
 			AccessToken string `yaml:"access_token"`
@@ -457,9 +446,9 @@ func main() {
 		if err := app.Zeroconf(); err != nil {
 			log.WithError(err).Fatal("failed running zeroconf")
 		}
-	case "user_pass":
-		if err := app.UserPass(cfg.Credentials.UserPass.Username, cfg.Credentials.UserPass.Password); err != nil {
-			log.WithError(err).Fatal("failed running with username and password")
+	case "interactive":
+		if err := app.Interactive(cfg.Credentials.Interactive.CallbackPort); err != nil {
+			log.WithError(err).Fatal("failed running with interactive auth")
 		}
 	case "spotify_token":
 		if err := app.SpotifyToken(cfg.Credentials.SpotifyToken.Username, cfg.Credentials.SpotifyToken.AccessToken); err != nil {

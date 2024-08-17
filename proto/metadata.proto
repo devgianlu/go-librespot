@@ -2,7 +2,7 @@ syntax = "proto2";
 
 package spotify.metadata;
 
-option go_package = "go-librespot/proto/spotify/metadata";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/metadata";
 
 message Artist {
   optional bytes gid = 1;

@@ -1,19 +1,21 @@
 package main
 
 import (
-	"encoding/hex"
+	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/ap"
+	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/output"
+	"github.com/devgianlu/go-librespot/player"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	"github.com/devgianlu/go-librespot/session"
+	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	"go-librespot/ap"
-	"go-librespot/dealer"
-	"go-librespot/output"
-	"go-librespot/player"
-	connectpb "go-librespot/proto/spotify/connectstate"
-	"go-librespot/session"
-	"go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
+	"io"
 	"math"
 	"strings"
 	"sync"
@@ -30,7 +32,7 @@ type AppPlayer struct {
 
 	player               *player.Player
 	initialVolumeOnce    sync.Once
-	externalVolumeUpdate output.RingBuffer[float32]
+	externalVolumeUpdate *output.RingBuffer[float32]
 
 	spotConnId string
 
@@ -57,6 +59,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 		}
 
 		p.prodInfo = &prod
+		log.Debugf("autoplay enabled: %t", p.prodInfo.AutoplayEnabled())
 		return nil
 	case ap.PacketTypeCountryCode:
 		*p.countryCode = string(payload)
@@ -76,7 +79,7 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
 
-		if !p.app.cfg.ExternalVolume && len(*p.app.cfg.MixerDevice) != 0 {
+		if !p.app.cfg.ExternalVolume && len(*p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
 			p.initialVolumeOnce.Do(func() {
 				p.updateVolume(*p.app.cfg.InitialVolume * player.MaxStateVolume / *p.app.cfg.VolumeSteps)
@@ -157,8 +160,13 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// playback
 		p.state.player.Timestamp = transferState.Playback.Timestamp
 		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
-		p.state.player.PlaybackSpeed = transferState.Playback.PlaybackSpeed
 		p.state.player.IsPaused = transferState.Playback.IsPaused
+
+		if playbackSpeed := transferState.Playback.PlaybackSpeed; playbackSpeed != 0 {
+			p.state.player.PlaybackSpeed = playbackSpeed
+		} else {
+			p.state.player.PlaybackSpeed = 1
+		}
 
 		// current session
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
@@ -236,12 +244,17 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "resume":
 		return p.play()
 	case "seek_to":
-		if req.Command.Relative != "beginning" {
+		var position int64
+		if req.Command.Relative == "current" {
+			position = p.player.PositionMs() + req.Command.Position
+		} else if req.Command.Relative == "beginning" {
+			position = req.Command.Position
+		} else {
 			log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
 			return nil
 		}
 
-		if err := p.seek(req.Command.Position); err != nil {
+		if err := p.seek(position); err != nil {
 			return fmt.Errorf("failed seeking stream: %w", err)
 		}
 
@@ -305,6 +318,46 @@ func (p *AppPlayer) handleDealerRequest(req dealer.Request) error {
 func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	log.Debugf("handling %s api request", req.Type)
 	switch req.Type {
+	case ApiRequestTypeWebApi:
+		data := req.Data.(ApiRequestDataWebApi)
+		resp, err := p.sess.WebApi(data.Method, data.Path, data.Query, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send web api request: %w", err)
+		}
+
+		defer func() { _ = resp.Body.Close() }()
+
+		// this is the status we want to return to client not just 500
+		switch resp.StatusCode {
+		case 400:
+			return nil, ErrBadRequest
+		case 403:
+			return nil, ErrForbidden
+		case 404:
+			return nil, ErrNotFound
+		case 405:
+			return nil, ErrMethodNotAllowed
+		case 429:
+			return nil, ErrTooManyRequests
+		}
+
+		// check for content type if not application/json
+		if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read response body: %w", err)
+			}
+
+			return respBody, nil
+		}
+
+		// decode and return json
+		var respJson any
+		if err = json.NewDecoder(resp.Body).Decode(&respJson); err != nil {
+			return nil, fmt.Errorf("failed to decode response body: %w", err)
+		}
+
+		return respJson, nil
 	case ApiRequestTypeStatus:
 		resp := &ApiResponseStatus{
 			Username:       p.sess.Username(),
@@ -359,8 +412,20 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 
 		var skipTo skipToFunc
 		if len(data.SkipToUri) > 0 {
+			skipToId, err := librespot.SpotifyIdFromUriSafe(data.SkipToUri)
+			if err != nil {
+				log.WithError(err).Warnf("trying to skip to invalid uri: %s", data.SkipToUri)
+				skipToId = nil
+			}
+
 			skipTo = func(track *connectpb.ContextTrack) bool {
-				return data.SkipToUri == track.Uri
+				if len(track.Uri) > 0 {
+					return data.SkipToUri == track.Uri
+				} else if len(track.Gid) > 0 {
+					return bytes.Equal(skipToId.Id(), track.Gid)
+				} else {
+					return false
+				}
 			}
 		}
 
@@ -690,7 +755,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 				log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
-				log.Debugf("sending successful reply for delaer request")
+				log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
 		case req := <-apiRecv:

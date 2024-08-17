@@ -5,14 +5,13 @@ package output
 // #cgo pkg-config: alsa
 //
 // #include <alsa/asoundlib.h>
-// extern int alsaMixerCallback(snd_mixer_elem_t*, unsigned int);
 //
 import "C"
 import (
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"golang.org/x/sys/unix"
 	"io"
 	"sync"
@@ -22,6 +21,7 @@ import (
 const (
 	DisableHardwarePause = true // FIXME: should we fix this?
 	ReleasePcmOnPause    = true
+	BufferTimeMicro      = 500_000
 )
 
 type output struct {
@@ -32,8 +32,11 @@ type output struct {
 
 	cond *sync.Cond
 
-	pcmHandle *C.snd_pcm_t
-	canPause  bool
+	pcmHandle  *C.snd_pcm_t
+	canPause   bool
+	periodSize int
+	bufferSize int
+	samples    *RingBuffer[[]float32]
 
 	externalVolume bool
 
@@ -51,11 +54,11 @@ type output struct {
 	closed   bool
 	released bool
 
-	externalVolumeUpdate RingBuffer[float32]
+	externalVolumeUpdate *RingBuffer[float32]
 	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate RingBuffer[float32]) (*output, error) {
+func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
 	out := &output{
 		reader:               reader,
 		channels:             channels,
@@ -64,17 +67,20 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 		mixer:                mixer,
 		control:              control,
 		volume:               initialVolume,
-		err:                  make(chan error, 1),
+		err:                  make(chan error, 2),
 		cond:                 sync.NewCond(&sync.Mutex{}),
 		externalVolume:       externalVolume,
 		externalVolumeUpdate: externalVolumeUpdate,
 	}
 
-	if err := out.openAndSetup(); err != nil {
+	if err := out.setupPcm(); err != nil {
 		return nil, err
 	}
 
-	if err := out.openAndSetupMixer(); err != nil {
+	// this buffer holds multiple period buffers
+	out.samples = NewRingBuffer[[]float32](16)
+
+	if err := out.setupMixer(); err != nil {
 		if uintptr(unsafe.Pointer(out.mixerHandle)) != 0 {
 			C.snd_mixer_close(out.mixerHandle)
 		}
@@ -84,7 +90,12 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	}
 
 	go func() {
-		out.err <- out.loop()
+		out.err <- out.readLoop()
+		_ = out.Close()
+	}()
+
+	go func() {
+		out.err <- out.writeLoop()
 		_ = out.Close()
 	}()
 
@@ -99,209 +110,179 @@ func (out *output) alsaError(name string, err C.int) error {
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
-func (out *output) openAndSetup() error {
+func (out *output) setupPcm() error {
 	cdevice := C.CString(out.device)
 	defer C.free(unsafe.Pointer(cdevice))
 	if err := C.snd_pcm_open(&out.pcmHandle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
 		return out.alsaError("snd_pcm_open", err)
 	}
 
-	var params *C.snd_pcm_hw_params_t
-	C.snd_pcm_hw_params_malloc(&params)
-	defer C.free(unsafe.Pointer(params))
+	var hwparams *C.snd_pcm_hw_params_t
+	C.snd_pcm_hw_params_malloc(&hwparams)
+	defer C.free(unsafe.Pointer(hwparams))
 
-	if err := C.snd_pcm_hw_params_any(out.pcmHandle, params); err < 0 {
+	if err := C.snd_pcm_hw_params_any(out.pcmHandle, hwparams); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_any", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_access(out.pcmHandle, params, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
+	if err := C.snd_pcm_hw_params_set_access(out.pcmHandle, hwparams, C.SND_PCM_ACCESS_RW_INTERLEAVED); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_access", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, params, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
+	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, hwparams, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_format", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, params, C.unsigned(out.channels)); err < 0 {
+	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, hwparams, C.unsigned(out.channels)); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_channels", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_rate_resample(out.pcmHandle, params, 1); err < 0 {
+	if err := C.snd_pcm_hw_params_set_rate_resample(out.pcmHandle, hwparams, 1); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_rate_resample", err)
 	}
 
 	sr := C.unsigned(out.sampleRate)
-	if err := C.snd_pcm_hw_params_set_rate_near(out.pcmHandle, params, &sr, nil); err < 0 {
+	if err := C.snd_pcm_hw_params_set_rate_near(out.pcmHandle, hwparams, &sr, nil); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_rate_near", err)
 	}
 
-	if err := C.snd_pcm_hw_params(out.pcmHandle, params); err < 0 {
+	bufferTime := C.uint(BufferTimeMicro)
+	if err := C.snd_pcm_hw_params_set_buffer_time_near(out.pcmHandle, hwparams, &bufferTime, nil); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_set_buffer_time_near", err)
+	}
+
+	if err := C.snd_pcm_hw_params(out.pcmHandle, hwparams); err < 0 {
 		return out.alsaError("snd_pcm_hw_params", err)
 	}
+
+	_ = out.logParams(hwparams)
 
 	if DisableHardwarePause {
 		out.canPause = false
 	} else {
-		if err := C.snd_pcm_hw_params_can_pause(params); err < 0 {
+		if err := C.snd_pcm_hw_params_can_pause(hwparams); err < 0 {
 			return out.alsaError("snd_pcm_hw_params_can_pause", err)
 		} else {
 			out.canPause = err == 1
 		}
 	}
 
+	var dir C.int
+	var frames C.snd_pcm_uframes_t
+	if err := C.snd_pcm_hw_params_get_period_size(hwparams, &frames, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_period_size", err)
+	} else {
+		out.periodSize = int(frames)
+	}
+
+	if err := C.snd_pcm_hw_params_get_buffer_size(hwparams, &frames); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
+	} else {
+		out.bufferSize = int(frames)
+	}
+
+	var swparams *C.snd_pcm_sw_params_t
+	C.snd_pcm_sw_params_malloc(&swparams)
+	defer C.free(unsafe.Pointer(swparams))
+
+	if err := C.snd_pcm_sw_params_current(out.pcmHandle, swparams); err < 0 {
+		return out.alsaError("snd_pcm_sw_params_current", err)
+	}
+
+	if err := C.snd_pcm_sw_params_set_start_threshold(out.pcmHandle, swparams, C.ulong(out.bufferSize-out.periodSize)); err < 0 {
+		return out.alsaError("snd_pcm_sw_params_set_start_threshold", err)
+	}
+
+	if err := C.snd_pcm_sw_params_set_avail_min(out.pcmHandle, swparams, C.ulong(out.periodSize)); err < 0 {
+		return out.alsaError("snd_pcm_sw_params_set_avail_min", err)
+	}
+
+	if err := C.snd_pcm_sw_params(out.pcmHandle, swparams); err < 0 {
+		return out.alsaError("snd_pcm_sw_params", err)
+	}
+
 	return nil
 }
 
-func (out *output) openAndSetupMixer() error {
-	if len(out.mixer) == 0 {
-		out.mixerEnabled = false
-		return nil
+func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
+	var dir C.int
+
+	var rate C.uint
+	if err := C.snd_pcm_hw_params_get_rate(params, &rate, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_rate", err)
 	}
 
-	if err := C.snd_mixer_open(&out.mixerHandle, 0); err < 0 {
-		return out.alsaError("snd_mixer_open", err)
+	var periodTime C.uint
+	if err := C.snd_pcm_hw_params_get_period_time(params, &periodTime, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_period_time", err)
 	}
 
-	cmixer := C.CString(out.mixer)
-	defer C.free(unsafe.Pointer(cmixer))
-	if err := C.snd_mixer_attach(out.mixerHandle, cmixer); err < 0 {
-		return out.alsaError("snd_mixer_attach", err)
+	var frames C.snd_pcm_uframes_t
+	if err := C.snd_pcm_hw_params_get_period_size(params, &frames, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_period_size", err)
 	}
 
-	if err := C.snd_mixer_selem_register(out.mixerHandle, nil, nil); err < 0 {
-		return out.alsaError("snd_mixer_selem_register", err)
+	var bufferTime C.uint
+	if err := C.snd_pcm_hw_params_get_buffer_time(params, &bufferTime, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_time", err)
 	}
 
-	if err := C.snd_mixer_load(out.mixerHandle); err < 0 {
-		return out.alsaError("snd_mixer_load", err)
+	var bufferSize C.ulong
+	if err := C.snd_pcm_hw_params_get_buffer_size(params, &bufferSize); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
 	}
 
-	var sid *C.snd_mixer_selem_id_t
-	if err := C.snd_mixer_selem_id_malloc(&sid); err < 0 {
-		return out.alsaError("snd_mixer_selem_id_malloc", err)
-	}
-	defer C.free(unsafe.Pointer(sid))
-
-	C.snd_mixer_selem_id_set_index(sid, 0)
-	C.snd_mixer_selem_id_set_name(sid, C.CString(out.control))
-
-	if out.mixerElemHandle = C.snd_mixer_find_selem(out.mixerHandle, sid); uintptr(unsafe.Pointer(out.mixerElemHandle)) == 0 {
-		return fmt.Errorf("mixer simple element not found")
+	var periods C.uint
+	if err := C.snd_pcm_hw_params_get_periods(params, &periods, &dir); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_periods", err)
 	}
 
-	if err := C.snd_mixer_selem_get_playback_volume_range(out.mixerElemHandle, &out.mixerMinVolume, &out.mixerMaxVolume); err < 0 {
-		return out.alsaError("snd_mixer_selem_get_playback_volume_range", err)
-	}
+	log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames",
+		rate, periodTime, frames, bufferTime, bufferSize, periods)
 
-	// get current volume from the mixer, and set the spotify volume accordingly
-	var volume C.long
-	C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
-	out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
-
-	out.externalVolumeUpdate.Put(out.volume)
-
-	// set callback and initialize private
-	var cb C.snd_mixer_elem_callback_t = (C.snd_mixer_elem_callback_t)(C.alsaMixerCallback)
-	C.snd_mixer_elem_set_callback(out.mixerElemHandle, cb)
-	C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
-
-	go out.waitForMixerEvents()
-
-	out.mixerEnabled = true
 	return nil
 }
 
-func (out *output) waitForMixerEvents() {
-	for !out.closed {
-		var res = C.snd_mixer_wait(out.mixerHandle, -1)
-		if out.closed {
-			// if we reach here, the playing context has probably changed
-			break
-		}
-		if res >= 0 {
-			res = C.snd_mixer_handle_events(out.mixerHandle)
-			if res <= 0 {
-				errStrPtr := C.snd_strerror(res)
-				log.Warnf("error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
-
-				// no need to free the errStrPtr, because it doesn't point into heap
-				continue
-			}
-
-			var priv = float32(*(*C.float)(C.snd_mixer_elem_get_callback_private(out.mixerElemHandle)))
-			if priv < 0 {
-				// volume update came from spotify, so no need to tell spotify about it
-				// reset the private, but discard the event
-				C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
-
-				continue
-			}
-			if priv == out.volume {
-				log.Debugf("skipping alsa mixer event, volume already updated: %.2f\n", priv)
-				continue
-			}
-
-			out.externalVolumeUpdate.Put(priv)
-		} else {
-			errStrPtr := C.snd_strerror(res)
-			log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
-		}
-	}
-}
-
-/*
-The mixer callback private is used to pass the detected volume from c back to go code.
-
-A private value between zero and one (inclusive) means, that the volume changed to that percentage of the maximum volume.
-
-A private value less than zero means, that the volume update was initiated by spotify instead of the alsa mixer.
-*/
-//export alsaMixerCallback
-func alsaMixerCallback(elem *C.snd_mixer_elem_t, _ C.uint) C.int {
-	if float32(*(*C.float)(C.snd_mixer_elem_get_callback_private(elem))) < 0 {
-		// the volume update came from spotify, so there is no need to tell spotify about it
-		return 0
-	}
-
-	var val C.long
-	var minVol C.long
-	var maxVol C.long
-	C.snd_mixer_selem_get_playback_volume(elem, C.SND_MIXER_SCHN_MONO, &val)
-	C.snd_mixer_selem_get_playback_volume_range(elem, &minVol, &maxVol)
-
-	var normalizedVolume = C.float(float32(val-minVol) / float32(maxVol-minVol))
-	C.snd_mixer_elem_set_callback_private(elem, unsafe.Pointer(&normalizedVolume))
-
-	return 0
-}
-
-func (out *output) loop() error {
-	floats := make([]float32, out.channels*16*1024)
-
+func (out *output) readLoop() error {
 	for {
+		floats := make([]float32, out.channels*out.periodSize)
 		n, err := out.reader.Read(floats)
-		if errors.Is(err, io.EOF) || errors.Is(err, librespot.ErrDrainReader) {
-			// drain pcm ignoring errors
+		if n > 0 {
+			floats = floats[:n]
+			if err := out.samples.PutWait(floats); errors.Is(err, ErrBufferClosed) {
+				return nil
+			} else if err != nil {
+				_ = out.samples.Close()
+				return err
+			}
+		}
+
+		if errors.Is(err, io.EOF) {
+			_ = out.samples.Close()
+			return nil
+		} else if err != nil {
+			_ = out.samples.Close()
+			return err
+		}
+	}
+}
+
+func (out *output) writeLoop() error {
+	for {
+		floats, err := out.samples.GetWait()
+		if errors.Is(err, ErrBufferClosed) {
 			out.cond.L.Lock()
 			C.snd_pcm_drain(out.pcmHandle)
 			out.cond.L.Unlock()
 
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-
-			out.reader.Drained()
-			continue
+			return nil
 		} else if err != nil {
-			return fmt.Errorf("failed reading source: %w", err)
-		}
-
-		if n%out.channels != 0 {
-			return fmt.Errorf("invalid read amount: %d", n)
+			_ = out.samples.Close()
+			return err
 		}
 
 		if !out.mixerEnabled && !out.externalVolume {
-			for i := 0; i < n; i++ {
+			for i := 0; i < len(floats); i++ {
 				floats[i] *= out.volume
 			}
 		}
@@ -316,7 +297,7 @@ func (out *output) loop() error {
 			return nil
 		}
 
-		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
+		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(len(floats)/out.channels)); nn < 0 {
 			nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
 			if nn < 0 {
 				out.cond.L.Unlock()
@@ -371,7 +352,7 @@ func (out *output) Resume() error {
 
 	if ReleasePcmOnPause {
 		if out.released {
-			if err := out.openAndSetup(); err != nil {
+			if err := out.setupPcm(); err != nil {
 				return err
 			}
 		}
@@ -400,6 +381,8 @@ func (out *output) Drop() error {
 	if out.closed || out.released {
 		return nil
 	}
+
+	out.samples.Clear()
 
 	if err := C.snd_pcm_drop(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_drop", err)

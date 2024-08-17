@@ -5,9 +5,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
 	"github.com/xlab/vorbis-go/vorbis"
-	librespot "go-librespot"
 	"io"
 	"math"
 )

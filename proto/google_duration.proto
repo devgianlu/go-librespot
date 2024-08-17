@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package google.protobuf;
 
-option go_package = "go-librespot/proto/google";
+option go_package = "github.com/devgianlu/go-librespot/proto/google";
 
 message Duration {
   int64 seconds = 1;

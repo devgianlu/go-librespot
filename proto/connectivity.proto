@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package spotify.clienttoken.data.v0;
 
-option go_package = "go-librespot/proto/spotify/clienttoken/data/v0";
+option go_package = "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/data/v0";
 
 message ConnectivitySdkData {
   PlatformSpecificData platform_specific_data = 1;

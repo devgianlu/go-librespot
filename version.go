@@ -38,5 +38,5 @@ func SystemInfoString() string {
 }
 
 func UserAgent() string {
-	return fmt.Sprintf("go-librespot/%s Go/%s", VersionNumberString(), runtime.Version())
+	return fmt.Sprintf("github.com/devgianlu/go-librespot/%s Go/%s", VersionNumberString(), runtime.Version())
 }

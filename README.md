@@ -9,19 +9,25 @@ Create a `config.yml` file containing:
 ```yaml
 device_name: go-librespot
 credentials:
-  type: user_pass
-  user_pass:
-    username: "<username>"
-    password: "<password>"
+  type: interactive
 ```
 
-Then, run:
+Then run (or grab a prebuilt binary from the [releases](https://github.com/devgianlu/go-librespot/releases) page):
 
 ```shell
 go run ./cmd/daemon
 ```
 
-The new device should appear in your Spotify Connect devices.
+Follow the instructions on the console for completing authentication and the new device should appear in your Spotify
+Connect devices.
+
+Alternatively, you can use the Zeroconf mode:
+
+```yaml
+device_name: go-librespot
+credentials:
+  type: zeroconf
+```
 
 ## API
 
@@ -51,5 +57,5 @@ To crosscompile for different architectures the `GOOS` and `GOARCH` environment 
 To recompile protobuf definitions use:
 
 ```shell
-protoc --go_out=proto --go_opt module=go-librespot/proto -I proto proto/*.proto
+protoc --go_out=proto --go_opt module=github.com/devgianlu/go-librespot/proto -I proto proto/*.proto
 ```

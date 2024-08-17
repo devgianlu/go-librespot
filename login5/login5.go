@@ -3,10 +3,10 @@ package login5
 import (
 	"bytes"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	pb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3"
+	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	pb "go-librespot/proto/spotify/login5/v3"
-	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
@@ -90,8 +90,6 @@ func (c *Login5) Login(credentials proto.Message) error {
 	switch lm := credentials.(type) {
 	case *credentialspb.StoredCredential:
 		req.LoginMethod = &pb.LoginRequest_StoredCredential{StoredCredential: lm}
-	case *credentialspb.Password:
-		req.LoginMethod = &pb.LoginRequest_Password{Password: lm}
 	case *credentialspb.FacebookAccessToken:
 		req.LoginMethod = &pb.LoginRequest_FacebookAccessToken{FacebookAccessToken: lm}
 	case *credentialspb.OneTimeToken:
@@ -144,6 +142,28 @@ func (c *Login5) Login(credentials proto.Message) error {
 	} else {
 		return fmt.Errorf("failed authenticating with login5: %v", resp.GetError())
 	}
+}
+
+func (c *Login5) Username() string {
+	c.loginOkLock.RLock()
+	defer c.loginOkLock.RUnlock()
+
+	if c.loginOk == nil {
+		panic("login5 not authenticated")
+	}
+
+	return c.loginOk.Username
+}
+
+func (c *Login5) StoredCredential() []byte {
+	c.loginOkLock.RLock()
+	defer c.loginOkLock.RUnlock()
+
+	if c.loginOk == nil {
+		panic("login5 not authenticated")
+	}
+
+	return c.loginOk.StoredCredential
 }
 
 func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {

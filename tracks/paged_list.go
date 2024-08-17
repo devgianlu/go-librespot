@@ -3,8 +3,8 @@ package tracks
 import (
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"golang.org/x/exp/rand"
 	"io"
 )

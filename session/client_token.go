@@ -3,10 +3,10 @@ package session
 import (
 	"bytes"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	pbdata "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/data/v0"
+	pbhttp "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/http/v0"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	pbdata "go-librespot/proto/spotify/clienttoken/data/v0"
-	pbhttp "go-librespot/proto/spotify/clienttoken/http/v0"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"

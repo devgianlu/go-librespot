@@ -1,8 +1,8 @@
 package session
 
 import (
-	"go-librespot/apresolve"
-	devicespb "go-librespot/proto/spotify/connectstate/devices"
+	"github.com/devgianlu/go-librespot/apresolve"
+	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 )
 
 type Options struct {
@@ -19,9 +19,8 @@ type Options struct {
 	Resolver *apresolve.ApResolver
 }
 
-type UserPassCredentials struct {
-	Username string
-	Password string
+type InteractiveCredentials struct {
+	CallbackPort int
 }
 
 type SpotifyTokenCredentials struct {

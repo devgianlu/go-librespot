@@ -3,7 +3,7 @@ package go_librespot
 import (
 	"encoding/hex"
 	"fmt"
-	connectpb "go-librespot/proto/spotify/connectstate"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"math/big"
 	"regexp"
 	"strings"
@@ -94,17 +94,26 @@ func SpotifyIdFromGid(typ SpotifyIdType, id []byte) SpotifyId {
 	return SpotifyId{typ, id}
 }
 
-func SpotifyIdFromUri(uri string) SpotifyId {
+func SpotifyIdFromUriSafe(uri string) (_ *SpotifyId, err error) {
 	matches := UriRegexp.FindStringSubmatch(uri)
 	if len(matches) == 0 {
-		panic(fmt.Sprintf("invalid uri: %s", uri))
+		return nil, fmt.Errorf("invalid uri: %s", uri)
 	}
 
 	var i big.Int
 	_, ok := i.SetString(matches[2], 62)
 	if !ok {
-		panic("failed decoding base62 track uri")
+		return nil, fmt.Errorf("failed decoding base62 track uri: %s", uri)
 	}
 
-	return SpotifyId{SpotifyIdType(matches[1]), i.FillBytes(make([]byte, 16))}
+	return &SpotifyId{SpotifyIdType(matches[1]), i.FillBytes(make([]byte, 16))}, nil
+}
+
+func SpotifyIdFromUri(uri string) SpotifyId {
+	id, err := SpotifyIdFromUriSafe(uri)
+	if err != nil {
+		panic(err)
+	}
+
+	return *id
 }

@@ -4,12 +4,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
+	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	"go-librespot/player"
-	connectpb "go-librespot/proto/spotify/connectstate"
-	playerpb "go-librespot/proto/spotify/player"
-	"go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
 	"math"
 	"strconv"
@@ -473,7 +473,7 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 		requiresUpdate = true
 	}
 
-	if shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
+	if p.state.tracks != nil && shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
 		if err := p.state.tracks.ToggleShuffle(*shufflingContext); err != nil {
 			log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
 			return
@@ -501,6 +501,11 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 }
 
 func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
+	if p.state.tracks == nil {
+		log.Warnf("cannot add to queue without a context")
+		return
+	}
+
 	p.state.tracks.AddToQueue(track)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
@@ -509,6 +514,11 @@ func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
 }
 
 func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
+	if p.state.tracks == nil {
+		log.Warnf("cannot set queue without a context")
+		return
+	}
+
 	p.state.tracks.SetQueue(prev, next)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
@@ -688,6 +698,7 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 			return false, nil
 		}
 
+		log.Debugf("resolved autoplay station: %s", ctx.Uri)
 		if err := p.loadContext(ctx, func(_ *connectpb.ContextTrack) bool { return true }, false); err != nil {
 			log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
 			return false, nil

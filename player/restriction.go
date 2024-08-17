@@ -1,8 +1,8 @@
 package player
 
 import (
-	librespot "go-librespot"
-	metadatapb "go-librespot/proto/spotify/metadata"
+	librespot "github.com/devgianlu/go-librespot"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"strings"
 )
 

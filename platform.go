@@ -1,8 +1,8 @@
 package go_librespot
 
 import (
-	spotifypb "go-librespot/proto/spotify"
-	clienttokenpb "go-librespot/proto/spotify/clienttoken/data/v0"
+	spotifypb "github.com/devgianlu/go-librespot/proto/spotify"
+	clienttokenpb "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/data/v0"
 	"runtime"
 )
 

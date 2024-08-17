@@ -6,13 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
 	librespot "go-librespot"
 	metadatapb "go-librespot/proto/spotify/metadata"
 	"net"
 	"net/http"
+	"net/url"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,11 +34,19 @@ type ApiServer struct {
 	clientsLock sync.RWMutex
 }
 
-var ErrNoSession = errors.New("no session")
+var (
+	ErrNoSession        = errors.New("no session")
+	ErrBadRequest       = errors.New("bad request")
+	ErrForbidden        = errors.New("forbidden")
+	ErrNotFound         = errors.New("not found")
+	ErrMethodNotAllowed = errors.New("method not allowed")
+	ErrTooManyRequests  = errors.New("the app has exceeded its rate limits")
+)
 
 type ApiRequestType string
 
 const (
+	ApiRequestTypeWebApi              ApiRequestType = "web_api"
 	ApiRequestTypeStatus              ApiRequestType = "status"
 	ApiRequestTypeResume              ApiRequestType = "resume"
 	ApiRequestTypePause               ApiRequestType = "pause"
@@ -80,6 +91,12 @@ type ApiRequest struct {
 
 func (r *ApiRequest) Reply(data any, err error) {
 	r.resp <- apiResponse{data, err}
+}
+
+type ApiRequestDataWebApi struct {
+	Method string
+	Path   string
+	Query  url.Values
 }
 
 type ApiRequestDataPlay struct {
@@ -323,19 +340,39 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	req.resp = make(chan apiResponse, 1)
 	s.requests <- req
 	resp := <-req.resp
-	if errors.Is(resp.err, ErrNoSession) {
-		w.WriteHeader(http.StatusNoContent)
-		log.Debug("No session error")
-		return
-	} else if resp.err != nil {
-		log.WithError(resp.err).Error("failed handling request")
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+
+	if resp.err != nil {
+		switch {
+		case errors.Is(resp.err, ErrNoSession):
+			w.WriteHeader(http.StatusNoContent)
+			return
+		case errors.Is(resp.err, ErrForbidden):
+			w.WriteHeader(http.StatusForbidden)
+			return
+		case errors.Is(resp.err, ErrNotFound):
+			w.WriteHeader(http.StatusNotFound)
+			return
+		case errors.Is(resp.err, ErrMethodNotAllowed):
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		case errors.Is(resp.err, ErrTooManyRequests):
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		default:
+			log.WithError(resp.err).Errorf("failed handling request %s", req.Type)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp.data)
-	log.Debug("Request handled successfully")
+	switch respData := resp.data.(type) {
+	case []byte:
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(respData)
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(respData)
+	}
 }
 
 
@@ -355,6 +392,16 @@ func (s *ApiServer) serve() {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte("{}"))
 	})
+	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleRequest(ApiRequest{
+			Type: ApiRequestTypeWebApi,
+			Data: ApiRequestDataWebApi{
+				Method: r.Method,
+				Path:   strings.TrimPrefix(r.URL.Path, "/web-api/"),
+				Query:  r.URL.Query(),
+			},
+		}, w)
+	}))
 	m.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -394,6 +441,11 @@ func (s *ApiServer) serve() {
 
 		var data ApiRequestDataPlay
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if len(data.Uri) == 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -446,6 +498,11 @@ func (s *ApiServer) serve() {
 			return
 		}
 
+		if data.Position < 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
 	})
 	m.HandleFunc("/player/volume", func(w http.ResponseWriter, r *http.Request) {
@@ -456,6 +513,11 @@ func (s *ApiServer) serve() {
 				Volume uint32 `json:"volume"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
+			if data.Volume < 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -527,10 +589,20 @@ func (s *ApiServer) serve() {
 			return
 		}
 
+		if len(data.Uri) == 0 {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
-		c, err := websocket.Accept(w, r, nil)
+		opts := &websocket.AcceptOptions{}
+		if len(s.allowOrigin) > 0 {
+			opts.OriginPatterns = []string{s.allowOrigin}
+		}
+
+		c, err := websocket.Accept(w, r, opts)
 		if err != nil {
 			log.WithError(err).Error("failed accepting websocket connection")
 			w.WriteHeader(http.StatusInternalServerError)

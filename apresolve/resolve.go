@@ -3,8 +3,8 @@ package apresolve
 import (
 	"encoding/json"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
 	"golang.org/x/exp/slices"
 	"net/http"
 	"net/url"

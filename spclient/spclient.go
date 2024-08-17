@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
+	librespot "github.com/devgianlu/go-librespot"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	storagepb "github.com/devgianlu/go-librespot/proto/spotify/download"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	connectpb "go-librespot/proto/spotify/connectstate"
-	storagepb "go-librespot/proto/spotify/download"
-	metadatapb "go-librespot/proto/spotify/metadata"
-	playerpb "go-librespot/proto/spotify/player"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
@@ -44,8 +44,7 @@ func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5T
 	}, nil
 }
 
-func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
-	reqUrl := c.baseUrl.JoinPath(path)
+func (c *Spclient) innerRequest(method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	if query != nil {
 		reqUrl.RawQuery = query.Encode()
 	}
@@ -95,6 +94,20 @@ func (c *Spclient) request(method string, path string, query url.Values, header 
 	}
 
 	return resp, nil
+}
+
+func (c *Spclient) WebApiRequest(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqPath, err := url.Parse("https://api.spotify.com/")
+	if err != nil {
+		panic("invalid api base url")
+	}
+	reqURL := reqPath.JoinPath(path)
+	return c.innerRequest(method, reqURL, query, header, body)
+}
+
+func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqUrl := c.baseUrl.JoinPath(path)
+	return c.innerRequest(method, reqUrl, query, header, body)
 }
 
 type putStateError struct {
@@ -177,7 +190,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 503 {
-		log.Debugf("storage resolve returned service unavailable, retring...")
+		log.Debugf("storage resolve returned service unavailable, retrying...")
 		_ = resp.Body.Close()
 
 		resp, err = c.request("GET", path, nil, nil, nil)

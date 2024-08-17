@@ -1,16 +1,21 @@
 package session
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
-	"go-librespot/ap"
-	"go-librespot/apresolve"
-	"go-librespot/audio"
-	"go-librespot/dealer"
-	"go-librespot/login5"
-	devicespb "go-librespot/proto/spotify/connectstate/devices"
-	credentialspb "go-librespot/proto/spotify/login5/v3/credentials"
-	"go-librespot/spclient"
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/ap"
+	"github.com/devgianlu/go-librespot/apresolve"
+	"github.com/devgianlu/go-librespot/audio"
+	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/login5"
+	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
+	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
+	"github.com/devgianlu/go-librespot/spclient"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
+	spotifyoauth2 "golang.org/x/oauth2/spotify"
 )
 
 type Session struct {
@@ -79,9 +84,64 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 		if err := s.ap.ConnectStored(creds.Username, creds.Data); err != nil {
 			return nil, fmt.Errorf("failed authenticating accesspoint with stored credentials: %w", err)
 		}
-	case UserPassCredentials:
-		if err := s.ap.ConnectUserPass(creds.Username, creds.Password); err != nil {
-			return nil, fmt.Errorf("failed authenticating accesspoint with username and password: %w", err)
+	case InteractiveCredentials:
+		ctx := context.Background()
+		serverCtx, serverCancel := context.WithCancel(ctx)
+
+		callbackPort, codeCh, err := NewOAuth2Server(serverCtx, creds.CallbackPort)
+		if err != nil {
+			serverCancel()
+			return nil, fmt.Errorf("failed initializing oauth2 server: %w", err)
+		}
+
+		oauthConf := &oauth2.Config{
+			ClientID:    librespot.ClientIdHex,
+			RedirectURL: fmt.Sprintf("http://127.0.0.1:%d/login", callbackPort),
+			Scopes: []string{
+				"app-remote-control",
+				"playlist-modify",
+				"playlist-modify-private",
+				"playlist-modify-public",
+				"playlist-read",
+				"playlist-read-collaborative",
+				"playlist-read-private",
+				"streaming",
+				"ugc-image-upload",
+				"user-follow-modify",
+				"user-follow-read",
+				"user-library-modify",
+				"user-library-read",
+				"user-modify",
+				"user-modify-playback-state",
+				"user-modify-private",
+				"user-personalized",
+				"user-read-birthdate",
+				"user-read-currently-playing",
+				"user-read-email",
+				"user-read-play-history",
+				"user-read-playback-position",
+				"user-read-playback-state",
+				"user-read-private",
+				"user-read-recently-played",
+				"user-top-read",
+			},
+			Endpoint: spotifyoauth2.Endpoint,
+		}
+
+		verifier := oauth2.GenerateVerifier()
+		url := oauthConf.AuthCodeURL("", oauth2.S256ChallengeOption(verifier))
+		log.Infof("to complete authentication visit the following link: %s", url)
+
+		code := <-codeCh
+		serverCancel()
+
+		token, err := oauthConf.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+		if err != nil {
+			return nil, fmt.Errorf("failed exchanging oauth2 code: %w", err)
+		}
+
+		if err := s.ap.ConnectSpotifyToken(token.Extra("username").(string), token.AccessToken); err != nil {
+			return nil, fmt.Errorf("failed authenticating accesspoint interactively: %w", err)
 		}
 	case SpotifyTokenCredentials:
 		if err := s.ap.ConnectSpotifyToken(creds.Username, creds.Token); err != nil {

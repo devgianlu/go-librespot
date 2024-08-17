@@ -1,10 +1,13 @@
 package session
 
 import (
-	"go-librespot/ap"
-	"go-librespot/audio"
-	"go-librespot/dealer"
-	"go-librespot/spclient"
+	"net/http"
+	"net/url"
+
+	"github.com/devgianlu/go-librespot/ap"
+	"github.com/devgianlu/go-librespot/audio"
+	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/spclient"
 )
 
 func (s *Session) Username() string {
@@ -29,4 +32,8 @@ func (s *Session) Dealer() *dealer.Dealer {
 
 func (s *Session) Accesspoint() *ap.Accesspoint {
 	return s.ap
+}
+
+func (s *Session) WebApi(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	return s.sp.WebApiRequest(method, path, query, header, body)
 }

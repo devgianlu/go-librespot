@@ -1,12 +1,12 @@
 package main
 
 import (
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/player"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	"go-librespot/dealer"
-	"go-librespot/player"
-	connectpb "go-librespot/proto/spotify/connectstate"
-	"go-librespot/tracks"
 	"time"
 )
 

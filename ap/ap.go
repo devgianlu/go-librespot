@@ -11,10 +11,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/cenkalti/backoff/v4"
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/dh"
+	pb "github.com/devgianlu/go-librespot/proto/spotify"
 	log "github.com/sirupsen/logrus"
-	librespot "go-librespot"
-	"go-librespot/dh"
-	pb "go-librespot/proto/spotify"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/proto"
@@ -91,14 +91,6 @@ func (ap *Accesspoint) init() (err error) {
 	ap.lastPongAck = time.Now().Add(pongAckInterval)
 
 	return nil
-}
-
-func (ap *Accesspoint) ConnectUserPass(username, password string) error {
-	return ap.Connect(&pb.LoginCredentials{
-		Typ:      pb.AuthenticationType_AUTHENTICATION_USER_PASS.Enum(),
-		Username: proto.String(username),
-		AuthData: []byte(password),
-	})
 }
 
 func (ap *Accesspoint) ConnectSpotifyToken(username, token string) error {
