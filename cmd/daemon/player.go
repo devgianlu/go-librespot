@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	librespot "github.com/devgianlu/go-librespot"
@@ -14,6 +15,7 @@ import (
 	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
+	"io"
 	"math"
 	"strings"
 	"sync"
@@ -314,6 +316,46 @@ func (p *AppPlayer) handleDealerRequest(req dealer.Request) error {
 
 func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	switch req.Type {
+	case ApiRequestTypeWebApi:
+		data := req.Data.(ApiRequestDataWebApi)
+		resp, err := p.sess.WebApi(data.Method, data.Path, data.Query, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send web api request: %w", err)
+		}
+
+		defer func() { _ = resp.Body.Close() }()
+
+		// this is the status we want to return to client not just 500
+		switch resp.StatusCode {
+		case 400:
+			return nil, ErrBadRequest
+		case 403:
+			return nil, ErrForbidden
+		case 404:
+			return nil, ErrNotFound
+		case 405:
+			return nil, ErrMethodNotAllowed
+		case 429:
+			return nil, ErrTooManyRequests
+		}
+
+		// check for content type if not application/json
+		if !strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+			respBody, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read response body: %w", err)
+			}
+
+			return respBody, nil
+		}
+
+		// decode and return json
+		var respJson any
+		if err = json.NewDecoder(resp.Body).Decode(&respJson); err != nil {
+			return nil, fmt.Errorf("failed to decode response body: %w", err)
+		}
+
+		return respJson, nil
 	case ApiRequestTypeStatus:
 		resp := &ApiResponseStatus{
 			Username:       p.sess.Username(),

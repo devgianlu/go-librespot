@@ -44,8 +44,7 @@ func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5T
 	}, nil
 }
 
-func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
-	reqUrl := c.baseUrl.JoinPath(path)
+func (c *Spclient) innerRequest(method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	if query != nil {
 		reqUrl.RawQuery = query.Encode()
 	}
@@ -95,6 +94,20 @@ func (c *Spclient) request(method string, path string, query url.Values, header 
 	}
 
 	return resp, nil
+}
+
+func (c *Spclient) WebApiRequest(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqPath, err := url.Parse("https://api.spotify.com/")
+	if err != nil {
+		panic("invalid api base url")
+	}
+	reqURL := reqPath.JoinPath(path)
+	return c.innerRequest(method, reqURL, query, header, body)
+}
+
+func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqUrl := c.baseUrl.JoinPath(path)
+	return c.innerRequest(method, reqUrl, query, header, body)
 }
 
 type putStateError struct {
