@@ -41,7 +41,7 @@ var (
 type ApiRequestType string
 
 const (
-	WebApiRequestType                 ApiRequestType = "web_api"
+	ApiRequestTypeWebApi              ApiRequestType = "web_api"
 	ApiRequestTypeStatus              ApiRequestType = "status"
 	ApiRequestTypeResume              ApiRequestType = "resume"
 	ApiRequestTypePause               ApiRequestType = "pause"
@@ -75,7 +75,7 @@ const (
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 )
 
-type WebAPI struct {
+type ApiRequestDataWebApi struct {
 	Method string
 	Path   string
 	Query  url.Values
@@ -87,7 +87,6 @@ type ApiRequest struct {
 
 	resp chan apiResponse
 
-	WebAPI WebAPI
 }
 
 func (r *ApiRequest) Reply(data any, err error) {
@@ -303,8 +302,8 @@ func (s *ApiServer) serve() {
 	m := http.NewServeMux()
 	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.handleRequest(ApiRequest{
-			Type: WebApiRequestType,
-			WebAPI: WebAPI{
+			Type: ApiRequestTypeWebApi,
+			Data: ApiRequestDataWebApi{
 				Method: r.Method,
 				Path:   strings.TrimPrefix(r.URL.Path, "/web-api/"),
 				Query:  r.URL.Query(),

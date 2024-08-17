@@ -316,9 +316,9 @@ func (p *AppPlayer) handleDealerRequest(req dealer.Request) error {
 
 func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	switch req.Type {
-	case WebApiRequestType:
-		resp, err := p.sess.WebApi(req.WebAPI.Method, req.WebAPI.Path, req.WebAPI.Query, nil, nil)
-		defer resp.Body.Close()
+	case ApiRequestTypeWebApi:
+		data := req.Data.(ApiRequestDataWebApi)
+		resp, err := p.sess.WebApi(data.Method, data.Path, data.Query, nil, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send web api request")
 		}
