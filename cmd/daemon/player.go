@@ -338,18 +338,21 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			return nil, ErrTooManyRequests
 		}
 
+		var respJson any
 		// check for content type if not application/json
 		if !strings.Contains(resp.Header.Get("content-type"), "application/json") {
 			respString, err := io.ReadAll(resp.Body)
 			if err != nil {
 				return nil, fmt.Errorf("failed to read response body: %w", err)
 			}
-			// return as plain text
-			return string(respString), nil
+			// convert plain-text into ApiResponseMessage
+			respJson = &ApiResponseMessage{
+				Message:    string(respString),
+				StatusCode: uint(resp.StatusCode),
+			}
+			return respJson, nil
 		}
-
 		// decode and return json
-		var respJson any
 		err = json.NewDecoder(resp.Body).Decode(&respJson)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode response body: %w", err)
