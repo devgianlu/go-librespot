@@ -265,23 +265,19 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "skip_prev":
 		return p.skipPrev()
 	case "skip_next":
-		// todo: refactor
 		if req.Command.Track != nil {
-			ctxTracks := p.state.tracks
-
 			contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
-			if err := ctxTracks.TrySeek(tracks.ContextTrackComparator(contextSpotType, req.Command.Track)); err != nil {
+			if err := p.state.tracks.TrySeek(tracks.ContextTrackComparator(contextSpotType, req.Command.Track)); err != nil {
 				return err
 			}
 
 			p.state.player.Timestamp = time.Now().UnixMilli()
 			p.state.player.PositionAsOfTimestamp = 0
 
-			p.state.tracks = ctxTracks
-			p.state.player.Track = ctxTracks.CurrentTrack()
-			p.state.player.PrevTracks = ctxTracks.PrevTracks()
-			p.state.player.NextTracks = ctxTracks.NextTracks()
-			p.state.player.Index = ctxTracks.Index()
+			p.state.player.Track = p.state.tracks.CurrentTrack()
+			p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+			p.state.player.NextTracks = p.state.tracks.NextTracks()
+			p.state.player.Index = p.state.tracks.Index()
 
 			if err := p.loadCurrentTrack(p.state.player.IsPaused); err != nil {
 				return err
