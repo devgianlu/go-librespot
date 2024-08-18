@@ -73,21 +73,6 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 		externalVolumeUpdate: externalVolumeUpdate,
 	}
 
-	out.numBuffers = 16
-	out.volumePtr = &out.volume
-
-	// hideous hack, if it is possible somehow differently, please change this
-	var in = C.calloc(C.ulong(out.numBuffers), C.ulong(unsafe.Sizeof(arr[float32]{})))
-	var f = NewRingBuffer[arr[float32]](uint64(out.numBuffers))
-
-	// replace the inner, with c-memory
-	f.inner = unsafe.Slice((*arr[float32])(in), out.numBuffers)
-	out.samples = f
-
-	out.pin.Pin(f.notFull)
-	out.pin.Pin(f.notEmpty)
-	out.pin.Pin(out.volumePtr)
-
 	if err := out.setupPcm(); err != nil {
 		return nil, err
 	}
@@ -120,6 +105,23 @@ func (out *output) setupPcm() error {
 		mReserved:         0,
 	}
 
+	log.Tracef("start setupPcm")
+
+	out.numBuffers = 16
+	out.volumePtr = &out.volume
+
+	var in = calloc(C.ulong(out.numBuffers), C.ulong(unsafe.Sizeof(arr[float32]{})), "setupPcm")
+	// hideous hack, if it is possible somehow differently, please change this
+	var f = NewRingBuffer[arr[float32]](uint64(out.numBuffers))
+
+	// replace the inner, with c-memory
+	f.inner = unsafe.Slice((*arr[float32])(in), out.numBuffers)
+	out.samples = f
+
+	out.pin.Pin(f.notFull)
+	out.pin.Pin(f.notEmpty)
+	out.pin.Pin(out.volumePtr)
+
 	var cb C.AudioQueueOutputCallback = (C.AudioQueueOutputCallback)(C.audioCallback)
 
 	err := C.AudioQueueNewOutput(&description, cb, (unsafe.Pointer)(out.samples), 0, 0, 0, &out.audioQueue)
@@ -150,6 +152,7 @@ func (out *output) setupPcm() error {
 	var queueStart = C.AudioQueueStart(out.audioQueue, nil)
 
 	log.Tracef("pcm setup! %d", int(queueStart))
+	out.closed = false
 	return nil
 }
 
@@ -159,8 +162,11 @@ func (out *output) logParams(params any) error {
 
 func (out *output) readLoop() error {
 	for {
-		var fts = unsafe.Pointer(C.calloc(C.ulong(out.channels*out.periodSize), C.ulong(unsafe.Sizeof(C.float(0)))))
+		if out.closed {
+			return io.EOF
+		}
 
+		var fts = calloc(C.ulong(out.channels*out.periodSize), C.ulong(unsafe.Sizeof(C.float(0))), "readLoop")
 		floats := unsafe.Slice((*float32)(fts), out.channels*out.periodSize)
 
 		n, err := out.reader.Read(floats)
@@ -199,7 +205,6 @@ func audioCallback(inUserData unsafe.Pointer, inAq C.AudioQueueRef, inBuffer C.A
 		log.Tracef("callback err")
 		return
 	}
-	defer C.free(unsafe.Pointer(samples.ptr))
 
 	if uint(inBuffer.mAudioDataBytesCapacity/4) < samples.ln {
 		log.Warnf("buffer overrun")
@@ -209,7 +214,7 @@ func audioCallback(inUserData unsafe.Pointer, inAq C.AudioQueueRef, inBuffer C.A
 	inBuffer.mAudioDataByteSize = C.uint(samplesToPush * 4)
 
 	var mem = inBuffer.mAudioData
-	C.memcpy(mem, unsafe.Pointer(samples.ptr), C.ulong(samplesToPush*4))
+	C.memcpy(mem, (unsafe.Pointer)(samples.ptr), C.ulong(samplesToPush*uint(unsafe.Sizeof((C.float)(0)))))
 
 	ptr := unsafe.Slice((*float32)(mem), samplesToPush)
 	for i := 0; i < int(samplesToPush); i++ {
@@ -219,6 +224,9 @@ func audioCallback(inUserData unsafe.Pointer, inAq C.AudioQueueRef, inBuffer C.A
 	if C.AudioQueueEnqueueBuffer(inAq, inBuffer, 0, nil) != C.OSStatus(0) {
 		log.Tracef("error enqueue")
 	}
+
+	free(unsafe.Pointer(samples.ptr), "audioCallback")
+	samples.ptr = nil
 }
 
 func (out *output) Pause() error {
@@ -316,6 +324,22 @@ func (out *output) Error() <-chan error {
 	return out.err
 }
 
+func free(p unsafe.Pointer, context string) {
+	// log.Tracef("(%s) freeing %x", context, p)
+	C.free(p)
+}
+
+func calloc(n C.ulong, sz C.ulong, context string) unsafe.Pointer {
+	ptr := C.calloc(n, sz)
+
+	// log.Tracef("(%s) calloc at %x", context, unsafe.Pointer(ptr))
+	if ptr == nil {
+		panic("calloc failed!")
+	}
+
+	return unsafe.Pointer(ptr)
+}
+
 func (out *output) Close() error {
 	log.Tracef("close")
 	out.cond.L.Lock()
@@ -329,7 +353,17 @@ func (out *output) Close() error {
 	C.AudioQueueFlush(out.audioQueue)
 	C.AudioQueueDispose(out.audioQueue, 0)
 
-	C.free(unsafe.Pointer(&out.samples.inner[0]))
+	for range out.samples.count {
+		s, ok, err := out.samples.Get()
+		if err != nil || !ok || s.ptr == nil {
+			break
+		}
+
+		free((unsafe.Pointer)(s.ptr), "singleSampleClose")
+		s.ptr = nil
+	}
+
+	free((unsafe.Pointer)(unsafe.SliceData(out.samples.inner)), "sampleContainerClose")
 
 	out.closed = true
 	out.cond.Signal()
