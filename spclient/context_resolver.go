@@ -6,7 +6,9 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/maps"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -17,9 +19,36 @@ type ContextResolver struct {
 	ctx *connectpb.Context
 }
 
+func isTracksComplete(ctx *connectpb.Context) bool {
+	expectedNumberOfTracks := -1
+	var err error = nil
+	for _, key := range maps.Keys(ctx.Metadata) {
+		if key == "playlist_number_of_tracks" {
+			expectedNumberOfTracks, err = strconv.Atoi(ctx.Metadata[key])
+			break
+		}
+	}
+
+	// this method should not result in errors, it's just a "guess"
+	if err != nil || expectedNumberOfTracks < 0 {
+		return true
+	}
+
+	totalLength := 0
+	for _, page := range ctx.Pages {
+		totalLength += len(page.Tracks)
+		if len(page.NextPageUrl) != 0 {
+			return true
+		}
+	}
+
+	return expectedNumberOfTracks == totalLength
+}
+
 func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(ctx.Uri)
-	if len(ctx.Pages) == 0 {
+
+	if len(ctx.Pages) == 0 || !isTracksComplete(ctx) {
 		ctx, err = sp.ContextResolve(ctx.Uri)
 		if err != nil {
 			return nil, fmt.Errorf("failed resolving context %s: %w", ctx.Uri, err)
@@ -100,6 +129,7 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
 	for idx >= len(r.ctx.Pages) {
 		lastPage := r.ctx.Pages[len(r.ctx.Pages)-1]
 		if len(lastPage.NextPageUrl) == 0 {
+
 			return nil, io.EOF
 		}
 
