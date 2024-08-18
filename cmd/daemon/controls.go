@@ -97,7 +97,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			},
 		})
 
-		hasNextTrack, err := p.advanceNext(false)
+		hasNextTrack, err := p.advanceNext(false, false)
 		if err != nil {
 			log.WithError(err).Error("failed advancing to next track")
 		}
@@ -125,7 +125,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 
 type skipToFunc func(*connectpb.ContextTrack) bool
 
-func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, paused bool) error {
+func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, paused, drop bool) error {
 	ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), ctx)
 	if err != nil {
 		return fmt.Errorf("failed creating track list: %w", err)
@@ -177,14 +177,14 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 	p.state.player.Index = ctxTracks.Index()
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(paused); err != nil {
+	if err := p.loadCurrentTrack(paused, drop); err != nil {
 		return fmt.Errorf("failed loading current track (load context): %w", err)
 	}
 
 	return nil
 }
 
-func (p *AppPlayer) loadCurrentTrack(paused bool) error {
+func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	p.primaryStream = nil
 
 	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
@@ -225,7 +225,7 @@ func (p *AppPlayer) loadCurrentTrack(paused bool) error {
 		}
 	}
 
-	if err := p.player.SetPrimaryStream(p.primaryStream.Source, paused); err != nil {
+	if err := p.player.SetPrimaryStream(p.primaryStream.Source, paused, drop); err != nil {
 		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
 
@@ -422,7 +422,7 @@ func (p *AppPlayer) skipPrev() error {
 	p.state.player.PositionAsOfTimestamp = 0
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(p.state.player.IsPaused); err != nil {
+	if err := p.loadCurrentTrack(p.state.player.IsPaused, true); err != nil {
 		return fmt.Errorf("failed loading current track (skip prev): %w", err)
 	}
 
@@ -430,7 +430,7 @@ func (p *AppPlayer) skipPrev() error {
 }
 
 func (p *AppPlayer) skipNext() error {
-	hasNextTrack, err := p.advanceNext(true)
+	hasNextTrack, err := p.advanceNext(true, true)
 	if err != nil {
 		return fmt.Errorf("failed skipping to next track: %w", err)
 	}
@@ -448,7 +448,7 @@ func (p *AppPlayer) skipNext() error {
 	return nil
 }
 
-func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
+func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 	var uri string
 	var hasNextTrack bool
 	if p.state.tracks != nil {
@@ -501,7 +501,7 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 		}
 
 		log.Debugf("resolved autoplay station: %s", ctx.Uri)
-		if err := p.loadContext(ctx, func(_ *connectpb.ContextTrack) bool { return true }, false); err != nil {
+		if err := p.loadContext(ctx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop); err != nil {
 			log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
 			return false, nil
 		}
@@ -516,14 +516,14 @@ func (p *AppPlayer) advanceNext(forceNext bool) (bool, error) {
 	}
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(!hasNextTrack); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
+	if err := p.loadCurrentTrack(!hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
 		log.WithError(err).Infof("skipping unplayable media: %s", uri)
 		if forceNext {
 			// we failed in finding another track to play, just stop
 			return false, err
 		}
 
-		return p.advanceNext(true)
+		return p.advanceNext(true, drop)
 	} else if err != nil {
 		return false, fmt.Errorf("failed loading current track (advance to %s): %w", uri, err)
 	}

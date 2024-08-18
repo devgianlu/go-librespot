@@ -206,7 +206,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.player.Index = ctxTracks.Index()
 
 		// load current track into stream
-		if err := p.loadCurrentTrack(transferState.Playback.IsPaused); err != nil {
+		if err := p.loadCurrentTrack(transferState.Playback.IsPaused, true); err != nil {
 			return fmt.Errorf("failed loading current track (transfer): %w", err)
 		}
 
@@ -237,7 +237,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			}
 		}
 
-		return p.loadContext(req.Command.Context, skipTo, req.Command.Options.InitiallyPaused)
+		return p.loadContext(req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true)
 	case "pause":
 		return p.pause()
 	case "resume":
@@ -427,7 +427,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			}
 		}
 
-		if err := p.loadContext(ctx, skipTo, data.Paused); err != nil {
+		if err := p.loadContext(ctx, skipTo, data.Paused, true); err != nil {
 			return nil, fmt.Errorf("failed loading context: %w", err)
 		}
 

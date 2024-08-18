@@ -60,6 +60,7 @@ type playerCmdDataSet struct {
 	source  librespot.AudioSource
 	primary bool
 	paused  bool
+	drop    bool
 }
 
 func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, device, mixer string, control string, volumeSteps uint32, externalVolume bool, externalVolumeUpdate *output.RingBuffer[float32]) (*Player, error) {
@@ -138,8 +139,9 @@ loop:
 					_ = out.Resume()
 				}
 
-				// when setting the primary stream just drop everything
-				_ = out.Drop()
+				if data.drop {
+					_ = out.Drop()
+				}
 
 				p.startedPlaying = time.Now()
 				cmd.resp <- nil
@@ -297,9 +299,9 @@ func (p *Player) PositionMs() int64 {
 	return pos.(int64)
 }
 
-func (p *Player) SetPrimaryStream(source librespot.AudioSource, paused bool) error {
+func (p *Player) SetPrimaryStream(source librespot.AudioSource, paused, drop bool) error {
 	resp := make(chan any)
-	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: source, primary: true, paused: paused}, resp: resp}
+	p.cmd <- playerCmd{typ: playerCmdSet, data: playerCmdDataSet{source: source, primary: true, paused: paused, drop: drop}, resp: resp}
 	if err := <-resp; err != nil {
 		return err.(error)
 	}
