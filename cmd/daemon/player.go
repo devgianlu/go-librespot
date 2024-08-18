@@ -279,7 +279,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			p.state.player.NextTracks = p.state.tracks.NextTracks()
 			p.state.player.Index = p.state.tracks.Index()
 
-			if err := p.loadCurrentTrack(p.state.player.IsPaused); err != nil {
+			if err := p.loadCurrentTrack(p.state.player.IsPaused, true); err != nil {
 				return err
 			}
 			return nil
