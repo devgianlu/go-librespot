@@ -226,34 +226,15 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		var skipTo skipToFunc
 		if len(req.Command.Options.SkipTo.TrackUri) > 0 || len(req.Command.Options.SkipTo.TrackUid) > 0 || req.Command.Options.SkipTo.TrackIndex > 0 {
+			index := -1
 			skipTo = func(track *connectpb.ContextTrack) bool {
 				if len(req.Command.Options.SkipTo.TrackUid) > 0 && req.Command.Options.SkipTo.TrackUid == track.Uid {
 					return true
 				} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
 					return true
 				} else if req.Command.Options.SkipTo.TrackIndex != 0 {
-					ndxRelative := req.Command.Options.SkipTo.TrackIndex - int(p.state.tracks.Index().Track)
-					var ndxNormalized = -1
-					if ndxRelative < 0 {
-						ndxNormalized += -ndxRelative
-					} else {
-						ndxNormalized += ndxRelative
-					}
-
-					var uri string
-					if ndxRelative < 0 {
-						if len(p.state.tracks.PrevTracks()) <= ndxNormalized {
-							return false
-						}
-						uri = p.state.tracks.PrevTracks()[ndxNormalized].Uri
-					} else {
-						if len(p.state.tracks.NextTracks()) <= ndxNormalized {
-							return false
-						}
-						uri = p.state.tracks.NextTracks()[ndxNormalized].Uri
-					}
-
-					return track.Uri == uri
+					index += 1
+					return index == req.Command.Options.SkipTo.TrackIndex
 				} else {
 					return false
 				}
@@ -288,12 +269,8 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		if req.Command.Track != nil {
 			ctxTracks := p.state.tracks
 
-			err := ctxTracks.TrySeek(
-				func(track *connectpb.ContextTrack) bool {
-					return track.Uri == req.Command.Track.Uri
-				},
-			)
-			if err != nil {
+			contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
+			if err := ctxTracks.TrySeek(tracks.ContextTrackComparator(contextSpotType, req.Command.Track)); err != nil {
 				return err
 			}
 
@@ -306,13 +283,10 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			p.state.player.NextTracks = ctxTracks.NextTracks()
 			p.state.player.Index = ctxTracks.Index()
 
-			err = p.loadCurrentTrack(p.state.player.IsPaused)
-			if err != nil {
+			if err := p.loadCurrentTrack(p.state.player.IsPaused); err != nil {
 				return err
 			}
-
 			return nil
-
 		}
 		return p.skipNext()
 	case "update_context":
