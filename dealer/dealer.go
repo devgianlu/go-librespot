@@ -31,9 +31,9 @@ type Dealer struct {
 	recvLoopOnce   sync.Once
 	lastPong       time.Time
 
-	// reconnectLock is held for writing when performing reconnection and for reading when accessing the conn.
+	// connMu is held for writing when performing reconnection and for reading when accessing the conn.
 	// If it's not held, a valid connection is available. Be careful not to deadlock anything with this.
-	reconnectLock sync.RWMutex
+	connMu sync.RWMutex
 
 	messageReceivers     []messageReceiver
 	messageReceiversLock sync.RWMutex
@@ -44,23 +44,23 @@ type Dealer struct {
 
 func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) (*Dealer, error) {
 	dealer := &Dealer{addr: dealerAddr, accessToken: accessToken}
-	dealer.requestReceivers = map[string]requestReceiver{}
-	dealer.recvLoopStop = make(chan struct{}, 1)
-	dealer.pingTickerStop = make(chan struct{}, 1)
 
-	// open connection to dealer
-	if err := dealer.connect(); err != nil {
-		return nil, err
-	}
-
-	// start the ping ticker, this should stop only if we close the dealer definitely
-	go dealer.pingTicker()
-
-	log.Debugf("dealer connection opened")
 	return dealer, nil
 }
 
-func (d *Dealer) connect() error {
+func (d *Dealer) Connect() error {
+	d.connMu.Lock()
+	defer d.connMu.Unlock()
+
+	if d.conn != nil && !d.stop {
+		return nil
+	}
+
+	d.requestReceivers = map[string]requestReceiver{}
+	d.recvLoopStop = make(chan struct{}, 1)
+	d.pingTickerStop = make(chan struct{}, 1)
+	d.stop = false
+
 	accessToken, err := d.accessToken(false)
 	if err != nil {
 		return fmt.Errorf("failed obtaining dealer access token: %w", err)
@@ -85,6 +85,15 @@ func (d *Dealer) connect() error {
 
 	// set last pong in the future
 	d.lastPong = time.Now().Add(pingInterval)
+
+	// start the ping ticker, this should stop only if we close the dealer definitely
+	go d.pingTicker()
+
+	// start the recv loop, will reconnect on connection loss
+	go d.recvLoop()
+
+	log.Debugf("dealer connection opened")
+
 	return nil
 }
 
@@ -118,9 +127,9 @@ loop:
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
-			d.reconnectLock.RLock()
+			d.connMu.RLock()
 			err := d.conn.Write(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
-			d.reconnectLock.RUnlock()
+			d.connMu.RUnlock()
 			cancel()
 
 			if err != nil {
@@ -149,7 +158,7 @@ loop:
 		case <-d.recvLoopStop:
 			break loop
 		default:
-			// no need to hold the reconnectLock since reconnection happens in this routine
+			// no need to hold the connMu since reconnection happens in this routine
 			msgType, messageBytes, err := d.conn.Read(context.Background())
 			if err != nil {
 				log.WithError(err).Errorf("failed receiving dealer message")
@@ -189,12 +198,12 @@ loop:
 
 	// if we shouldn't stop, try to reconnect
 	if !d.stop {
-		d.reconnectLock.Lock()
+		d.connMu.Lock()
 		if err := backoff.Retry(d.reconnect, backoff.NewExponentialBackOff()); err != nil {
 			log.WithError(err).Errorf("failed reconnecting dealer, bye bye")
 			log.Exit(1)
 		}
-		d.reconnectLock.Unlock()
+		d.connMu.Unlock()
 
 		// reconnection was successful, do not close receivers
 		return
@@ -223,9 +232,9 @@ func (d *Dealer) sendReply(key string, success bool) error {
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	d.reconnectLock.RLock()
+	d.connMu.RLock()
 	err = d.conn.Write(ctx, websocket.MessageText, replyBytes)
-	d.reconnectLock.RUnlock()
+	d.connMu.RUnlock()
 	cancel()
 	if err != nil {
 		return fmt.Errorf("failed sending dealer reply: %w", err)
@@ -235,7 +244,7 @@ func (d *Dealer) sendReply(key string, success bool) error {
 }
 
 func (d *Dealer) reconnect() error {
-	if err := d.connect(); err != nil {
+	if err := d.Connect(); err != nil {
 		return err
 	}
 
