@@ -121,7 +121,7 @@ loop:
 		case <-d.pingTickerStop:
 			break loop
 		case <-ticker.C:
-			if time.Since(d.lastPong) > pingInterval {
+			if time.Since(d.lastPong) > pingInterval+timeout {
 				log.Errorf("did not receive last pong from dealer, %.0fs passed", time.Since(d.lastPong).Seconds())
 
 				// closing the connection should make the read on the "recvLoop" fail,
@@ -135,6 +135,7 @@ loop:
 			err := d.conn.Write(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			d.connMu.RUnlock()
 			cancel()
+			log.Tracef("sent dealer ping")
 
 			if err != nil {
 				if d.stop {
@@ -263,6 +264,7 @@ func (d *Dealer) reconnect() error {
 		return err
 	}
 
+	d.lastPong = time.Now()
 	// restart the recv loop
 	go d.recvLoop()
 
