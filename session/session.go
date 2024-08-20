@@ -179,9 +179,6 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 		return nil, fmt.Errorf("failed getting dealer from resolver: %w", err)
 	}
 	s.dealer = dealer.NewDealer(dealerAddr, s.login5.AccessToken())
-	if err := s.dealer.Connect(); err != nil {
-		return nil, fmt.Errorf("failed connecting to dealer: %w", err)
-	}
 
 	// init audio key provider
 	s.audioKey = audio.NewAudioKeyProvider(s.ap)
