@@ -95,11 +95,12 @@ func (d *Dealer) Close() {
 	d.connMu.Lock()
 	defer d.connMu.Unlock()
 
+	d.stop = true
+
 	if d.conn == nil {
 		return
 	}
 
-	d.stop = true
 	d.recvLoopStop <- struct{}{}
 	d.pingTickerStop <- struct{}{}
 	_ = d.conn.Close(websocket.StatusGoingAway, "")
@@ -168,9 +169,7 @@ loop:
 			break loop
 		default:
 			// no need to hold the connMu since reconnection happens in this routine
-			d.connMu.RLock()
 			msgType, messageBytes, err := d.conn.Read(context.Background())
-			d.connMu.RUnlock()
 
 			// Don't log closed error if we're stopping
 			if d.stop && websocket.CloseStatus(err) == websocket.StatusGoingAway {
@@ -214,6 +213,7 @@ loop:
 
 	// if we shouldn't stop, try to reconnect
 	if !d.stop {
+		// Only close when not stopping, as Close() handles it when stopping
 		_ = d.conn.Close(websocket.StatusInternalError, "")
 
 		d.connMu.Lock()

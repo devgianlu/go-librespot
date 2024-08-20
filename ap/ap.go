@@ -188,11 +188,12 @@ func (ap *Accesspoint) Close() {
 	ap.connMu.Lock()
 	defer ap.connMu.Unlock()
 
+	ap.stop = true
+
 	if ap.conn == nil {
 		return
 	}
 
-	ap.stop = true
 	ap.recvLoopStop <- struct{}{}
 	ap.pongAckTickerStop <- struct{}{}
 	_ = ap.conn.Close()
@@ -274,10 +275,11 @@ loop:
 		}
 	}
 
-	_ = ap.conn.Close()
-
 	// if we shouldn't stop, try to reconnect
 	if !ap.stop {
+		// Only close when not stopping, as Close() handles it when stopping
+		_ = ap.conn.Close()
+
 		ap.connMu.Lock()
 		if err := backoff.Retry(ap.reconnect, backoff.NewExponentialBackOff()); err != nil {
 			log.WithError(err).Errorf("failed reconnecting accesspoint, bye bye")
