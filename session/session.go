@@ -72,9 +72,12 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	s.login5 = login5.NewLogin5(s.deviceId, s.clientToken)
 
 	// connect to the accesspoint
-	if apAddr, err := s.resolver.GetAccesspoint(); err != nil {
+	apAddr, err := s.resolver.GetAccesspoint()
+	if err != nil {
 		return nil, fmt.Errorf("failed getting accesspoint from resolver: %w", err)
-	} else if s.ap, err = ap.NewAccesspoint(apAddr, s.deviceId); err != nil {
+	}
+	s.ap = ap.NewAccesspoint(apAddr, s.deviceId)
+	if err != nil {
 		return nil, fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
 
@@ -171,11 +174,11 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	}
 
 	// initialize dealer
-	if dealerAddr, err := s.resolver.GetDealer(); err != nil {
+	dealerAddr, err := s.resolver.GetDealer()
+	if err != nil {
 		return nil, fmt.Errorf("failed getting dealer from resolver: %w", err)
-	} else if s.dealer, err = dealer.NewDealer(dealerAddr, s.login5.AccessToken()); err != nil {
-		return nil, fmt.Errorf("failed connecting to dealer: %w", err)
 	}
+	s.dealer = dealer.NewDealer(dealerAddr, s.login5.AccessToken())
 
 	// init audio key provider
 	s.audioKey = audio.NewAudioKeyProvider(s.ap)

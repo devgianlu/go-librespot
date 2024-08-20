@@ -491,6 +491,11 @@ func (p *AppPlayer) Close() {
 }
 
 func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
+	err := p.sess.Dealer().Connect()
+	if err != nil {
+		log.WithError(err).Fatal("failed connecting to dealer")
+	}
+
 	apRecv := p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
 	msgRecv := p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/")
 	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
