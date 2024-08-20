@@ -188,6 +188,10 @@ func (ap *Accesspoint) Close() {
 	ap.connMu.Lock()
 	defer ap.connMu.Unlock()
 
+	if ap.conn == nil {
+		return
+	}
+
 	ap.stop = true
 	ap.recvLoopStop <- struct{}{}
 	ap.pongAckTickerStop <- struct{}{}

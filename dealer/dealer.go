@@ -95,6 +95,10 @@ func (d *Dealer) Close() {
 	d.connMu.Lock()
 	defer d.connMu.Unlock()
 
+	if d.conn == nil {
+		return
+	}
+
 	d.stop = true
 	d.recvLoopStop <- struct{}{}
 	d.pingTickerStop <- struct{}{}
