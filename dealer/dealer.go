@@ -197,6 +197,7 @@ loop:
 				break
 			case "pong":
 				d.lastPong = time.Now()
+				log.Tracef("received dealer pong")
 				break
 			default:
 				log.Warnf("unknown dealer message type: %s", message.Type)
