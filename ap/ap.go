@@ -184,9 +184,6 @@ func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
 		return fmt.Errorf("failed authenticating: %w", err)
 	}
 
-	// start the ping ticker, this should stop only if we close the connection definitely
-	go ap.pongAckTicker()
-
 	return nil
 }
 
@@ -223,7 +220,11 @@ func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
 }
 
 func (ap *Accesspoint) startReceiving() {
-	ap.recvLoopOnce.Do(func() { go ap.recvLoop() })
+	ap.recvLoopOnce.Do(func() {
+		log.Tracef("starting accesspoint recv loop")
+		go ap.recvLoop()
+		go ap.pongAckTicker()
+	})
 }
 
 func (ap *Accesspoint) recvLoop() {
