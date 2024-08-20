@@ -42,10 +42,8 @@ type Dealer struct {
 	requestReceiversLock sync.RWMutex
 }
 
-func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) (*Dealer, error) {
-	dealer := &Dealer{addr: dealerAddr, accessToken: accessToken}
-
-	return dealer, nil
+func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
+	return &Dealer{addr: dealerAddr, accessToken: accessToken}
 }
 
 func (d *Dealer) Connect() error {
@@ -53,9 +51,14 @@ func (d *Dealer) Connect() error {
 	defer d.connMu.Unlock()
 
 	if d.conn != nil && !d.stop {
+		log.Debugf("dealer connection already opened")
 		return nil
 	}
 
+	return d.connect()
+}
+
+func (d *Dealer) connect() error {
 	d.requestReceivers = map[string]requestReceiver{}
 	d.recvLoopStop = make(chan struct{}, 1)
 	d.pingTickerStop = make(chan struct{}, 1)
@@ -89,15 +92,15 @@ func (d *Dealer) Connect() error {
 	// start the ping ticker, this should stop only if we close the dealer definitely
 	go d.pingTicker()
 
-	// start the recv loop, will reconnect on connection loss
-	go d.recvLoop()
-
 	log.Debugf("dealer connection opened")
 
 	return nil
 }
 
 func (d *Dealer) Close() {
+	d.connMu.Lock()
+	defer d.connMu.Unlock()
+
 	d.stop = true
 	d.recvLoopStop <- struct{}{}
 	d.pingTickerStop <- struct{}{}
@@ -159,7 +162,15 @@ loop:
 			break loop
 		default:
 			// no need to hold the connMu since reconnection happens in this routine
+			d.connMu.RLock()
 			msgType, messageBytes, err := d.conn.Read(context.Background())
+			d.connMu.RUnlock()
+
+			// Don't log closed error if we're stopping
+			if d.stop && websocket.CloseStatus(err) == websocket.StatusGoingAway {
+				log.Debugf("dealer connection closed")
+				break
+			}
 			if err != nil {
 				log.WithError(err).Errorf("failed receiving dealer message")
 				break loop
@@ -194,10 +205,10 @@ loop:
 		}
 	}
 
-	_ = d.conn.Close(websocket.StatusInternalError, "")
-
 	// if we shouldn't stop, try to reconnect
 	if !d.stop {
+		_ = d.conn.Close(websocket.StatusInternalError, "")
+
 		d.connMu.Lock()
 		if err := backoff.Retry(d.reconnect, backoff.NewExponentialBackOff()); err != nil {
 			log.WithError(err).Errorf("failed reconnecting dealer, bye bye")
@@ -220,6 +231,8 @@ loop:
 		close(recv.c)
 	}
 	d.messageReceiversLock.RUnlock()
+
+	log.Debugf("dealer recv loop stopped")
 }
 
 func (d *Dealer) sendReply(key string, success bool) error {
@@ -244,7 +257,7 @@ func (d *Dealer) sendReply(key string, success bool) error {
 }
 
 func (d *Dealer) reconnect() error {
-	if err := d.Connect(); err != nil {
+	if err := d.connect(); err != nil {
 		return err
 	}
 

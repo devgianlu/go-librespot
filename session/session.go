@@ -171,9 +171,12 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	}
 
 	// initialize dealer
-	if dealerAddr, err := s.resolver.GetDealer(); err != nil {
+	dealerAddr, err := s.resolver.GetDealer()
+	if err != nil {
 		return nil, fmt.Errorf("failed getting dealer from resolver: %w", err)
-	} else if s.dealer, err = dealer.NewDealer(dealerAddr, s.login5.AccessToken()); err != nil {
+	}
+	s.dealer = dealer.NewDealer(dealerAddr, s.login5.AccessToken())
+	if err := s.dealer.Connect(); err != nil {
 		return nil, fmt.Errorf("failed connecting to dealer: %w", err)
 	}
 
