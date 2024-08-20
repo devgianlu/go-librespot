@@ -75,9 +75,6 @@ func (ap *Accesspoint) init() (err error) {
 		return fmt.Errorf("failed dialing accesspoint: %w", err)
 	}
 
-	// set last ping in the future
-	ap.lastPongAck = time.Now().Add(pongAckInterval)
-
 	return nil
 }
 
@@ -223,6 +220,9 @@ func (ap *Accesspoint) startReceiving() {
 	ap.recvLoopOnce.Do(func() {
 		log.Tracef("starting accesspoint recv loop")
 		go ap.recvLoop()
+
+		// set last ping in the future
+		ap.lastPongAck = time.Now().Add(pongAckInterval)
 		go ap.pongAckTicker()
 	})
 }

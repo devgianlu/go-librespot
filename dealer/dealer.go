@@ -86,12 +86,6 @@ func (d *Dealer) connect() error {
 	// remove the read limit
 	d.conn.SetReadLimit(math.MaxUint32)
 
-	// set last pong in the future
-	d.lastPong = time.Now().Add(pingInterval)
-
-	// start the ping ticker, this should stop only if we close the dealer definitely
-	go d.pingTicker()
-
 	log.Debugf("dealer connection opened")
 
 	return nil
@@ -108,7 +102,14 @@ func (d *Dealer) Close() {
 }
 
 func (d *Dealer) startReceiving() {
-	d.recvLoopOnce.Do(func() { go d.recvLoop() })
+	d.recvLoopOnce.Do(func() {
+		log.Tracef("starting dealer recv loop")
+		// set last pong in the future
+		d.lastPong = time.Now().Add(pingInterval)
+
+		go d.recvLoop()
+		go d.pingTicker()
+	})
 }
 
 func (d *Dealer) pingTicker() {
