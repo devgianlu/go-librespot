@@ -72,9 +72,12 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	s.login5 = login5.NewLogin5(s.deviceId, s.clientToken)
 
 	// connect to the accesspoint
-	if apAddr, err := s.resolver.GetAccesspoint(); err != nil {
+	apAddr, err := s.resolver.GetAccesspoint()
+	if err != nil {
 		return nil, fmt.Errorf("failed getting accesspoint from resolver: %w", err)
-	} else if s.ap, err = ap.NewAccesspoint(apAddr, s.deviceId); err != nil {
+	}
+	s.ap = ap.NewAccesspoint(apAddr, s.deviceId)
+	if err != nil {
 		return nil, fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
 
