@@ -109,10 +109,10 @@ func (d *Dealer) Close() {
 func (d *Dealer) startReceiving() {
 	d.recvLoopOnce.Do(func() {
 		log.Tracef("starting dealer recv loop")
+		go d.recvLoop()
+
 		// set last pong in the future
 		d.lastPong = time.Now().Add(pingInterval)
-
-		go d.recvLoop()
 		go d.pingTicker()
 	})
 }
@@ -171,12 +171,11 @@ loop:
 			// no need to hold the connMu since reconnection happens in this routine
 			msgType, messageBytes, err := d.conn.Read(context.Background())
 
-			// Don't log closed error if we're stopping
+			// don't log closed error if we're stopping
 			if d.stop && websocket.CloseStatus(err) == websocket.StatusGoingAway {
 				log.Debugf("dealer connection closed")
-				break
-			}
-			if err != nil {
+				break loop
+			} else if err != nil {
 				log.WithError(err).Errorf("failed receiving dealer message")
 				break loop
 			} else if msgType != websocket.MessageText {
@@ -211,11 +210,11 @@ loop:
 		}
 	}
 
+	// always close as we might end up here because of application errors
+	_ = d.conn.Close(websocket.StatusInternalError, "")
+
 	// if we shouldn't stop, try to reconnect
 	if !d.stop {
-		// Only close when not stopping, as Close() handles it when stopping
-		_ = d.conn.Close(websocket.StatusInternalError, "")
-
 		d.connMu.Lock()
 		if err := backoff.Retry(d.reconnect, backoff.NewExponentialBackOff()); err != nil {
 			log.WithError(err).Errorf("failed reconnecting dealer, bye bye")
