@@ -225,7 +225,11 @@ func (tl *List) AddToQueue(track *connectpb.ContextTrack) {
 }
 
 func (tl *List) SetQueue(_ []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
-	tl.queue = nil
+	if tl.playingQueue {
+		tl.queue = tl.queue[:1]
+	} else {
+		tl.queue = nil
+	}
 
 	// I don't know if this good enough, but it surely saves us a lot of complicated code
 	for _, track := range next {
