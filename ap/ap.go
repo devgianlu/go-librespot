@@ -157,6 +157,10 @@ func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
 	ap.connMu.Lock()
 	defer ap.connMu.Unlock()
 
+	return ap.connect(creds)
+}
+
+func (ap *Accesspoint) connect(creds *pb.LoginCredentials) error {
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.pongAckTickerStop = make(chan struct{}, 1)
 	ap.recvChans = make(map[PacketType][]chan Packet)
@@ -334,9 +338,7 @@ func (ap *Accesspoint) reconnect() (err error) {
 		return backoff.Permanent(fmt.Errorf("cannot reconnect without APWelcome"))
 	}
 
-	if err = ap.init(); err != nil {
-		return err
-	} else if err = ap.Connect(&pb.LoginCredentials{
+	if err = ap.connect(&pb.LoginCredentials{
 		Typ:      ap.welcome.ReusableAuthCredentialsType,
 		Username: ap.welcome.CanonicalUsername,
 		AuthData: ap.welcome.ReusableAuthCredentials,
