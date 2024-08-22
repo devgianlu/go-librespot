@@ -232,6 +232,9 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 					return true
 				} else if len(req.Command.Options.SkipTo.TrackUri) > 0 && req.Command.Options.SkipTo.TrackUri == track.Uri {
 					return true
+					// the following length checks are needed, because the TrackIndex corresponds to an offset relative to the current playlist or album
+					// If there are multiple albums in the current context (e.g. when starting from an artists page, the TrackIndex would indicate, that
+					// you started the xth track vom the first album, even if you started the xth track from the second or third album etc.)
 				} else if req.Command.Options.SkipTo.TrackIndex != 0 && len(req.Command.Options.SkipTo.TrackUri) == 0 && len(req.Command.Options.SkipTo.TrackUid) == 0 {
 					index += 1
 					return index == req.Command.Options.SkipTo.TrackIndex
