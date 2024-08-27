@@ -10,6 +10,9 @@ require (
 	github.com/xlab/vorbis-go v0.0.0-20210911202351-b5b85f1ec645
 	golang.org/x/crypto v0.10.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
+	golang.org/x/net v0.11.0
+	golang.org/x/oauth2 v0.21.0
+	golang.org/x/sys v0.10.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v3 v3.0.1
 	nhooyr.io/websocket v1.8.7
@@ -20,8 +23,5 @@ require (
 	github.com/klauspost/compress v1.10.3 // indirect
 	github.com/miekg/dns v1.1.54 // indirect
 	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/net v0.11.0 // indirect
-	golang.org/x/oauth2 v0.21.0 // indirect
-	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/tools v0.10.0 // indirect
 )

@@ -2,6 +2,7 @@ package ap
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/hmac"
 	"crypto/rand"
@@ -17,6 +18,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/exp/slices"
+	"golang.org/x/net/proxy"
 	"google.golang.org/protobuf/proto"
 	"io"
 	"net"
@@ -70,7 +72,9 @@ func (ap *Accesspoint) init() (err error) {
 	}
 
 	// open connection to accesspoint
-	ap.conn, err = net.Dial("tcp", ap.addr())
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	ap.conn, err = proxy.Dial(ctx, "tcp", ap.addr())
 	if err != nil {
 		return fmt.Errorf("failed dialing accesspoint: %w", err)
 	}
