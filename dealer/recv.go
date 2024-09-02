@@ -41,7 +41,6 @@ func (req Request) Reply(success bool) {
 
 type RequestPayload struct {
 	MessageId      uint32 `json:"message_id"`
-	TargetAliasId  string `json:"target_alias_id"`
 	SentByDeviceId string `json:"sent_by_device_id"`
 	Command        struct {
 		Endpoint         string                    `json:"endpoint"`
