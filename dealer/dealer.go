@@ -43,7 +43,7 @@ type Dealer struct {
 }
 
 func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
-	return &Dealer{addr: dealerAddr, accessToken: accessToken}
+	return &Dealer{addr: dealerAddr, accessToken: accessToken, requestReceivers: map[string]requestReceiver{}}
 }
 
 func (d *Dealer) Connect() error {
@@ -59,7 +59,6 @@ func (d *Dealer) Connect() error {
 }
 
 func (d *Dealer) connect() error {
-	d.requestReceivers = map[string]requestReceiver{}
 	d.recvLoopStop = make(chan struct{}, 1)
 	d.pingTickerStop = make(chan struct{}, 1)
 	d.stop = false
