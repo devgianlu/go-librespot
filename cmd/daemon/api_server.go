@@ -25,7 +25,6 @@ type ApiServer struct {
 	allowOrigin string
 	certFile string
         keyFile string
-	useTLS string
 
 	close    bool
 	listener net.Listener
