@@ -93,9 +93,24 @@
               "description": "Which port to bind for the API server",
               "default": 0
             },
+            "secure": {
+              "type": "boolean",
+              "description": "Whether to use TLS or not",
+              "default": false
+            },
             "allow_origin": {
               "type": "string",
               "description": "The value for the Access-Control-Allow-Origin header",
+              "default": ""
+            },
+            "cert_file": {
+              "type": "string",
+              "description": "File path of the certificate file to use for TLS",
+              "default": ""
+            },
+            "key_file": {
+              "type": "string",
+              "description": "File path of the private key file to use for TLS",
               "default": ""
             }
           }
