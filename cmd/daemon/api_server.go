@@ -16,7 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"strings"
 )
 
 const timeout = 10 * time.Second
@@ -547,11 +546,11 @@ func (s *ApiServer) serve() {
 		}
 	})
 
-	err := nil
+	var err error
 	if len(s.certFile) > 0 && len(s.keyFile) > 0 {
-		err := http.ServeTLS(s.listener, s.allowOriginMiddleware(m),s.certFile,s.keyFile)
+		err = http.ServeTLS(s.listener, s.allowOriginMiddleware(m),s.certFile,s.keyFile)
 	} else {
-		err := http.Serve(s.listener, s.allowOriginMiddleware(m))
+		err = http.Serve(s.listener, s.allowOriginMiddleware(m))
 	}
 	if s.close {
 		return
