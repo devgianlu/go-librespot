@@ -257,6 +257,13 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			position = p.player.PositionMs() + req.Command.Position
 		} else if req.Command.Relative == "beginning" {
 			position = req.Command.Position
+		} else if req.Command.Relative == "" {
+			if pos, ok := req.Command.Value.(float64); ok {
+				position = int64(pos)
+			} else {
+				log.Warnf("unsupported seek_to position type: %T", req.Command.Value)
+				return nil
+			}
 		} else {
 			log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
 			return nil
