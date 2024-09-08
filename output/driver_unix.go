@@ -282,8 +282,12 @@ func (out *output) writeLoop() error {
 		}
 
 		if !out.mixerEnabled && !out.externalVolume {
+			// Map volume (in percent) to what is perceived as linear by
+			// humans. This is the same as math.Pow(out.volume, 2) but simpler.
+			volume := out.volume * out.volume
+
 			for i := 0; i < len(floats); i++ {
-				floats[i] *= out.volume
+				floats[i] *= volume
 			}
 		}
 
