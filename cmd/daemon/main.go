@@ -351,13 +351,19 @@ type Config struct {
 }
 
 func loadConfig(cfg *Config) error {
-	flag.StringVar(&cfg.ConfigPath, "config_path", "config.yml", "the configuration file path")
+	flag.StringVar(&cfg.ConfigPath, "config_path", "", "the configuration file path (default config.yml)")
 	flag.StringVar(&cfg.CredentialsPath, "credentials_path", "credentials.json", "the credentials file path")
 	flag.Parse()
 
-	configBytes, err := os.ReadFile(cfg.ConfigPath)
+	configPath := cfg.ConfigPath
+	if configPath == "" {
+		configPath = "config.yml"
+	}
+	configBytes, err := os.ReadFile(configPath)
 	if err != nil {
-		return fmt.Errorf("failed reading configuration file: %w", err)
+		if cfg.ConfigPath != "" || !os.IsNotExist(err) {
+			return fmt.Errorf("failed reading configuration file: %w", err)
+		}
 	}
 
 	if err := yaml.Unmarshal(configBytes, cfg); err != nil {
