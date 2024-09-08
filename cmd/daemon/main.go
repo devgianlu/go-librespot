@@ -381,6 +381,9 @@ func loadConfig(cfg *Config) error {
 		cfg.DeviceName = new(string)
 		*cfg.DeviceName = "go-librespot"
 	}
+	if cfg.Credentials.Type == "" {
+		cfg.Credentials.Type = "zeroconf"
+	}
 	if cfg.DeviceType == nil {
 		cfg.DeviceType = new(string)
 		*cfg.DeviceType = "computer"
