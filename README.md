@@ -52,6 +52,21 @@ go build -o go-librespot-daemon ./cmd/daemon
 
 To crosscompile for different architectures the `GOOS` and `GOARCH` environment variables can be used.
 
+### Dependencies
+
+You need to have the following installed:
+
+  * Go 1.22 or higher
+  * libogg
+  * libvorbis
+  * libasound2
+
+You can install the 3 libraries in Debian (and Ubuntu/Raspbian) using the following command:
+
+    sudo apt-get install libogg-dev libvorbis-dev libasound2-dev
+
+You can install a newer Go version from the [Go website](https://go.dev/dl/).
+
 ## Development
 
 To recompile protobuf definitions use:
