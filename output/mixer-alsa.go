@@ -15,7 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (out *output) setupMixer() error {
+func (out *alsaOutput) setupMixer() error {
 	if len(out.mixer) == 0 {
 		out.mixerEnabled = false
 		return nil
@@ -74,7 +74,7 @@ func (out *output) setupMixer() error {
 	return nil
 }
 
-func (out *output) waitForMixerEvents() {
+func (out *alsaOutput) waitForMixerEvents() {
 	for !out.closed {
 		var res = C.snd_mixer_wait(out.mixerHandle, -1)
 		if out.closed {
