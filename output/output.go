@@ -4,8 +4,27 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 )
 
-type Output struct {
-	*output
+type Output interface {
+	// Pause pauses the output.
+	Pause() error
+
+	// Resume resumes the output.
+	Resume() error
+
+	// Drop empties the audio buffer without waiting.
+	Drop() error
+
+	// DelayMs returns the output device delay in milliseconds.
+	DelayMs() (int64, error)
+
+	// SetVolume sets the volume (0-1).
+	SetVolume(vol float32)
+
+	// Error returns the error that stopped the device (if any).
+	Error() <-chan error
+
+	// Close closes the output.
+	Close() error
 }
 
 type NewOutputOptions struct {
@@ -52,46 +71,11 @@ type NewOutputOptions struct {
 	ExternalVolumeUpdate *RingBuffer[float32]
 }
 
-func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.ExternalVolumeUpdate)
+func NewOutput(options *NewOutputOptions) (Output, error) {
+	out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.ExternalVolumeUpdate)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Output{out}, nil
-}
-
-// Pause pauses the output.
-func (c *Output) Pause() error {
-	return c.output.Pause()
-}
-
-// Resume resumes the output.
-func (c *Output) Resume() error {
-	return c.output.Resume()
-}
-
-// Drop empties the audio buffer without waiting.
-func (c *Output) Drop() error {
-	return c.output.Drop()
-}
-
-// DelayMs returns the output device delay in milliseconds.
-func (c *Output) DelayMs() (int64, error) {
-	return c.output.DelayMs()
-}
-
-// SetVolume sets the volume (0-1).
-func (c *Output) SetVolume(vol float32) {
-	c.output.SetVolume(vol)
-}
-
-// Error returns the error that stopped the device (if any).
-func (c *Output) Error() <-chan error {
-	return c.output.Error()
-}
-
-// Close closes the output.
-func (c *Output) Close() error {
-	return c.output.Close()
+	return out, nil
 }

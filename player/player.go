@@ -27,7 +27,7 @@ type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 
-	newOutput func(source librespot.Float32Reader, volume float32) (*output.Output, error)
+	newOutput func(source librespot.Float32Reader, volume float32) (output.Output, error)
 
 	cmd chan playerCmd
 	ev  chan Event
@@ -70,8 +70,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 		normalisationEnabled: normalisationEnabled,
 		normalisationPregain: normalisationPregain,
 		countryCode:          countryCode,
-		volumeSteps:          volumeSteps,
-		newOutput: func(reader librespot.Float32Reader, volume float32) (*output.Output, error) {
+		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
 				Reader:               reader,
 				SampleRate:           SampleRate,
@@ -96,7 +95,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 
 func (p *Player) manageLoop() {
 	// currently available output device
-	var out *output.Output
+	var out output.Output
 	outErr := make(<-chan error)
 
 	// initial volume is 1
