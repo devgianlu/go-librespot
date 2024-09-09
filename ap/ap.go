@@ -82,15 +82,26 @@ func (ap *Accesspoint) init() (err error) {
 	}
 
 	// open connection to accesspoint
-	ap.conn, err = net.Dial("tcp", ap.addr())
-	if err != nil {
-		return fmt.Errorf("failed dialing accesspoint: %w", err)
+	attempts := 0
+	for {
+		attempts++
+		addr := ap.addr()
+		ap.conn, err = net.DialTimeout("tcp", addr, time.Second*30)
+		if err == nil {
+			// Successfully connected.
+			log.Infoln("connected to", addr)
+
+			// set last ping in the future
+			ap.lastPongAck = time.Now().Add(pongAckInterval)
+
+			return nil
+		} else if attempts >= 6 {
+			// Only try a few times before giving up.
+			return fmt.Errorf("failed to connect to AP %v: %e", addr, err)
+		}
+		// Try again with a different AP.
+		log.Warnf("failed to connect to AP %v (error: %v), retrying with a different AP", addr, err)
 	}
-
-	// set last ping in the future
-	ap.lastPongAck = time.Now().Add(pongAckInterval)
-
-	return nil
 }
 
 func (ap *Accesspoint) ConnectUserPass(username, password string) error {
