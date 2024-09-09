@@ -1,6 +1,8 @@
 package output
 
 import (
+	"fmt"
+
 	librespot "github.com/devgianlu/go-librespot"
 )
 
@@ -28,6 +30,9 @@ type Output interface {
 }
 
 type NewOutputOptions struct {
+	// Backend is the audio backend to use (also, pulseaudio, etc).
+	Backend string
+
 	// Reader provides data for the output device.
 	//
 	// The format of data is as follows:
@@ -50,12 +55,12 @@ type NewOutputOptions struct {
 
 	// Device specifies the audio device name.
 	//
-	// This feature is support only for the unix driver.
+	// This feature is support only for the alsa backend.
 	Device string
 
 	// Mixer specifies the audio mixer name.
 	//
-	// This feature is support only for the unix driver.
+	// This feature is support only for the alsa backend.
 	Mixer string
 	// Control specifies the mixer control name
 	//
@@ -63,9 +68,15 @@ type NewOutputOptions struct {
 	Control string
 
 	// InitialVolume specifies the initial output volume.
+	//
+	// This is only supported on the alsa backend. The PulseAudio backend uses
+	// the PulseAudio default volume.
 	InitialVolume float32
 
 	// ExternalVolume specifies, if the volume is controlled outside of the app.
+	//
+	// This is only supported on the alsa backend. The PulseAudio backend always
+	// uses external volume.
 	ExternalVolume bool
 
 	// VolumeUpdate is a channel on which volume updates will be sent back to
@@ -76,12 +87,22 @@ type NewOutputOptions struct {
 }
 
 func NewOutput(options *NewOutputOptions) (Output, error) {
-	out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.VolumeUpdate)
-	if err != nil {
-		return nil, err
+	switch options.Backend {
+	case "alsa":
+		out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.VolumeUpdate)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	case "pulseaudio":
+		out, err := newPulseAudioOutput(options.Reader, options.SampleRate, options.ChannelCount, options.VolumeUpdate)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unknown audio backend: %s", options.Backend)
 	}
-
-	return out, nil
 }
 
 // Do a non-blocking send on the channel to send a volume update.

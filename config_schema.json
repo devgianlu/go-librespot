@@ -60,6 +60,15 @@
           "type": "string",
           "description": "The Spotify client token"
         },
+        "audio_backend": {
+          "type": "string",
+          "description": "Which audio backend (API) should be used for playback, leave empty for default",
+          "enum": [
+            "alsa",
+            "pulseaudio"
+          ],
+          "default": "alsa"
+        },
         "audio_device": {
           "type": "string",
           "description": "Which audio device should be used for playback, leave empty for default",
