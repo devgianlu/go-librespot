@@ -47,6 +47,7 @@ type Accesspoint struct {
 	recvChans         map[PacketType][]chan Packet
 	recvChansLock     sync.RWMutex
 	lastPongAck       time.Time
+	lastPongAckLock   sync.Mutex
 
 	// connMu is held for writing when performing reconnection and for reading mainly when accessing welcome
 	// or sending packets. If it's not held, a valid connection (and APWelcome) is available. Be careful not to deadlock
@@ -263,7 +264,9 @@ loop:
 				}
 			case PacketTypePongAck:
 				log.Tracef("received accesspoint pong ack")
+				ap.lastPongAckLock.Lock()
 				ap.lastPongAck = time.Now()
+				ap.lastPongAckLock.Unlock()
 				continue
 			default:
 				ap.recvChansLock.RLock()
@@ -323,8 +326,11 @@ loop:
 		case <-ap.pongAckTickerStop:
 			break loop
 		case <-ticker.C:
-			if time.Since(ap.lastPongAck) > pongAckInterval {
-				log.Errorf("did not receive last pong ack from accesspoint, %.0fs passed", time.Since(ap.lastPongAck).Seconds())
+			ap.lastPongAckLock.Lock()
+			timePassed := time.Since(ap.lastPongAck)
+			ap.lastPongAckLock.Unlock()
+			if timePassed > pongAckInterval {
+				log.Errorf("did not receive last pong ack from accesspoint, %.0fs passed", timePassed.Seconds())
 
 				// closing the connection should make the read on the "recvLoop" fail,
 				// continue hoping for a new connection

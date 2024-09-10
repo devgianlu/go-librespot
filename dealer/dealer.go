@@ -30,6 +30,7 @@ type Dealer struct {
 	recvLoopStop   chan struct{}
 	recvLoopOnce   sync.Once
 	lastPong       time.Time
+	lastPongLock   sync.Mutex
 
 	// connMu is held for writing when performing reconnection and for reading when accessing the conn.
 	// If it's not held, a valid connection is available. Be careful not to deadlock anything with this.
@@ -125,8 +126,11 @@ loop:
 		case <-d.pingTickerStop:
 			break loop
 		case <-ticker.C:
-			if time.Since(d.lastPong) > pingInterval+timeout {
-				log.Errorf("did not receive last pong from dealer, %.0fs passed", time.Since(d.lastPong).Seconds())
+			d.lastPongLock.Lock()
+			timePassed := time.Since(d.lastPong)
+			d.lastPongLock.Unlock()
+			if timePassed > pingInterval+timeout {
+				log.Errorf("did not receive last pong from dealer, %.0fs passed", timePassed.Seconds())
 
 				// closing the connection should make the read on the "recvLoop" fail,
 				// continue hoping for a new connection
@@ -199,7 +203,9 @@ loop:
 				// we never receive ping messages
 				break
 			case "pong":
+				d.lastPongLock.Lock()
 				d.lastPong = time.Now()
+				d.lastPongLock.Unlock()
 				log.Tracef("received dealer pong")
 				break
 			default:
@@ -266,7 +272,9 @@ func (d *Dealer) reconnect() error {
 		return err
 	}
 
+	d.lastPongLock.Lock()
 	d.lastPong = time.Now()
+	d.lastPongLock.Unlock()
 	// restart the recv loop
 	go d.recvLoop()
 
