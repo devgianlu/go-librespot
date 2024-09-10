@@ -22,8 +22,8 @@ const timeout = 10 * time.Second
 
 type ApiServer struct {
 	allowOrigin string
-	certFile string
-        keyFile string
+	certFile    string
+	keyFile     string
 
 	close    bool
 	listener net.Listener
@@ -247,7 +247,7 @@ type ApiEventDataShuffleContext struct {
 }
 
 func NewApiServer(address string, port int, allowOrigin string, certFile string, keyFile string) (_ *ApiServer, err error) {
-	s := &ApiServer{allowOrigin: allowOrigin,certFile: certFile,keyFile: keyFile}
+	s := &ApiServer{allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
 	s.requests = make(chan ApiRequest)
 
 	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
@@ -505,9 +505,9 @@ func (s *ApiServer) serve() {
 		opts := &websocket.AcceptOptions{}
 		if len(s.allowOrigin) > 0 {
 			allow := s.allowOrigin
-			if strings.HasPrefix(allow,"https:") {
-                          allow = s.allowOrigin[8:]
-		        }
+			if strings.HasPrefix(allow, "https://") {
+				allow = s.allowOrigin[8:]
+			}
 			opts.OriginPatterns = []string{allow}
 		}
 
@@ -548,7 +548,7 @@ func (s *ApiServer) serve() {
 
 	var err error
 	if len(s.certFile) > 0 && len(s.keyFile) > 0 {
-		err = http.ServeTLS(s.listener, s.allowOriginMiddleware(m),s.certFile,s.keyFile)
+		err = http.ServeTLS(s.listener, s.allowOriginMiddleware(m), s.certFile, s.keyFile)
 	} else {
 		err = http.Serve(s.listener, s.allowOriginMiddleware(m))
 	}
