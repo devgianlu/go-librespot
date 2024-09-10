@@ -78,19 +78,19 @@ func (ap *Accesspoint) init() (err error) {
 	for {
 		attempts++
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
 		addr := ap.addr()
 		ap.conn, err = proxy.Dial(ctx, "tcp", addr)
+		cancel()
 		if err == nil {
 			// Successfully connected.
 			log.Infoln("connected to", addr)
 			return nil
 		} else if attempts >= 6 {
 			// Only try a few times before giving up.
-			return fmt.Errorf("failed to connect to AP %v: %e", addr, err)
+			return fmt.Errorf("failed to connect to AP %v: %w", addr, err)
 		}
 		// Try again with a different AP.
-		log.Warnf("failed to connect to AP %v (error: %v), retrying with a different AP", addr, err)
+		log.WithError(err).Warnf("failed to connect to AP %v, retrying with a different AP", addr)
 	}
 }
 
