@@ -337,6 +337,8 @@ type Config struct {
 		Address     string `yaml:"address"`
 		Port        int    `yaml:"port"`
 		AllowOrigin string `yaml:"allow_origin"`
+		CertFile    string `yaml:"cert_file"`
+		KeyFile     string `yaml:"key_file"`
 	} `yaml:"server"`
 	Credentials struct {
 		Type        string `yaml:"type"`
@@ -432,7 +434,7 @@ func main() {
 
 	// create api server if needed
 	if cfg.Server.Enabled {
-		app.server, err = NewApiServer(cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin)
+		app.server, err = NewApiServer(cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating api server")
 		}
