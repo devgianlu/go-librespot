@@ -5,11 +5,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"math"
+
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
 	"github.com/xlab/vorbis-go/vorbis"
-	"io"
-	"math"
 )
 
 const (

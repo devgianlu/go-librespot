@@ -3,13 +3,14 @@ package spclient
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"strconv"
+	"strings"
+
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
-	"io"
-	"strconv"
-	"strings"
 )
 
 type ContextResolver struct {

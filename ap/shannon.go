@@ -3,10 +3,11 @@ package ap
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/devgianlu/shannon"
 	"io"
 	"net"
 	"sync"
+
+	"github.com/devgianlu/shannon"
 )
 
 type shannonConn struct {

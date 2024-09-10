@@ -3,14 +3,15 @@ package session
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+
 	librespot "github.com/devgianlu/go-librespot"
 	pbdata "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/data/v0"
 	pbhttp "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/http/v0"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
-	"io"
-	"net/http"
-	"net/url"
 )
 
 func retrieveClientToken(deviceId string) (string, error) {

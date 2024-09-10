@@ -2,6 +2,7 @@ package tracks
 
 import (
 	"fmt"
+
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/spclient"

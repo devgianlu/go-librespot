@@ -2,6 +2,8 @@ package player
 
 import (
 	"fmt"
+	"time"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/output"
@@ -10,7 +12,6 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 const SampleRate = 44100

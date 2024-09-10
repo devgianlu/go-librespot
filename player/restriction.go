@@ -1,9 +1,10 @@
 package player
 
 import (
+	"strings"
+
 	librespot "github.com/devgianlu/go-librespot"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
-	"strings"
 )
 
 func isMediaRestricted(media *librespot.Media, country string) bool {

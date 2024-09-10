@@ -3,13 +3,14 @@ package apresolve
 import (
 	"encoding/json"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	librespot "github.com/devgianlu/go-librespot"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 )
 
 type apResolveResponse struct {

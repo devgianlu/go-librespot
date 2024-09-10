@@ -5,6 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -13,10 +18,6 @@ import (
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
-	"io"
-	"net/http"
-	"net/url"
-	"strconv"
 )
 
 type Spclient struct {

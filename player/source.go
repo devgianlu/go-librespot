@@ -2,9 +2,10 @@ package player
 
 import (
 	"errors"
-	librespot "github.com/devgianlu/go-librespot"
 	"io"
 	"sync"
+
+	librespot "github.com/devgianlu/go-librespot"
 )
 
 type SwitchingAudioSource struct {

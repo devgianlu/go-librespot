@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
-	"math"
-	"net/http"
 	"nhooyr.io/websocket"
-	"sync"
-	"time"
 )
 
 const (

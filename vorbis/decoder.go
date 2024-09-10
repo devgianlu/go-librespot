@@ -3,12 +3,13 @@ package vorbis
 import (
 	"errors"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
-	"github.com/devgianlu/go-librespot/audio"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"strings"
 	"sync"
+
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/audio"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/xlab/vorbis-go/vorbis"
 )

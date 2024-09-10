@@ -3,9 +3,10 @@ package session
 import (
 	"context"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func NewOAuth2Server(ctx context.Context, callbackPort int) (int, chan string, error) {
