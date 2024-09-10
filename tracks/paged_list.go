@@ -3,10 +3,11 @@ package tracks
 import (
 	"errors"
 	"fmt"
+	"io"
+
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
-	"io"
 )
 
 type pagedListItem[T any] struct {

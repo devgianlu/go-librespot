@@ -1,10 +1,11 @@
 package tracks
 
 import (
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/exp/rand"
 	"io"
 	"testing"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/rand"
 )
 
 type dummyPageResolver struct {

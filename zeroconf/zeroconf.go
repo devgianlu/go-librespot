@@ -9,14 +9,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
+	"sync"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dh"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/grandcat/zeroconf"
 	log "github.com/sirupsen/logrus"
-	"net"
-	"net/http"
-	"sync"
 )
 
 type Zeroconf struct {

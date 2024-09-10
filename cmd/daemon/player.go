@@ -5,6 +5,12 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
+	"math"
+	"strings"
+	"sync"
+	"time"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/dealer"
@@ -15,11 +21,6 @@ import (
 	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
-	"io"
-	"math"
-	"strings"
-	"sync"
-	"time"
 )
 
 type AppPlayer struct {

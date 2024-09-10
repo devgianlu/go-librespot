@@ -3,16 +3,17 @@ package login5
 import (
 	"bytes"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
-	pb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3"
-	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 	"io"
 	"net/http"
 	"net/url"
 	"sync"
 	"time"
+
+	librespot "github.com/devgianlu/go-librespot"
+	pb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3"
+	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
 )
 
 type Login5 struct {

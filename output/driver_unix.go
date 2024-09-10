@@ -10,12 +10,13 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 	"io"
 	"sync"
 	"unsafe"
+
+	librespot "github.com/devgianlu/go-librespot"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 const (

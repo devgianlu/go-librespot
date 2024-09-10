@@ -11,6 +11,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"os"
+	"sync"
+	"time"
+
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dh"
@@ -20,11 +26,6 @@ import (
 	"golang.org/x/exp/slices"
 	"golang.org/x/net/proxy"
 	"google.golang.org/protobuf/proto"
-	"io"
-	"net"
-	"os"
-	"sync"
-	"time"
 )
 
 const pongAckInterval = 120 * time.Second

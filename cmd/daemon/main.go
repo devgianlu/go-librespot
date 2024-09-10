@@ -6,6 +6,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/devgianlu/go-librespot/apresolve"
 	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/player"
@@ -15,10 +20,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
 	"gopkg.in/yaml.v3"
-	"math"
-	"os"
-	"strings"
-	"time"
 )
 
 type App struct {

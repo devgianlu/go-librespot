@@ -6,16 +6,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"net"
 	"net/http"
 	"net/url"
-	"nhooyr.io/websocket"
-	"nhooyr.io/websocket/wsjson"
 	"strings"
 	"sync"
 	"time"
+
+	librespot "github.com/devgianlu/go-librespot"
+	log "github.com/sirupsen/logrus"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 const timeout = 10 * time.Second

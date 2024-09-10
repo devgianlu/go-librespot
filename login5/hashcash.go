@@ -2,10 +2,11 @@ package login5
 
 import (
 	"crypto/sha1"
-	"github.com/devgianlu/go-librespot/proto/google"
-	challengespb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/challenges"
 	"math/bits"
 	"time"
+
+	"github.com/devgianlu/go-librespot/proto/google"
+	challengespb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/challenges"
 )
 
 func checkHashcash(hash []byte, length int) bool {

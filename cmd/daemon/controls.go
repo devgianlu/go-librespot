@@ -3,6 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"time"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -10,9 +14,6 @@ import (
 	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
-	"math"
-	"strconv"
-	"time"
 )
 
 func (p *AppPlayer) prefetchNext() {

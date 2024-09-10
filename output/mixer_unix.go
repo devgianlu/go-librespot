@@ -10,8 +10,9 @@ package output
 import "C"
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"unsafe"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func (out *output) setupMixer() error {

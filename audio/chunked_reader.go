@@ -2,9 +2,6 @@ package audio
 
 import (
 	"fmt"
-	"github.com/cenkalti/backoff/v4"
-	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,6 +9,10 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
+	librespot "github.com/devgianlu/go-librespot"
+	log "github.com/sirupsen/logrus"
 )
 
 const (

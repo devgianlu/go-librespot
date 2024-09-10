@@ -2,6 +2,7 @@ package go_librespot
 
 import (
 	"errors"
+
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 )
 

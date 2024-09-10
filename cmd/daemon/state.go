@@ -1,13 +1,14 @@
 package main
 
 import (
+	"time"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dealer"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/tracks"
 	log "github.com/sirupsen/logrus"
-	"time"
 )
 
 type State struct {

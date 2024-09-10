@@ -6,11 +6,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"reflect"
 	"strings"
+
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	log "github.com/sirupsen/logrus"
 )
 
 type messageReceiver struct {
