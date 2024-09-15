@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/rs/cors"
 	"net"
 	"net/http"
 	"net/url"
@@ -305,16 +306,6 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	}
 }
 
-func (s *ApiServer) allowOriginMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if len(s.allowOrigin) > 0 {
-			w.Header().Set("Access-Control-Allow-Origin", s.allowOrigin)
-		}
-
-		next.ServeHTTP(w, req)
-	})
-}
-
 func (s *ApiServer) serve() {
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -506,9 +497,9 @@ func (s *ApiServer) serve() {
 		opts := &websocket.AcceptOptions{}
 		if len(s.allowOrigin) > 0 {
 			allow := s.allowOrigin
-			if strings.HasPrefix(allow, "https://") {
-				allow = s.allowOrigin[8:]
-			}
+			allow = strings.TrimPrefix(allow, "http://")
+			allow = strings.TrimPrefix(allow, "https://")
+			allow = strings.TrimSuffix(allow, "/")
 			opts.OriginPatterns = []string{allow}
 		}
 
@@ -547,12 +538,19 @@ func (s *ApiServer) serve() {
 		}
 	})
 
+	c := cors.New(cors.Options{
+		AllowedOrigins:      []string{s.allowOrigin},
+		AllowPrivateNetwork: true,
+		AllowCredentials:    true,
+	})
+
 	var err error
 	if len(s.certFile) > 0 && len(s.keyFile) > 0 {
-		err = http.ServeTLS(s.listener, s.allowOriginMiddleware(m), s.certFile, s.keyFile)
+		err = http.ServeTLS(s.listener, c.Handler(m), s.certFile, s.keyFile)
 	} else {
-		err = http.Serve(s.listener, s.allowOriginMiddleware(m))
+		err = http.Serve(s.listener, c.Handler(m))
 	}
+
 	if s.close {
 		return
 	} else if err != nil {

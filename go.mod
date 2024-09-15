@@ -22,6 +22,7 @@ require (
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/klauspost/compress v1.10.3 // indirect
 	github.com/miekg/dns v1.1.54 // indirect
+	github.com/rs/cors v1.11.1 // indirect
 	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/tools v0.10.0 // indirect
 )
