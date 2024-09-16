@@ -42,6 +42,20 @@ server:
 
 For API documentation see [here](API.md).
 
+### CORS support
+
+CORS headers can be added to the API via the `server.allow_origin` field. For example, to allow requests from a
+website at `http://129.168.1.1:8080`, the following configuration can be used:
+
+```yaml
+server:
+  enabled: true
+  port: 3678
+  allow_origin: 'http://129.168.1.1:8080'
+```
+
+This is useful when interacting with the API directly from a webpage. 
+
 ## Building
 
 The daemon can be easily built with:
@@ -56,10 +70,10 @@ To crosscompile for different architectures the `GOOS` and `GOARCH` environment 
 
 You need to have the following installed:
 
-  * Go 1.22 or higher
-  * libogg
-  * libvorbis
-  * libasound2
+* Go 1.22 or higher
+* libogg
+* libvorbis
+* libasound2
 
 You can install the 3 libraries in Debian (and Ubuntu/Raspbian) using the following command:
 
