@@ -289,6 +289,9 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 		case errors.Is(resp.err, ErrTooManyRequests):
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
+		case errors.Is(resp.err, ErrBadRequest):
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		default:
 			log.WithError(resp.err).Errorf("failed handling request %s", req.Type)
 			w.WriteHeader(http.StatusInternalServerError)
