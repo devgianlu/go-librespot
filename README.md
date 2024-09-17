@@ -37,6 +37,8 @@ Once prerequisites are installed you can clone the repository and run the daemon
 go run ./cmd/daemon
 ```
 
+Details about cross-compiling go-librespot are described [here](/CROSS_COMPILE.md) (thank you @felixstorm).
+
 ## Configuration
 
 The default directory for configuration files is `~/.config/go-librespot`. You can change this directory with the
