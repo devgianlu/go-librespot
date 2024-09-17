@@ -329,3 +329,7 @@ func (c *Spclient) ContextResolveAutoplay(reqProto *playerpb.AutoplayContextRequ
 
 	return &context, nil
 }
+
+func (c *Spclient) GetAccessToken(force bool) (string, error) {
+	return c.accessToken(force)
+}
