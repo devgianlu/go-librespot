@@ -492,6 +492,14 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeAddToQueue:
 		p.addToQueue(&connectpb.ContextTrack{Uri: req.Data.(string)})
 		return nil, nil
+	case ApiRequestTypeToken:
+		accessToken, err := p.sess.Spclient().GetAccessToken(true)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting access token: %w", err)
+		}
+		return &ApiResponseToken{
+			Token: accessToken,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}

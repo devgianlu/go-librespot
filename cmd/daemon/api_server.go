@@ -62,6 +62,7 @@ const (
 	ApiRequestTypeSetRepeatingTrack   ApiRequestType = "repeating_track"
 	ApiRequestTypeSetShufflingContext ApiRequestType = "shuffling_context"
 	ApiRequestTypeAddToQueue          ApiRequestType = "add_to_queue"
+	ApiRequestTypeToken               ApiRequestType = "token"
 )
 
 type ApiEventType string
@@ -194,6 +195,10 @@ type ApiResponseStatus struct {
 type ApiResponseVolume struct {
 	Value uint32 `json:"value"`
 	Max   uint32 `json:"max"`
+}
+
+type ApiResponseToken struct {
+	Token string `json:"token"`
 }
 
 type ApiEvent struct {
@@ -495,6 +500,14 @@ func (s *ApiServer) serve() {
 		}
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
+	})
+	m.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeToken}, w)
 	})
 	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
 		opts := &websocket.AcceptOptions{}
