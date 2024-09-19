@@ -22,7 +22,14 @@ func (p *AppPlayer) prefetchNext() {
 		return
 	}
 
-	nextId := librespot.SpotifyIdFromUri(next.Uri)
+	// TODO: the same logic is present in ContextTrackToProvidedTrack and should
+	// probably be generalized.
+	var nextId librespot.SpotifyId
+	if next.Uri != "" {
+		nextId = librespot.SpotifyIdFromUri(next.Uri)
+	} else {
+		nextId = librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, next.Gid)
+	}
 	if p.secondaryStream != nil && p.secondaryStream.Is(nextId) {
 		return
 	}

@@ -21,6 +21,8 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 }
 
 func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrack, provider string) *connectpb.ProvidedTrack {
+	// TODO: the same logic is present in AppPlayer.prefetchNext and should
+	// probably be generalized.
 	var uri string
 	if len(track.Uri) > 0 {
 		uri = track.Uri
