@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sync"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
@@ -107,12 +108,19 @@ func (p *KeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
 	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse)}
 	p.reqChan <- req
 
-	resp := <-req.resp
-	if resp.err != nil {
-		return nil, resp.err
-	}
+	timeout := time.NewTimer(15 * time.Second)
+	defer timeout.Stop()
 
-	return resp.key, nil
+	select {
+	case <-timeout.C:
+		return nil, fmt.Errorf("request timed out")
+	case resp := <-req.resp:
+		if resp.err != nil {
+			return nil, resp.err
+		}
+
+		return resp.key, nil
+	}
 }
 
 func (p *KeyProvider) Close() {
