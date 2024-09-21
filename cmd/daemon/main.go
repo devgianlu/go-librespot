@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"math"
 	"os"
@@ -19,7 +18,14 @@ import (
 	"github.com/devgianlu/go-librespot/zeroconf"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
-	"gopkg.in/yaml.v3"
+
+	"github.com/knadh/koanf/v2"
+	flag "github.com/spf13/pflag"
+
+	"github.com/knadh/koanf/parsers/yaml"
+	"github.com/knadh/koanf/providers/confmap"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/posflag"
 )
 
 type App struct {
@@ -47,24 +53,24 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
-	app.deviceType, err = parseDeviceType(*cfg.DeviceType)
+	app.deviceType, err = parseDeviceType(cfg.DeviceType)
 	if err != nil {
 		return nil, err
 	}
 
 	app.resolver = apresolve.NewApResolver()
 
-	if cfg.DeviceId == nil {
+	if cfg.DeviceId == "" {
 		deviceIdBytes := make([]byte, 20)
 		_, _ = rand.Read(deviceIdBytes)
 		app.deviceId = hex.EncodeToString(deviceIdBytes)
 		log.Infof("generated new device id: %s", app.deviceId)
 	} else {
-		app.deviceId = *cfg.DeviceId
+		app.deviceId = cfg.DeviceId
 	}
 
-	if cfg.ClientToken != nil {
-		app.clientToken = *cfg.ClientToken
+	if cfg.ClientToken != "" {
+		app.clientToken = cfg.ClientToken
 	}
 
 	return app, nil
@@ -96,16 +102,16 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 
 	if appPlayer.player, err = player.NewPlayer(
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
-		!app.cfg.NormalisationDisabled, *app.cfg.NormalisationPregain,
-		appPlayer.countryCode, *app.cfg.AudioDevice, *app.cfg.MixerDevice, *app.cfg.MixerControlName,
-		*app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
+		!app.cfg.NormalisationDisabled, app.cfg.NormalisationPregain,
+		appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
+		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
 
 	// only update the "spotify volume", when external volume is enabled or a mixer is defined
 	// try to keep synchronized with the device volume
-	if app.cfg.ExternalVolume || len(*app.cfg.MixerDevice) > 0 {
+	if app.cfg.ExternalVolume || len(app.cfg.MixerDevice) > 0 {
 		// listen on external volume changes (for example the alsa driver)
 		go func() {
 			for {
@@ -146,14 +152,14 @@ func (app *App) withCredentials(creds any) (err error) {
 	var storedUsername string
 	var storedCredentials []byte
 	if content, err := os.ReadFile(app.cfg.CredentialsPath); err == nil {
-		var file storedCredentialsFile
-		if err := json.Unmarshal(content, &file); err != nil {
+		var credsFile storedCredentialsFile
+		if err := json.Unmarshal(content, &credsFile); err != nil {
 			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
 		}
 
-		storedUsername = file.Username
-		storedCredentials = file.Data
-		log.Debugf("stored credentials found for %s", file.Username)
+		storedUsername = credsFile.Username
+		storedCredentials = credsFile.Data
+		log.Debugf("stored credentials found for %s", credsFile.Username)
 	} else {
 		log.Debugf("stored credentials not found")
 	}
@@ -206,7 +212,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(*app.cfg.DeviceName, app.deviceId, app.deviceType)
+	z, err := zeroconf.NewZeroconf(app.cfg.DeviceName, app.deviceId, app.deviceType)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
@@ -315,110 +321,97 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 }
 
 type Config struct {
-	ConfigPath      string `yaml:"-"`
-	CredentialsPath string `yaml:"-"`
+	ConfigPath      string `koanf:"config_path"`
+	CredentialsPath string `koanf:"credentials_path"`
 
-	LogLevel              *string  `yaml:"log_level"`
-	DeviceId              *string  `yaml:"device_id"`
-	DeviceName            *string  `yaml:"device_name"`
-	DeviceType            *string  `yaml:"device_type"`
-	ClientToken           *string  `yaml:"client_token"`
-	AudioDevice           *string  `yaml:"audio_device"`
-	MixerDevice           *string  `yaml:"mixer_device"`
-	MixerControlName      *string  `yaml:"mixer_control_name"`
-	Bitrate               *int     `yaml:"bitrate"`
-	VolumeSteps           *uint32  `yaml:"volume_steps"`
-	InitialVolume         *uint32  `yaml:"initial_volume"`
-	NormalisationDisabled bool     `yaml:"normalisation_disabled"`
-	NormalisationPregain  *float32 `yaml:"normalisation_pregain"`
-	ExternalVolume        bool     `yaml:"external_volume"`
-	ZeroconfEnabled       bool     `yaml:"zeroconf_enabled"`
+	LogLevel              log.Level `koanf:"log_level"`
+	DeviceId              string    `koanf:"device_id"`
+	DeviceName            string    `koanf:"device_name"`
+	DeviceType            string    `koanf:"device_type"`
+	ClientToken           string    `koanf:"client_token"`
+	AudioDevice           string    `koanf:"audio_device"`
+	MixerDevice           string    `koanf:"mixer_device"`
+	MixerControlName      string    `koanf:"mixer_control_name"`
+	Bitrate               int       `koanf:"bitrate"`
+	VolumeSteps           uint32    `koanf:"volume_steps"`
+	InitialVolume         uint32    `koanf:"initial_volume"`
+	NormalisationDisabled bool      `koanf:"normalisation_disabled"`
+	NormalisationPregain  float32   `koanf:"normalisation_pregain"`
+	ExternalVolume        bool      `koanf:"external_volume"`
+	ZeroconfEnabled       bool      `koanf:"zeroconf_enabled"`
 	Server                struct {
-		Enabled     bool   `yaml:"enabled"`
-		Address     string `yaml:"address"`
-		Port        int    `yaml:"port"`
-		AllowOrigin string `yaml:"allow_origin"`
-		CertFile    string `yaml:"cert_file"`
-		KeyFile     string `yaml:"key_file"`
-	} `yaml:"server"`
+		Enabled     bool   `koanf:"enabled"`
+		Address     string `koanf:"address"`
+		Port        int    `koanf:"port"`
+		AllowOrigin string `koanf:"allow_origin"`
+		CertFile    string `koanf:"cert_file"`
+		KeyFile     string `koanf:"key_file"`
+	} `koanf:"server"`
 	Credentials struct {
 		Type        string `yaml:"type"`
 		Interactive struct {
 			CallbackPort int `yaml:"callback_port"`
-		} `yaml:"interactive"`
+		} `koanf:"interactive"`
 		SpotifyToken struct {
 			Username    string `yaml:"username"`
 			AccessToken string `yaml:"access_token"`
-		} `yaml:"spotify_token"`
-	} `yaml:"credentials"`
+		} `koanf:"spotify_token"`
+	} `koanf:"credentials"`
 }
 
 func loadConfig(cfg *Config) error {
-	flag.StringVar(&cfg.ConfigPath, "config_path", "", "the configuration file path (default config.yml)")
-	flag.StringVar(&cfg.CredentialsPath, "credentials_path", "credentials.json", "the credentials file path")
-	flag.Parse()
+	f := flag.NewFlagSet("config", flag.ContinueOnError)
+	f.Usage = func() {
+		fmt.Println(f.FlagUsages())
+		os.Exit(0)
+	}
+	f.StringVar(&cfg.ConfigPath, "config_path", "", "the configuration file path (default \"config.yml\")")
+	f.StringVar(&cfg.CredentialsPath, "credentials_path", "credentials.json", "the credentials file path")
+	_ = f.Parse(os.Args[1:])
 
+	k := koanf.New(".")
+
+	// load default configuration
+	_ = k.Load(confmap.Provider(map[string]interface{}{
+		"log_level":          log.InfoLevel,
+		"device_type":        "computer",
+		"audio_device":       "default",
+		"mixer_control_name": "Master",
+		"bitrate":            160,
+		"volume_steps":       100,
+		"initial_volume":     100,
+		"credentials.type":   "zeroconf",
+	}, "."), nil)
+
+	// load file configuration (if available)
 	configPath := cfg.ConfigPath
 	if configPath == "" {
 		configPath = "config.yml"
 	}
-	configBytes, err := os.ReadFile(configPath)
-	if err != nil {
+
+	if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
 		if cfg.ConfigPath != "" || !os.IsNotExist(err) {
 			return fmt.Errorf("failed reading configuration file: %w", err)
 		}
 	}
 
-	if err := yaml.Unmarshal(configBytes, cfg); err != nil {
-		return fmt.Errorf("failed unmarshalling configuration file: %w", err)
+	// load command line configuration
+	if err := k.Load(posflag.Provider(f, ".", k), nil); err != nil {
+		return fmt.Errorf("failed loading command line configuration: %w", err)
 	}
 
-	if cfg.LogLevel == nil {
-		cfg.LogLevel = new(string)
-		*cfg.LogLevel = "info"
+	// unmarshal configuration
+	if err := k.Unmarshal("", &cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal configuration: %w", err)
 	}
-	if cfg.DeviceName == nil {
-		cfg.DeviceName = new(string)
-		*cfg.DeviceName = "go-librespot"
+
+	if cfg.DeviceName == "" {
+		cfg.DeviceName = "go-librespot"
+
 		hostname, _ := os.Hostname()
 		if hostname != "" {
-			*cfg.DeviceName += " " + hostname
+			cfg.DeviceName += " " + hostname
 		}
-	}
-	if cfg.Credentials.Type == "" {
-		cfg.Credentials.Type = "zeroconf"
-	}
-	if cfg.DeviceType == nil {
-		cfg.DeviceType = new(string)
-		*cfg.DeviceType = "computer"
-	}
-	if cfg.AudioDevice == nil {
-		cfg.AudioDevice = new(string)
-		*cfg.AudioDevice = "default"
-	}
-	if cfg.MixerDevice == nil {
-		cfg.MixerDevice = new(string)
-		*cfg.MixerDevice = ""
-	}
-	if cfg.MixerControlName == nil {
-		cfg.MixerControlName = new(string)
-		*cfg.MixerControlName = "Master"
-	}
-	if cfg.Bitrate == nil {
-		cfg.Bitrate = new(int)
-		*cfg.Bitrate = 160
-	}
-	if cfg.VolumeSteps == nil {
-		cfg.VolumeSteps = new(uint32)
-		*cfg.VolumeSteps = 100
-	}
-	if cfg.InitialVolume == nil {
-		cfg.InitialVolume = new(uint32)
-		*cfg.InitialVolume = 100
-	}
-	if cfg.NormalisationPregain == nil {
-		cfg.NormalisationPregain = new(float32)
-		*cfg.NormalisationPregain = 0
 	}
 
 	return nil
@@ -432,13 +425,8 @@ func main() {
 		log.WithError(err).Fatal("failed loading config")
 	}
 
-	// parse and set log level
-	logLevel, err := log.ParseLevel(*cfg.LogLevel)
-	if err != nil {
-		log.WithError(err).Fatalf("invalid log level: %s", *cfg.LogLevel)
-	} else {
-		log.SetLevel(logLevel)
-	}
+	// set log level
+	log.SetLevel(cfg.LogLevel)
 
 	// create new app
 	app, err := NewApp(&cfg)
