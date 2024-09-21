@@ -138,7 +138,7 @@ func (c *Login5) Login(credentials proto.Message) error {
 	if ok := resp.GetOk(); ok != nil {
 		c.loginOk = ok
 		c.loginOkExp = time.Now().Add(time.Duration(c.loginOk.AccessTokenExpiresIn) * time.Second)
-		log.Debugf("authenticated as %s", c.loginOk.Username)
+		log.Infof("authenticated Login5 as %s", c.loginOk.Username)
 		return nil
 	} else {
 		return fmt.Errorf("failed authenticating with login5: %v", resp.GetError())

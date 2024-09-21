@@ -83,7 +83,7 @@ func (ap *Accesspoint) init() (err error) {
 		cancel()
 		if err == nil {
 			// Successfully connected.
-			log.Infoln("connected to", addr)
+			log.Debugf("connected to %s", addr)
 			return nil
 		} else if attempts >= 6 {
 			// Only try a few times before giving up.
@@ -504,7 +504,7 @@ func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
 		}
 
 		ap.welcome = &welcome
-		log.Debugf("authenticated as %s", *welcome.CanonicalUsername)
+		log.Infof("authenticated AP as %s", *welcome.CanonicalUsername)
 
 		return nil
 	} else if recvPkt == PacketTypeAuthFailure {

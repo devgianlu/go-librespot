@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/rs/cors"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rs/cors"
 
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
@@ -261,6 +262,8 @@ func NewApiServer(address string, port int, allowOrigin string, certFile string,
 	if err != nil {
 		return nil, fmt.Errorf("failed starting api listener: %w", err)
 	}
+
+	log.Infof("api server listening on %s", s.listener.Addr())
 
 	go s.serve()
 	return s, nil
