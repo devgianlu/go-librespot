@@ -105,7 +105,7 @@ func (p *KeyProvider) recvLoop() {
 func (p *KeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
 	p.startReceiving()
 
-	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse)}
+	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse, 1)}
 	p.reqChan <- req
 
 	timeout := time.NewTimer(15 * time.Second)

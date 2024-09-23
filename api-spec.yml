@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  version: 0.0.13
+  version: 0.0.18
   title: go-librespot API
   description: go-librespot daemon API
 
@@ -150,6 +150,10 @@ paths:
                 position:
                   description: Seek position in milliseconds
                   type: integer
+                relative:
+                  description: Whether the seek position is relative to the current one
+                  type: boolean
+                  default: false
       responses:
         200:
           description: Successful response

@@ -95,6 +95,11 @@ func (r *ApiRequest) Reply(data any, err error) {
 	r.resp <- apiResponse{data, err}
 }
 
+type ApiRequestDataSeek struct {
+	Position int64 `json:"position"`
+	Relative bool  `json:"relative"`
+}
+
 type ApiRequestDataWebApi struct {
 	Method string
 	Path   string
@@ -398,20 +403,18 @@ func (s *ApiServer) serve() {
 			return
 		}
 
-		var data struct {
-			Position int64 `json:"position"`
-		}
+		var data ApiRequestDataSeek
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		if data.Position < 0 {
+		if !data.Relative && data.Position < 0 {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data.Position}, w)
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data}, w)
 	})
 	m.HandleFunc("/player/volume", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
