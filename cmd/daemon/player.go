@@ -490,8 +490,18 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			Value: uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
 		}, nil
 	case ApiRequestTypeSetVolume:
-		vol := req.Data.(uint32)
-		p.updateVolume(vol * player.MaxStateVolume / p.app.cfg.VolumeSteps)
+		data := req.Data.(ApiRequestDataVolume)
+
+		var volume int32
+		if data.Relative {
+			volume = int32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
+			volume += data.Volume
+			volume = max(min(volume, int32(p.app.cfg.VolumeSteps)), 0)
+		} else {
+			volume = data.Volume
+		}
+
+		p.updateVolume(uint32(volume) * player.MaxStateVolume / p.app.cfg.VolumeSteps)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
 		val := req.Data.(bool)

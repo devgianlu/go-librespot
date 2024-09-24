@@ -101,6 +101,11 @@ type ApiRequestDataSeek struct {
 	Relative bool  `json:"relative"`
 }
 
+type ApiRequestDataVolume struct {
+	Volume   int32 `json:"volume"`
+	Relative bool  `json:"relative"`
+}
+
 type ApiRequestDataWebApi struct {
 	Method string
 	Path   string
@@ -429,20 +434,17 @@ func (s *ApiServer) serve() {
 		if r.Method == "GET" {
 			s.handleRequest(ApiRequest{Type: ApiRequestTypeGetVolume}, w)
 		} else if r.Method == "POST" {
-			var data struct {
-				Volume uint32 `json:"volume"`
-			}
+			var data ApiRequestDataVolume
 			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-
-			if data.Volume < 0 {
+			if !data.Relative && data.Volume < 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data.Volume}, w)
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data}, w)
 		} else {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
