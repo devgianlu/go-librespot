@@ -420,6 +420,13 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypePause:
 		_ = p.pause()
 		return nil, nil
+	case ApiRequestTypePlayPause:
+		if p.state.player.IsPaused {
+			_ = p.play()
+		} else {
+			_ = p.pause()
+		}
+		return nil, nil
 	case ApiRequestTypeSeek:
 		data := req.Data.(ApiRequestDataSeek)
 

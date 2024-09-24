@@ -53,6 +53,7 @@ const (
 	ApiRequestTypeStatus              ApiRequestType = "status"
 	ApiRequestTypeResume              ApiRequestType = "resume"
 	ApiRequestTypePause               ApiRequestType = "pause"
+	ApiRequestTypePlayPause           ApiRequestType = "playpause"
 	ApiRequestTypeSeek                ApiRequestType = "seek"
 	ApiRequestTypePrev                ApiRequestType = "prev"
 	ApiRequestTypeNext                ApiRequestType = "next"
@@ -380,6 +381,14 @@ func (s *ApiServer) serve() {
 		}
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
+	})
+	m.HandleFunc("/player/playpause", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypePlayPause}, w)
 	})
 	m.HandleFunc("/player/next", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
