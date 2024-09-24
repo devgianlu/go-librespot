@@ -125,6 +125,12 @@ paths:
       responses:
         200:
           description: Successful response
+  /player/playpause:
+    post:
+      description: Resume playback when paused, or pause playback when playing
+      responses:
+        200:
+          description: Successful response
   /player/next:
     post:
       description: Skip to next track
