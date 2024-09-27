@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -151,7 +152,7 @@ type storedCredentialsFile struct {
 func (app *App) withCredentials(creds any) (err error) {
 	var storedUsername string
 	var storedCredentials []byte
-	if content, err := os.ReadFile(app.cfg.CredentialsPath); err == nil {
+	if content, err := os.ReadFile(app.cfg.CredentialsPath()); err == nil {
 		var credsFile storedCredentialsFile
 		if err := json.Unmarshal(content, &credsFile); err != nil {
 			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
@@ -177,12 +178,18 @@ func (app *App) withCredentials(creds any) (err error) {
 			storedUsername = appPlayer.sess.Username()
 			storedCredentials = appPlayer.sess.StoredCredentials()
 
-			if content, err := json.Marshal(&storedCredentialsFile{
+			content, err := json.Marshal(&storedCredentialsFile{
 				Username: appPlayer.sess.Username(),
 				Data:     appPlayer.sess.StoredCredentials(),
-			}); err != nil {
+			})
+			if err != nil {
 				return nil, fmt.Errorf("failed marshalling stored credentials: %w", err)
-			} else if err := os.WriteFile(app.cfg.CredentialsPath, content, 0600); err != nil {
+			}
+			err = os.MkdirAll(app.cfg.ConfigDir, 0o700)
+			if err != nil {
+				return nil, fmt.Errorf("failed creating config directory: %w", err)
+			}
+			if err := os.WriteFile(app.cfg.CredentialsPath(), content, 0600); err != nil {
 				return nil, fmt.Errorf("failed writing stored credentials file: %w", err)
 			}
 
@@ -321,8 +328,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 }
 
 type Config struct {
-	ConfigPath      string `koanf:"config_path"`
-	CredentialsPath string `koanf:"credentials_path"`
+	ConfigDir string `koanf:"config_dir"`
 
 	LogLevel              log.Level `koanf:"log_level"`
 	DeviceId              string    `koanf:"device_id"`
@@ -365,8 +371,12 @@ func loadConfig(cfg *Config) error {
 		fmt.Println(f.FlagUsages())
 		os.Exit(0)
 	}
-	f.StringVar(&cfg.ConfigPath, "config_path", "", "the configuration file path (default \"config.yml\")")
-	f.StringVar(&cfg.CredentialsPath, "credentials_path", "credentials.json", "the credentials file path")
+	userConfigDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	defaultConfigDir := filepath.Join(userConfigDir, "go-librespot")
+	f.StringVar(&cfg.ConfigDir, "config_dir", defaultConfigDir, "the configuration directory")
 	_ = f.Parse(os.Args[1:])
 
 	k := koanf.New(".")
@@ -384,13 +394,10 @@ func loadConfig(cfg *Config) error {
 	}, "."), nil)
 
 	// load file configuration (if available)
-	configPath := cfg.ConfigPath
-	if configPath == "" {
-		configPath = "config.yml"
-	}
+	configPath := cfg.ConfigPath()
 
 	if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
-		if cfg.ConfigPath != "" || !os.IsNotExist(err) {
+		if !os.IsNotExist(err) {
 			return fmt.Errorf("failed reading configuration file: %w", err)
 		}
 	}
@@ -415,6 +422,14 @@ func loadConfig(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func (cfg *Config) ConfigPath() string {
+	return filepath.Join(cfg.ConfigDir, "config.yml")
+}
+
+func (cfg *Config) CredentialsPath() string {
+	return filepath.Join(cfg.ConfigDir, "credentials.json")
 }
 
 func main() {
