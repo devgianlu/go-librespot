@@ -66,13 +66,25 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 	app.resolver = apresolve.NewApResolver()
 
-	if cfg.DeviceId == "" {
+	if cfg.DeviceId != "" {
+		// Use configured device ID.
+		app.deviceId = cfg.DeviceId
+	} else if app.state.DeviceId != "" {
+		// Use device ID generated in a previous run.
+		app.deviceId = app.state.DeviceId
+	} else {
+		// Generate a new device ID.
 		deviceIdBytes := make([]byte, 20)
 		_, _ = rand.Read(deviceIdBytes)
 		app.deviceId = hex.EncodeToString(deviceIdBytes)
 		log.Infof("generated new device id: %s", app.deviceId)
-	} else {
-		app.deviceId = cfg.DeviceId
+
+		// Save device ID so we can reuse it next time.
+		app.state.DeviceId = app.deviceId
+		err := app.writeAppState()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if cfg.ClientToken != "" {
@@ -418,6 +430,7 @@ func (cfg *Config) CredentialsPath() string {
 }
 
 type AppState struct {
+	DeviceId    string `json:"device_id"`
 	Credentials struct {
 		Username string `json:"username"`
 		Data     []byte `json:"data"`
