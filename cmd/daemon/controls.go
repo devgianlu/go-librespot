@@ -532,6 +532,12 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 	return hasNextTrack, nil
 }
 
+// Return the volume as an integer in the range 0..player.MaxStateVolume, as
+// used in the API.
+func (p *AppPlayer) apiVolume() uint32 {
+	return uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
+}
+
 func (p *AppPlayer) updateVolume(newVal uint32) {
 	if newVal > player.MaxStateVolume {
 		newVal = player.MaxStateVolume
@@ -555,7 +561,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeVolume,
 		Data: ApiEventDataVolume{
-			Value: uint32(math.Ceil(float64(newVal*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
+			Value: p.apiVolume(),
 			Max:   p.app.cfg.VolumeSteps,
 		},
 	})
