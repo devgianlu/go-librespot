@@ -37,6 +37,7 @@ type App struct {
 	deviceId    string
 	deviceType  devicespb.DeviceType
 	clientToken string
+	state       *AppState
 
 	server   *ApiServer
 	logoutCh chan *AppPlayer
@@ -56,6 +57,10 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := app.readAppState(); err != nil {
 		return nil, err
 	}
 
@@ -144,30 +149,13 @@ func (app *App) Interactive(callbackPort int) error {
 	return app.withCredentials(session.InteractiveCredentials{CallbackPort: callbackPort})
 }
 
-type storedCredentialsFile struct {
-	Username string `json:"username"`
-	Data     []byte `json:"data"`
-}
-
 func (app *App) withCredentials(creds any) (err error) {
-	var storedUsername string
-	var storedCredentials []byte
-	if content, err := os.ReadFile(app.cfg.CredentialsPath()); err == nil {
-		var credsFile storedCredentialsFile
-		if err := json.Unmarshal(content, &credsFile); err != nil {
-			return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
-		}
-
-		storedUsername = credsFile.Username
-		storedCredentials = credsFile.Data
-		log.Debugf("stored credentials found for %s", credsFile.Username)
-	} else {
-		log.Debugf("stored credentials not found")
-	}
-
 	return app.withAppPlayer(func() (*AppPlayer, error) {
-		if len(storedCredentials) > 0 {
-			return app.newAppPlayer(session.StoredCredentials{Username: storedUsername, Data: storedCredentials})
+		if len(app.state.Credentials.Data) > 0 {
+			return app.newAppPlayer(session.StoredCredentials{
+				Username: app.state.Credentials.Username,
+				Data:     app.state.Credentials.Data,
+			})
 		} else {
 			appPlayer, err := app.newAppPlayer(creds)
 			if err != nil {
@@ -175,22 +163,12 @@ func (app *App) withCredentials(creds any) (err error) {
 			}
 
 			// store credentials outside this context in case we get called again
-			storedUsername = appPlayer.sess.Username()
-			storedCredentials = appPlayer.sess.StoredCredentials()
+			app.state.Credentials.Username = appPlayer.sess.Username()
+			app.state.Credentials.Data = appPlayer.sess.StoredCredentials()
 
-			content, err := json.Marshal(&storedCredentialsFile{
-				Username: appPlayer.sess.Username(),
-				Data:     appPlayer.sess.StoredCredentials(),
-			})
+			err = app.writeAppState()
 			if err != nil {
-				return nil, fmt.Errorf("failed marshalling stored credentials: %w", err)
-			}
-			err = os.MkdirAll(app.cfg.ConfigDir, 0o700)
-			if err != nil {
-				return nil, fmt.Errorf("failed creating config directory: %w", err)
-			}
-			if err := os.WriteFile(app.cfg.CredentialsPath(), content, 0600); err != nil {
-				return nil, fmt.Errorf("failed writing stored credentials file: %w", err)
+				return nil, err
 			}
 
 			log.Debugf("stored credentials for %s", appPlayer.sess.Username())
@@ -377,7 +355,10 @@ func loadConfig(cfg *Config) error {
 	}
 	defaultConfigDir := filepath.Join(userConfigDir, "go-librespot")
 	f.StringVar(&cfg.ConfigDir, "config_dir", defaultConfigDir, "the configuration directory")
-	_ = f.Parse(os.Args[1:])
+	err = f.Parse(os.Args[1:])
+	if err != nil {
+		return err
+	}
 
 	k := koanf.New(".")
 
@@ -428,8 +409,62 @@ func (cfg *Config) ConfigPath() string {
 	return filepath.Join(cfg.ConfigDir, "config.yml")
 }
 
+func (cfg *Config) StatePath() string {
+	return filepath.Join(cfg.ConfigDir, "state.json")
+}
+
 func (cfg *Config) CredentialsPath() string {
 	return filepath.Join(cfg.ConfigDir, "credentials.json")
+}
+
+type AppState struct {
+	Credentials struct {
+		Username string `json:"username"`
+		Data     []byte `json:"data"`
+	} `json:"credentials"`
+}
+
+func (app *App) readAppState() error {
+	// Read app state saved in a previous run.
+	app.state = &AppState{}
+	if content, err := os.ReadFile(app.cfg.StatePath()); err == nil {
+		if err := json.Unmarshal(content, &app.state); err != nil {
+			return fmt.Errorf("failed unmarshalling state file: %w", err)
+		}
+		log.Debugf("app state loaded")
+	} else {
+		log.Debugf("no app state found")
+	}
+
+	// Read credentials (old configuration, in credentials.json).
+	if app.state.Credentials.Username == "" {
+		if content, err := os.ReadFile(app.cfg.CredentialsPath()); err == nil {
+			if err := json.Unmarshal(content, &app.state.Credentials); err != nil {
+				return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
+			}
+
+			log.Debugf("stored credentials found for %s", app.state.Credentials.Username)
+		} else {
+			log.Debugf("stored credentials not found")
+		}
+	}
+
+	return nil
+}
+
+func (app *App) writeAppState() error {
+	err := os.MkdirAll(app.cfg.ConfigDir, 0o700)
+	if err != nil {
+		return fmt.Errorf("failed creating config directory: %w", err)
+	}
+	content, err := json.Marshal(&app.state)
+	if err != nil {
+		return fmt.Errorf("failed marshalling app state: %w", err)
+	}
+	if err := os.WriteFile(app.cfg.StatePath(), content, 0600); err != nil {
+		return fmt.Errorf("failed writing app state: %w", err)
+	}
+	return nil
 }
 
 func main() {
