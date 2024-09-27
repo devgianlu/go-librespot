@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -399,7 +398,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			DeviceType:     p.app.deviceType.String(),
 			DeviceName:     p.app.cfg.DeviceName,
 			VolumeSteps:    p.app.cfg.VolumeSteps,
-			Volume:         p.state.device.Volume,
+			Volume:         p.apiVolume(),
 			RepeatContext:  p.state.player.Options.RepeatingContext,
 			RepeatTrack:    p.state.player.Options.RepeatingTrack,
 			ShuffleContext: p.state.player.Options.ShufflingContext,
@@ -487,14 +486,14 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeGetVolume:
 		return &ApiResponseVolume{
 			Max:   p.app.cfg.VolumeSteps,
-			Value: uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
+			Value: p.apiVolume(),
 		}, nil
 	case ApiRequestTypeSetVolume:
 		data := req.Data.(ApiRequestDataVolume)
 
 		var volume int32
 		if data.Relative {
-			volume = int32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
+			volume = int32(p.apiVolume())
 			volume += data.Volume
 			volume = max(min(volume, int32(p.app.cfg.VolumeSteps)), 0)
 		} else {
