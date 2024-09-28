@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -399,7 +398,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			DeviceType:     p.app.deviceType.String(),
 			DeviceName:     p.app.cfg.DeviceName,
 			VolumeSteps:    p.app.cfg.VolumeSteps,
-			Volume:         p.state.device.Volume,
+			Volume:         p.apiVolume(),
 			RepeatContext:  p.state.player.Options.RepeatingContext,
 			RepeatTrack:    p.state.player.Options.RepeatingTrack,
 			ShuffleContext: p.state.player.Options.ShufflingContext,
@@ -419,6 +418,13 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		return nil, nil
 	case ApiRequestTypePause:
 		_ = p.pause()
+		return nil, nil
+	case ApiRequestTypePlayPause:
+		if p.state.player.IsPaused {
+			_ = p.play()
+		} else {
+			_ = p.pause()
+		}
 		return nil, nil
 	case ApiRequestTypeSeek:
 		data := req.Data.(ApiRequestDataSeek)
@@ -480,11 +486,21 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeGetVolume:
 		return &ApiResponseVolume{
 			Max:   p.app.cfg.VolumeSteps,
-			Value: uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume)),
+			Value: p.apiVolume(),
 		}, nil
 	case ApiRequestTypeSetVolume:
-		vol := req.Data.(uint32)
-		p.updateVolume(vol * player.MaxStateVolume / p.app.cfg.VolumeSteps)
+		data := req.Data.(ApiRequestDataVolume)
+
+		var volume int32
+		if data.Relative {
+			volume = int32(p.apiVolume())
+			volume += data.Volume
+			volume = max(min(volume, int32(p.app.cfg.VolumeSteps)), 0)
+		} else {
+			volume = data.Volume
+		}
+
+		p.updateVolume(uint32(volume) * player.MaxStateVolume / p.app.cfg.VolumeSteps)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
 		val := req.Data.(bool)

@@ -53,6 +53,7 @@ const (
 	ApiRequestTypeStatus              ApiRequestType = "status"
 	ApiRequestTypeResume              ApiRequestType = "resume"
 	ApiRequestTypePause               ApiRequestType = "pause"
+	ApiRequestTypePlayPause           ApiRequestType = "playpause"
 	ApiRequestTypeSeek                ApiRequestType = "seek"
 	ApiRequestTypePrev                ApiRequestType = "prev"
 	ApiRequestTypeNext                ApiRequestType = "next"
@@ -97,6 +98,11 @@ func (r *ApiRequest) Reply(data any, err error) {
 
 type ApiRequestDataSeek struct {
 	Position int64 `json:"position"`
+	Relative bool  `json:"relative"`
+}
+
+type ApiRequestDataVolume struct {
+	Volume   int32 `json:"volume"`
 	Relative bool  `json:"relative"`
 }
 
@@ -381,6 +387,14 @@ func (s *ApiServer) serve() {
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
 	})
+	m.HandleFunc("/player/playpause", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypePlayPause}, w)
+	})
 	m.HandleFunc("/player/next", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -420,20 +434,17 @@ func (s *ApiServer) serve() {
 		if r.Method == "GET" {
 			s.handleRequest(ApiRequest{Type: ApiRequestTypeGetVolume}, w)
 		} else if r.Method == "POST" {
-			var data struct {
-				Volume uint32 `json:"volume"`
-			}
+			var data ApiRequestDataVolume
 			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-
-			if data.Volume < 0 {
+			if !data.Relative && data.Volume < 0 {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data.Volume}, w)
+			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data}, w)
 		} else {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}

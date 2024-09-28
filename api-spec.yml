@@ -125,6 +125,12 @@ paths:
       responses:
         200:
           description: Successful response
+  /player/playpause:
+    post:
+      description: Resume playback when paused, or pause playback when playing
+      responses:
+        200:
+          description: Successful response
   /player/next:
     post:
       description: Skip to next track
@@ -186,7 +192,10 @@ paths:
                 volume:
                   description: Volume from 0 to max
                   type: number
-                  minimum: 0
+                relative:
+                  description: Whether to change the volume relative to the current volume
+                  type: boolean
+                  default: false
       responses:
         200:
           description: Successful response

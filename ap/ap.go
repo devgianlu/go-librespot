@@ -58,7 +58,7 @@ type Accesspoint struct {
 }
 
 func NewAccesspoint(addr librespot.GetAddressFunc, deviceId string) *Accesspoint {
-	return &Accesspoint{addr: addr, deviceId: deviceId}
+	return &Accesspoint{addr: addr, deviceId: deviceId, recvChans: make(map[PacketType][]chan Packet)}
 }
 
 func (ap *Accesspoint) init() (err error) {
@@ -179,7 +179,6 @@ func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
 func (ap *Accesspoint) connect(creds *pb.LoginCredentials) error {
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.pongAckTickerStop = make(chan struct{}, 1)
-	ap.recvChans = make(map[PacketType][]chan Packet)
 
 	if err := ap.init(); err != nil {
 		return err
