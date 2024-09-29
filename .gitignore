@@ -3,5 +3,6 @@
 
 /config.yml
 /credentials.json
+/state.json
 
 /dist

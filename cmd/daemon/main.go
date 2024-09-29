@@ -150,7 +150,17 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 }
 
 func (app *App) Zeroconf() error {
-	return app.withAppPlayer(func() (*AppPlayer, error) { return nil, nil })
+	return app.withAppPlayer(func() (*AppPlayer, error) {
+		if app.cfg.Credentials.Zeroconf.PersistCredentials && len(app.state.Credentials.Data) > 0 {
+			log.WithField("username", app.state.Credentials.Username).Infof("loading previously persisted zeroconf credentials")
+			return app.newAppPlayer(session.StoredCredentials{
+				Username: app.state.Credentials.Username,
+				Data:     app.state.Credentials.Data,
+			})
+		}
+
+		return nil, nil
+	})
 }
 
 func (app *App) SpotifyToken(username, token string) error {
@@ -312,6 +322,18 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 		apiCh = make(chan ApiRequest)
 		currentPlayer = newAppPlayer
 
+		if app.cfg.Credentials.Zeroconf.PersistCredentials {
+			app.state.Credentials.Username = newAppPlayer.sess.Username()
+			app.state.Credentials.Data = newAppPlayer.sess.StoredCredentials()
+
+			err = app.writeAppState()
+			if err != nil {
+				log.WithError(err).Errorf("failed persisting zeroconf credentials")
+			}
+
+			log.WithField("username", newAppPlayer.sess.Username()).Debugf("persisted zeroconf credentials")
+		}
+
 		go newAppPlayer.Run(apiCh)
 		return true
 	})
@@ -352,6 +374,9 @@ type Config struct {
 			Username    string `yaml:"username"`
 			AccessToken string `yaml:"access_token"`
 		} `koanf:"spotify_token"`
+		Zeroconf struct {
+			PersistCredentials bool `koanf:"persist_credentials"`
+		} `koanf:"zeroconf"`
 	} `koanf:"credentials"`
 }
 

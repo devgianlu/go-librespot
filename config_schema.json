@@ -151,6 +151,17 @@
                   "default": ""
                 }
               }
+            },
+            "zeroconf": {
+              "type": "object",
+              "description": "Authenticate with Zeroconf (auto discovery)",
+              "properties": {
+                "persist_credentials": {
+                  "type": "boolean",
+                  "description": "Whether credentials from the Zeroconf session should be persisted",
+                  "default": false
+                }
+              }
             }
           }
         },
