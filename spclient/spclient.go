@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
@@ -145,34 +146,39 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutSta
 	if err != nil {
 		return fmt.Errorf("failed marshalling PutStateRequest: %w", err)
 	}
+	_, err = backoff.RetryWithData(func() (*http.Response, error) {
+		resp, err := c.request(
+			"PUT",
+			fmt.Sprintf("/connect-state/v1/devices/%s", c.deviceId),
+			nil,
+			http.Header{
+				"X-Spotify-Connection-Id": []string{spotConnId},
+				"Content-Type":            []string{"application/x-protobuf"},
+			},
+			reqBody,
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = resp.Body.Close() }()
 
-	resp, err := c.request(
-		"PUT",
-		fmt.Sprintf("/connect-state/v1/devices/%s", c.deviceId),
-		nil,
-		http.Header{
-			"X-Spotify-Connection-Id": []string{spotConnId},
-			"Content-Type":            []string{"application/x-protobuf"},
-		},
-		reqBody,
-	)
+		if resp.StatusCode != 200 {
+			var putError putStateError
+			if err := json.NewDecoder(resp.Body).Decode(&putError); err != nil {
+				log.Debugf("failed reading error response %s", err)
+				return nil, fmt.Errorf("failed reading error response: %w", err)
+			}
+			log.Debugf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
+			return nil, fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
+		} else {
+			log.Debugf("put connect state because %s", reqProto.PutStateReason)
+			return resp, nil
+		}
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2))
 	if err != nil {
 		return err
 	}
-
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != 200 {
-		var putError putStateError
-		if err := json.NewDecoder(resp.Body).Decode(&putError); err != nil {
-			return fmt.Errorf("failed reading error response: %w", err)
-		}
-
-		return fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
-	} else {
-		log.Debugf("put connect state because %s", reqProto.PutStateReason)
-		return nil
-	}
+	return nil
 }
 
 func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*storagepb.StorageResolveResponse, error) {
