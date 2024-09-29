@@ -164,15 +164,11 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutSta
 
 		if resp.StatusCode != 200 {
 			var putError putStateError
-			if resp.ContentLength <= 0 {
-				log.Debugf("failure to decode response.Body, ContentLength was: %d", resp.ContentLength)
-				return nil, fmt.Errorf("failure to decode response.Body, ContentLength was: %d", resp.ContentLength)
-			}
 			if err := json.NewDecoder(resp.Body).Decode(&putError); err != nil {
-				log.Debugf("failed reading error response %s, retrying in 1 second", err)
+				log.Debugf("failed reading error response %s", err)
 				return nil, fmt.Errorf("failed reading error response: %w", err)
 			}
-			log.Debugf("put state request failed with status %d: %s, retrying in 1 second", resp.StatusCode, putError.Message)
+			log.Debugf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
 			return nil, fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
 		} else {
 			log.Debugf("put connect state because %s", reqProto.PutStateReason)
