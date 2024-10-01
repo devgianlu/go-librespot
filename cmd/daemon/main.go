@@ -515,7 +515,7 @@ func (app *App) readAppState() error {
 }
 
 func (app *App) writeAppState() error {
-	content, err := json.Marshal(&app.state)
+	content, err := json.MarshalIndent(&app.state, "", "\t")
 	if err != nil {
 		return fmt.Errorf("failed marshalling app state: %w", err)
 	}
