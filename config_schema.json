@@ -86,7 +86,7 @@
             "address": {
               "type": "string",
               "description": "Which address to bind for the API server",
-              "default": ""
+              "default": "localhost"
             },
             "port": {
               "type": "integer",

@@ -409,6 +409,7 @@ func loadConfig(cfg *Config) error {
 		"volume_steps":       100,
 		"initial_volume":     100,
 		"credentials.type":   "zeroconf",
+		"server.address":     "localhost",
 	}, "."), nil)
 
 	// load file configuration (if available)
