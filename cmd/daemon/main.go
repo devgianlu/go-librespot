@@ -17,6 +17,7 @@ import (
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/devgianlu/go-librespot/session"
 	"github.com/devgianlu/go-librespot/zeroconf"
+	"github.com/gofrs/flock"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
 
@@ -28,6 +29,8 @@ import (
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/posflag"
 )
+
+var errAlreadyRunning = errors.New("go-librespot is already running")
 
 type App struct {
 	cfg *Config
@@ -342,6 +345,10 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 type Config struct {
 	ConfigDir string `koanf:"config_dir"`
 
+	// We need to keep this object around, otherwise it gets GC'd and the
+	// finalizer will run, probably closing the lock.
+	configLock *flock.Flock
+
 	LogLevel              log.Level `koanf:"log_level"`
 	DeviceId              string    `koanf:"device_id"`
 	DeviceName            string    `koanf:"device_name"`
@@ -395,6 +402,23 @@ func loadConfig(cfg *Config) error {
 	err = f.Parse(os.Args[1:])
 	if err != nil {
 		return err
+	}
+
+	// Make config directory if needed.
+	err = os.MkdirAll(cfg.ConfigDir, 0o700)
+	if err != nil {
+		return fmt.Errorf("failed creating config directory: %w", err)
+	}
+
+	// Lock the config directory (to ensure multiple instances won't clobber
+	// each others state).
+	lockFilePath := filepath.Join(cfg.ConfigDir, "lockfile")
+	cfg.configLock = flock.New(lockFilePath)
+	if locked, err := cfg.configLock.TryLock(); err != nil {
+		return fmt.Errorf("could not lock config directory: %w", err)
+	} else if !locked {
+		// Lock already taken! Looks like go-librespot is already running.
+		return fmt.Errorf("%w (lockfile: %s)", errAlreadyRunning, lockFilePath)
 	}
 
 	k := koanf.New(".")
@@ -491,10 +515,6 @@ func (app *App) readAppState() error {
 }
 
 func (app *App) writeAppState() error {
-	err := os.MkdirAll(app.cfg.ConfigDir, 0o700)
-	if err != nil {
-		return fmt.Errorf("failed creating config directory: %w", err)
-	}
 	content, err := json.Marshal(&app.state)
 	if err != nil {
 		return fmt.Errorf("failed marshalling app state: %w", err)
@@ -510,6 +530,12 @@ func main() {
 
 	var cfg Config
 	if err := loadConfig(&cfg); err != nil {
+		if errors.Is(err, errAlreadyRunning) {
+			// Print a nice error message instead of a harder-to-read log
+			// message.
+			fmt.Fprintln(os.Stderr, "could not start:", err)
+			os.Exit(1)
+		}
 		log.WithError(err).Fatal("failed loading config")
 	}
 
