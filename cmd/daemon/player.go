@@ -101,12 +101,18 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed unmarshalling ClusterUpdate: %w", err)
 		}
 
-		stopBeingActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId
+		stopBeingActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId && clusterUpdate.Cluster.PlayerState.Timestamp > p.state.lastTransferTimestamp
 
 		// We are still the active device, do not quit
 		if !stopBeingActive {
 			return nil
 		}
+
+		name := "<unknown>"
+		if device := clusterUpdate.Cluster.Device[clusterUpdate.Cluster.ActiveDeviceId]; device != nil {
+			name = device.Name
+		}
+		log.Infof("playback was transferred to %s", name)
 
 		p.player.Stop()
 		p.primaryStream = nil
@@ -142,6 +148,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		if err := proto.Unmarshal(req.Command.Data, &transferState); err != nil {
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
 		}
+		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
 
 		ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
