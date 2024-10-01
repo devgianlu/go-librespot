@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/devgianlu/go-librespot/apresolve"
@@ -41,6 +42,7 @@ type App struct {
 	deviceType  devicespb.DeviceType
 	clientToken string
 	state       *AppState
+	stateLock   sync.Mutex
 
 	server   *ApiServer
 	logoutCh chan *AppPlayer
@@ -515,12 +517,27 @@ func (app *App) readAppState() error {
 }
 
 func (app *App) writeAppState() error {
+	app.stateLock.Lock()
+	defer app.stateLock.Unlock()
+
 	content, err := json.MarshalIndent(&app.state, "", "\t")
 	if err != nil {
 		return fmt.Errorf("failed marshalling app state: %w", err)
 	}
-	if err := os.WriteFile(app.cfg.StatePath(), content, 0600); err != nil {
+
+	// Create a temporary file, and overwrite the old file.
+	// This is a way to atomically replace files.
+	// The file is created with mode 0o600 so we don't need to change the mode.
+	tmppath := app.cfg.StatePath()
+	tmpfile, err := os.CreateTemp(filepath.Dir(tmppath), filepath.Base(tmppath)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed creating temporary file for app state: %w", err)
+	}
+	if _, err := tmpfile.Write(content); err != nil {
 		return fmt.Errorf("failed writing app state: %w", err)
+	}
+	if err := os.Rename(tmpfile.Name(), tmppath); err != nil {
+		return fmt.Errorf("failed replacing app state file: %w", err)
 	}
 	return nil
 }
