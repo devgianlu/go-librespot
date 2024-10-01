@@ -23,6 +23,18 @@ type State struct {
 	lastCommand *dealer.RequestPayload
 }
 
+// Set the IsPaused flag, and also the PlaybackSpeed as well.
+// PlaybackSpeed must be 0 when paused, or Spotify Android will have subtle
+// bugs.
+func (s *State) setPaused(val bool) {
+	s.player.IsPaused = val
+	if val {
+		s.player.PlaybackSpeed = 0
+	} else {
+		s.player.PlaybackSpeed = 1
+	}
+}
+
 func (s *State) setActive(val bool) {
 	if val {
 		if s.active {
