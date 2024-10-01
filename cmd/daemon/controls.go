@@ -22,6 +22,14 @@ func (p *AppPlayer) prefetchNext() {
 		return
 	}
 
+	if next.Uri == "" {
+		// It should be implemented some day (the ContextTrack has enough
+		// information to infer the track Uri) but it's hard to reproduce this
+		// issue.
+		log.Warn("cannot prefetch next track because the uri field is empty")
+		return
+	}
+
 	nextId := librespot.SpotifyIdFromUri(next.Uri)
 	if p.secondaryStream != nil && p.secondaryStream.Is(nextId) {
 		return
