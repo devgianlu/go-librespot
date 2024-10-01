@@ -197,9 +197,11 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	log.WithField("uri", spotId.Uri()).
 		Debugf("loading %s (paused: %t, position: %dms)", spotId.Type(), paused, trackPosition)
 
+	p.state.updateTimestamp()
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = true
-	p.state.setPaused(paused)
+	p.state.player.IsPaused = paused
+	p.state.player.PlaybackSpeed = 0 // not progressing while buffering
 	p.updateState()
 
 	p.app.server.Emit(&ApiEvent{
@@ -235,9 +237,11 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 			strconv.QuoteToGraphic(p.primaryStream.Media.Name()), paused, trackPosition, p.primaryStream.Media.Duration(),
 			prefetched)
 
+	p.state.updateTimestamp()
 	p.state.player.Duration = int64(p.primaryStream.Media.Duration())
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false
+	p.state.setPaused(paused) // update IsPaused and PlaybackSpeed
 	p.updateState()
 	p.schedulePrefetchNext()
 

@@ -20,7 +20,8 @@ type State struct {
 
 	tracks *tracks.List
 
-	lastCommand *dealer.RequestPayload
+	lastCommand           *dealer.RequestPayload
+	lastTransferTimestamp int64
 }
 
 // Set the IsPaused flag, and also the PlaybackSpeed as well.
@@ -67,6 +68,26 @@ func (s *State) trackPosition() int64 {
 	} else {
 		return time.Now().UnixMilli() - s.player.Timestamp + s.player.PositionAsOfTimestamp
 	}
+}
+
+// Update timestamp, and updating the player position timestamp according to how
+// much time has passed since the last update.
+func (s *State) updateTimestamp() {
+	// Use single timestamp throughout, for consistency.
+	now := time.Now()
+
+	// How many milliseconds the playback has advanced since the last update to
+	// PositionAsOfTimestamp.
+	advancedTimeMillis := now.UnixMilli() - s.player.Timestamp
+
+	// How far the playback position has advanced during that time.
+	// (For example, PlaybackSpeed is 0 when paused so the position doesn't
+	// change).
+	advancedPositionMillis := int64(float64(advancedTimeMillis) * s.player.PlaybackSpeed)
+
+	// Update the timestamps accordingly.
+	s.player.PositionAsOfTimestamp += advancedPositionMillis
+	s.player.Timestamp = now.UnixMilli()
 }
 
 func (s *State) playOrigin() string {
