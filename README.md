@@ -50,6 +50,7 @@ website at `http://129.168.1.1:8080`, the following configuration can be used:
 ```yaml
 server:
   enabled: true
+  address: "" # allow connections from anywhere (default is localhost only)
   port: 3678
   allow_origin: 'http://129.168.1.1:8080'
 ```
