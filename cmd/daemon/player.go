@@ -151,21 +151,16 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.setActive(true)
 		p.state.player.IsPlaying = false
 		p.state.player.IsBuffering = false
-		p.state.player.IsPaused = false
 
 		// options
 		p.state.player.Options = transferState.Options
 
 		// playback
+		// Note: this sets playback speed to 0 or 1 because that's all we're
+		// capable of, depending on whether the playback is paused or not.
 		p.state.player.Timestamp = transferState.Playback.Timestamp
 		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
-		p.state.player.IsPaused = transferState.Playback.IsPaused
-
-		if playbackSpeed := transferState.Playback.PlaybackSpeed; playbackSpeed != 0 {
-			p.state.player.PlaybackSpeed = playbackSpeed
-		} else {
-			p.state.player.PlaybackSpeed = 1
-		}
+		p.state.setPaused(transferState.Playback.IsPaused)
 
 		// current session
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
@@ -452,7 +447,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		}
 
 		p.state.setActive(true)
-		p.state.player.PlaybackSpeed = 1
+		p.state.setPaused(data.Paused)
 		p.state.player.Suppressions = &connectpb.Suppressions{}
 		p.state.player.PlayOrigin = &connectpb.PlayOrigin{
 			FeatureIdentifier: "go-librespot",

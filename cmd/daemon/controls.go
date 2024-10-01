@@ -65,7 +65,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlaying:
 		p.state.player.IsPlaying = true
-		p.state.player.IsPaused = false
+		p.state.setPaused(false)
 		p.state.player.IsBuffering = false
 		p.updateState()
 
@@ -78,7 +78,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 		})
 	case player.EventTypePaused:
 		p.state.player.IsPlaying = true
-		p.state.player.IsPaused = true
+		p.state.setPaused(true)
 		p.state.player.IsBuffering = false
 		p.updateState()
 
@@ -132,7 +132,7 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 		return fmt.Errorf("failed creating track list: %w", err)
 	}
 
-	p.state.player.IsPaused = paused
+	p.state.setPaused(paused)
 
 	p.state.player.ContextUri = ctx.Uri
 	p.state.player.ContextUrl = ctx.Url
@@ -199,7 +199,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = true
-	p.state.player.IsPaused = paused
+	p.state.setPaused(paused)
 	p.updateState()
 
 	p.app.server.Emit(&ApiEvent{
@@ -348,7 +348,7 @@ func (p *AppPlayer) play() error {
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
-	p.state.player.IsPaused = false
+	p.state.setPaused(false)
 	p.updateState()
 	p.schedulePrefetchNext()
 
@@ -367,7 +367,7 @@ func (p *AppPlayer) pause() error {
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
-	p.state.player.IsPaused = true
+	p.state.setPaused(true)
 	p.updateState()
 	p.schedulePrefetchNext()
 
