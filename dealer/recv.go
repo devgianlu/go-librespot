@@ -69,6 +69,7 @@ type RequestPayload struct {
 			RestorePosition     string `json:"restore_position"`
 			RestoreTrack        string `json:"restore_track"`
 			AlwaysPlaySomething bool   `json:"always_play_something"`
+			AllowSeeking        bool   `json:"allow_seeking"`
 			SkipTo              struct {
 				TrackUid   string `json:"track_uid"`
 				TrackUri   string `json:"track_uri"`
