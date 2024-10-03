@@ -2,6 +2,7 @@ package tracks
 
 import (
 	"fmt"
+	"slices"
 
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -85,6 +86,9 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	if err := iter.error(); err != nil {
 		log.WithError(err).Error("failed fetching prev tracks")
 	}
+
+	// Tracks were added in reverse order. Fix this by reversing them again.
+	slices.Reverse(tracks)
 
 	return tracks
 }
