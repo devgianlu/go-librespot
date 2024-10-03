@@ -277,7 +277,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "skip_prev":
-		return p.skipPrev()
+		return p.skipPrev(req.Command.Options.AllowSeeking)
 	case "skip_next":
 		if req.Command.Track != nil {
 			contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
@@ -441,7 +441,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		_ = p.seek(position)
 		return nil, nil
 	case ApiRequestTypePrev:
-		_ = p.skipPrev()
+		_ = p.skipPrev(true)
 		return nil, nil
 	case ApiRequestTypeNext:
 		_ = p.skipNext()

@@ -416,8 +416,8 @@ func (p *AppPlayer) seek(position int64) error {
 	return nil
 }
 
-func (p *AppPlayer) skipPrev() error {
-	if p.player.PositionMs() > 3000 {
+func (p *AppPlayer) skipPrev(allowSeeking bool) error {
+	if allowSeeking && p.player.PositionMs() > 3000 {
 		return p.seek(0)
 	}
 
