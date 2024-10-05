@@ -72,13 +72,11 @@ To crosscompile for different architectures the `GOOS` and `GOARCH` environment 
 You need to have the following installed:
 
 * Go 1.22 or higher
-* libogg
-* libvorbis
 * libasound2
 
 You can install the 3 libraries in Debian (and Ubuntu/Raspbian) using the following command:
 
-    sudo apt-get install libogg-dev libvorbis-dev libasound2-dev
+    sudo apt-get install libasound2-dev
 
 You can install a newer Go version from the [Go website](https://go.dev/dl/).
 
