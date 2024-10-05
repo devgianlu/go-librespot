@@ -18,7 +18,8 @@ type State struct {
 	device *connectpb.DeviceInfo
 	player *connectpb.PlayerState
 
-	tracks *tracks.List
+	tracks  *tracks.List
+	queueID uint64
 
 	lastCommand           *dealer.RequestPayload
 	lastTransferTimestamp int64

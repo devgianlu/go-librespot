@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -193,6 +194,24 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// shuffle the context if needed
 		if err := ctxTracks.ToggleShuffle(transferState.Options.ShufflingContext); err != nil {
 			return fmt.Errorf("failed shuffling context")
+		}
+
+		// Set queueID to the highest queue ID found in the queue.
+		// The UIDs are of the form q0, q1, q2, etc.
+		// Spotify apps don't seem to do this (they start again at 0 after
+		// transfer), which means that queue IDs get duplicated when tracks are
+		// added before and after the transfer and reordering will lead to weird
+		// effects. But we can do better :)
+		p.state.queueID = 0
+		for _, track := range transferState.Queue.Tracks {
+			if track.Uid == "" || track.Uid[0] != 'q' {
+				continue // not of the "q<number>" format
+			}
+			n, err := strconv.ParseUint(track.Uid[1:], 10, 64)
+			if err != nil {
+				continue // not of the "q<number>" format
+			}
+			p.state.queueID = max(p.state.queueID, n)
 		}
 
 		// add all tracks from queue

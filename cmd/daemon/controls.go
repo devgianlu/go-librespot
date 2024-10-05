@@ -321,6 +321,12 @@ func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
 		return
 	}
 
+	if track.Uid == "" {
+		// The uid always seems unset, so we have to set one manually.
+		p.state.queueID++
+		track.Uid = fmt.Sprintf("q%d", p.state.queueID)
+	}
+
 	p.state.tracks.AddToQueue(track)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks()
