@@ -430,8 +430,11 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("unsupported channels: %d", stream.Channels)
 	}
 
-	if err := stream.SetPositionMs(max(0, min(mediaPosition, int64(media.Duration())))); err != nil {
-		return nil, fmt.Errorf("failed seeking stream: %w", err)
+	// Seek to the correct position if needed.
+	if mediaPosition > 0 {
+		if err := stream.SetPositionMs(max(0, min(mediaPosition, int64(media.Duration())))); err != nil {
+			return nil, fmt.Errorf("failed seeking stream: %w", err)
+		}
 	}
 
 	return &Stream{Source: stream, Media: media, File: file}, nil
