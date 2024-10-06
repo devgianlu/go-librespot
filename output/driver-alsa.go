@@ -25,7 +25,7 @@ const (
 	BufferTimeMicro      = 500_000
 )
 
-type output struct {
+type alsaOutput struct {
 	channels   int
 	sampleRate int
 	device     string
@@ -59,8 +59,8 @@ type output struct {
 	err                  chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
-	out := &output{
+func newAlsaOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*alsaOutput, error) {
+	out := &alsaOutput{
 		reader:               reader,
 		channels:             channels,
 		sampleRate:           sampleRate,
@@ -103,7 +103,7 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	return out, nil
 }
 
-func (out *output) alsaError(name string, err C.int) error {
+func (out *alsaOutput) alsaError(name string, err C.int) error {
 	if errors.Is(unix.Errno(-err), unix.EPIPE) {
 		_ = out.Close()
 	}
@@ -111,7 +111,7 @@ func (out *output) alsaError(name string, err C.int) error {
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
-func (out *output) setupPcm() error {
+func (out *alsaOutput) setupPcm() error {
 	cdevice := C.CString(out.device)
 	defer C.free(unsafe.Pointer(cdevice))
 	if err := C.snd_pcm_open(&out.pcmHandle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
@@ -205,7 +205,7 @@ func (out *output) setupPcm() error {
 	return nil
 }
 
-func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
+func (out *alsaOutput) logParams(params *C.snd_pcm_hw_params_t) error {
 	var dir C.int
 
 	var rate C.uint
@@ -244,7 +244,7 @@ func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
 	return nil
 }
 
-func (out *output) readLoop() error {
+func (out *alsaOutput) readLoop() error {
 	for {
 		floats := make([]float32, out.channels*out.periodSize)
 		n, err := out.reader.Read(floats)
@@ -268,7 +268,7 @@ func (out *output) readLoop() error {
 	}
 }
 
-func (out *output) writeLoop() error {
+func (out *alsaOutput) writeLoop() error {
 	for {
 		floats, err := out.samples.GetWait()
 		if errors.Is(err, ErrBufferClosed) {
@@ -314,7 +314,7 @@ func (out *output) writeLoop() error {
 	}
 }
 
-func (out *output) Pause() error {
+func (out *alsaOutput) Pause() error {
 	// Do not use snd_pcm_drop as this might hang (https://github.com/libsdl-org/SDL/blob/a5c610b0a3857d3138f3f3da1f6dc3172c5ea4a8/src/audio/alsa/SDL_alsa_audio.c#L478).
 
 	out.cond.L.Lock()
@@ -347,7 +347,7 @@ func (out *output) Pause() error {
 	return nil
 }
 
-func (out *output) Resume() error {
+func (out *alsaOutput) Resume() error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
@@ -379,7 +379,7 @@ func (out *output) Resume() error {
 	return nil
 }
 
-func (out *output) Drop() error {
+func (out *alsaOutput) Drop() error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
@@ -401,7 +401,7 @@ func (out *output) Drop() error {
 	return nil
 }
 
-func (out *output) DelayMs() (int64, error) {
+func (out *alsaOutput) DelayMs() (int64, error) {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
@@ -417,7 +417,7 @@ func (out *output) DelayMs() (int64, error) {
 	return int64(frames) * 1000 / int64(out.sampleRate), nil
 }
 
-func (out *output) SetVolume(vol float32) {
+func (out *alsaOutput) SetVolume(vol float32) {
 	if vol < 0 || vol > 1 {
 		panic(fmt.Sprintf("invalid volume value: %0.2f", vol))
 	}
@@ -436,14 +436,14 @@ func (out *output) SetVolume(vol float32) {
 	}
 }
 
-func (out *output) Error() <-chan error {
+func (out *alsaOutput) Error() <-chan error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 
 	return out.err
 }
 
-func (out *output) Close() error {
+func (out *alsaOutput) Close() error {
 	out.cond.L.Lock()
 	defer out.cond.L.Unlock()
 

@@ -126,7 +126,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	if appPlayer.player, err = player.NewPlayer(
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, app.cfg.NormalisationPregain,
-		appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
+		appPlayer.countryCode, app.cfg.AudioBackend, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
 		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
@@ -356,6 +356,7 @@ type Config struct {
 	DeviceName            string    `koanf:"device_name"`
 	DeviceType            string    `koanf:"device_type"`
 	ClientToken           string    `koanf:"client_token"`
+	AudioBackend          string    `koanf:"audio_backend"`
 	AudioDevice           string    `koanf:"audio_device"`
 	MixerDevice           string    `koanf:"mixer_device"`
 	MixerControlName      string    `koanf:"mixer_control_name"`
@@ -429,6 +430,7 @@ func loadConfig(cfg *Config) error {
 	_ = k.Load(confmap.Provider(map[string]interface{}{
 		"log_level":          log.InfoLevel,
 		"device_type":        "computer",
+		"audio_backend":      "alsa",
 		"audio_device":       "default",
 		"mixer_control_name": "Master",
 		"bitrate":            160,

@@ -1,14 +1,38 @@
 package output
 
 import (
+	"fmt"
+
 	librespot "github.com/devgianlu/go-librespot"
 )
 
-type Output struct {
-	*output
+type Output interface {
+	// Pause pauses the output.
+	Pause() error
+
+	// Resume resumes the output.
+	Resume() error
+
+	// Drop empties the audio buffer without waiting.
+	Drop() error
+
+	// DelayMs returns the output device delay in milliseconds.
+	DelayMs() (int64, error)
+
+	// SetVolume sets the volume (0-1).
+	SetVolume(vol float32)
+
+	// Error returns the error that stopped the device (if any).
+	Error() <-chan error
+
+	// Close closes the output.
+	Close() error
 }
 
 type NewOutputOptions struct {
+	// Backend is the audio backend to use (also, pulseaudio, etc).
+	Backend string
+
 	// Reader provides data for the output device.
 	//
 	// The format of data is as follows:
@@ -31,12 +55,12 @@ type NewOutputOptions struct {
 
 	// Device specifies the audio device name.
 	//
-	// This feature is support only for the unix driver.
+	// This feature is support only for the alsa backend.
 	Device string
 
 	// Mixer specifies the audio mixer name.
 	//
-	// This feature is support only for the unix driver.
+	// This feature is support only for the alsa backend.
 	Mixer string
 	// Control specifies the mixer control name
 	//
@@ -44,54 +68,35 @@ type NewOutputOptions struct {
 	Control string
 
 	// InitialVolume specifies the initial output volume.
+	//
+	// This is only supported on the alsa backend. The PulseAudio backend uses
+	// the PulseAudio default volume.
 	InitialVolume float32
 
 	// ExternalVolume specifies, if the volume is controlled outside of the app.
+	//
+	// This is only supported on the alsa backend. The PulseAudio backend always
+	// uses external volume.
 	ExternalVolume bool
 
 	ExternalVolumeUpdate *RingBuffer[float32]
 }
 
-func NewOutput(options *NewOutputOptions) (*Output, error) {
-	out, err := newOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.ExternalVolumeUpdate)
-	if err != nil {
-		return nil, err
+func NewOutput(options *NewOutputOptions) (Output, error) {
+	switch options.Backend {
+	case "alsa":
+		out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.ExternalVolumeUpdate)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	case "pulseaudio":
+		out, err := newPulseAudioOutput(options.Reader, options.SampleRate, options.ChannelCount, options.ExternalVolumeUpdate)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("unknown audio backend: %s", options.Backend)
 	}
-
-	return &Output{out}, nil
-}
-
-// Pause pauses the output.
-func (c *Output) Pause() error {
-	return c.output.Pause()
-}
-
-// Resume resumes the output.
-func (c *Output) Resume() error {
-	return c.output.Resume()
-}
-
-// Drop empties the audio buffer without waiting.
-func (c *Output) Drop() error {
-	return c.output.Drop()
-}
-
-// DelayMs returns the output device delay in milliseconds.
-func (c *Output) DelayMs() (int64, error) {
-	return c.output.DelayMs()
-}
-
-// SetVolume sets the volume (0-1).
-func (c *Output) SetVolume(vol float32) {
-	c.output.SetVolume(vol)
-}
-
-// Error returns the error that stopped the device (if any).
-func (c *Output) Error() <-chan error {
-	return c.output.Error()
-}
-
-// Close closes the output.
-func (c *Output) Close() error {
-	return c.output.Close()
 }

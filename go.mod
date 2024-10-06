@@ -7,6 +7,7 @@ require (
 	github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e
 	github.com/gofrs/flock v0.12.1
 	github.com/grandcat/zeroconf v1.0.0
+	github.com/jfreymuth/pulse v0.1.2-0.20240922104912-9ad25c5b6956
 	github.com/knadh/koanf/parsers/yaml v0.1.0
 	github.com/knadh/koanf/providers/confmap v0.1.0
 	github.com/knadh/koanf/providers/file v1.1.0
