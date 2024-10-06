@@ -71,6 +71,7 @@ type Decoder struct {
 	buf      []float32
 	stopChan chan struct{}
 	closed   bool
+	started  bool
 
 	lastGranulepos vorbis.OggInt64
 }
@@ -108,8 +109,6 @@ func New(log *log.Entry, r librespot.SizedReadAtSeeker, meta *audio.MetadataPage
 		d.decoderStateCleanup()
 		return nil, errors.New("vorbis: error during playback initialization")
 	}
-
-	vorbis.BlockInit(&d.dspState, &d.block)
 
 	return d, nil
 }
@@ -253,6 +252,11 @@ func (d *Decoder) Read(p []float32) (n int, err error) {
 	defer d.Unlock()
 	if d.closed {
 		return 0, errors.New("decoder: decoder has already been closed")
+	}
+
+	if !d.started {
+		vorbis.BlockInit(&d.dspState, &d.block)
+		d.started = true
 	}
 
 	n = 0
