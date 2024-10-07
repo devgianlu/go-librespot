@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/binary"
 	"io"
 )
 
@@ -26,17 +27,16 @@ func NewAesAudioDecryptor(r io.ReaderAt, key []byte) (*Decryptor, error) {
 
 func (a *Decryptor) ReadAt(p []byte, pos int64) (n int, err error) {
 	bs := int64(a.cipher.BlockSize())
-	block, off := int(pos/bs), int(pos%bs)
+	block, off := uint64(pos/bs), int(pos%bs)
 
+	// Create a new IV with an incremented counter.
+	// Because the IV is static, we can just increment the last 8 bytes (64
+	// bits) knowing it won't overflow with any reasonable stream size. With the
+	// current base IV it will overflow at over 20 exabyte.
+	counter := binary.BigEndian.Uint64(baseIv[8:])
+	counter += block
 	newIv := bytes.Clone(baseIv)
-	for j := 0; j < block; j++ {
-		for i := len(newIv) - 1; i >= 0; i-- {
-			newIv[i]++
-			if newIv[i] != 0 {
-				break
-			}
-		}
-	}
+	binary.BigEndian.PutUint64(newIv[8:], counter)
 
 	stream := cipher.NewCTR(a.cipher, newIv)
 
