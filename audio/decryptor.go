@@ -26,17 +26,16 @@ func NewAesAudioDecryptor(r io.ReaderAt, key []byte) (*Decryptor, error) {
 
 func (a *Decryptor) ReadAt(p []byte, pos int64) (n int, err error) {
 	bs := int64(a.cipher.BlockSize())
-	block, off := int(pos/bs), int(pos%bs)
+	block, off := uint32(pos/bs), int(pos%bs)
 
+	// Create a new IV with an incremented counter.
+	counter := uint32(baseIv[15]) + uint32(baseIv[14])<<8 + uint32(baseIv[13])<<16 + uint32(baseIv[12])<<24
+	counter += block
 	newIv := bytes.Clone(baseIv)
-	for j := 0; j < block; j++ {
-		for i := len(newIv) - 1; i >= 0; i-- {
-			newIv[i]++
-			if newIv[i] != 0 {
-				break
-			}
-		}
-	}
+	newIv[15] = uint8(counter >> 0)
+	newIv[14] = uint8(counter >> 8)
+	newIv[13] = uint8(counter >> 16)
+	newIv[12] = uint8(counter >> 24)
 
 	stream := cipher.NewCTR(a.cipher, newIv)
 
