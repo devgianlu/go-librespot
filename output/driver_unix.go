@@ -152,6 +152,18 @@ func (out *output) setupPcm() error {
 		return out.alsaError("snd_pcm_hw_params_set_buffer_time_near", err)
 	}
 
+	// Request a period size that's approximately bufferSize/4.
+	// By default, it might use a really short buffer size like 220 which can
+	// lead to crackling.
+	var bufferSize C.snd_pcm_uframes_t
+	if err := C.snd_pcm_hw_params_get_buffer_size(hwparams, &bufferSize); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
+	}
+	var periodSize C.snd_pcm_uframes_t = C.snd_pcm_uframes_t(bufferSize) / 4
+	if err := C.snd_pcm_hw_params_set_period_size_near(out.pcmHandle, hwparams, &periodSize, nil); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_set_period_size_near", err)
+	}
+
 	if err := C.snd_pcm_hw_params(out.pcmHandle, hwparams); err < 0 {
 		return out.alsaError("snd_pcm_hw_params", err)
 	}
