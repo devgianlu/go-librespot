@@ -12,17 +12,16 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 	"unsafe"
 
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/sys/unix"
 )
 
 const (
-	DisableHardwarePause = true // FIXME: should we fix this?
-	ReleasePcmOnPause    = true
-	BufferTimeMicro      = 500_000
+	BufferTimeMicro = 500_000
+	NumPeriods      = 4 // number of periods requested
 )
 
 type output struct {
@@ -31,13 +30,11 @@ type output struct {
 	device     string
 	reader     librespot.Float32Reader
 
-	cond *sync.Cond
+	lock sync.Mutex
 
-	pcmHandle  *C.snd_pcm_t
-	canPause   bool
+	pcmHandle  *C.snd_pcm_t // nil when pcmHandle is closed
 	periodSize int
 	bufferSize int
-	samples    *RingBuffer[[]float32]
 
 	externalVolume bool
 
@@ -50,10 +47,8 @@ type output struct {
 	mixerMinVolume  C.long
 	mixerMaxVolume  C.long
 
-	volume   float32
-	paused   bool
-	closed   bool
-	released bool
+	volume float32
+	closed bool
 
 	externalVolumeUpdate *RingBuffer[float32]
 	err                  chan error
@@ -69,17 +64,9 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 		control:              control,
 		volume:               initialVolume,
 		err:                  make(chan error, 2),
-		cond:                 sync.NewCond(&sync.Mutex{}),
 		externalVolume:       externalVolume,
 		externalVolumeUpdate: externalVolumeUpdate,
 	}
-
-	if err := out.setupPcm(); err != nil {
-		return nil, err
-	}
-
-	// this buffer holds multiple period buffers
-	out.samples = NewRingBuffer[[]float32](16)
 
 	if err := out.setupMixer(); err != nil {
 		if uintptr(unsafe.Pointer(out.mixerHandle)) != 0 {
@@ -90,24 +77,10 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 		log.WithError(err).Warnf("failed setting up output device mixer")
 	}
 
-	go func() {
-		out.err <- out.readLoop()
-		_ = out.Close()
-	}()
-
-	go func() {
-		out.err <- out.writeLoop()
-		_ = out.Close()
-	}()
-
 	return out, nil
 }
 
 func (out *output) alsaError(name string, err C.int) error {
-	if errors.Is(unix.Errno(-err), unix.EPIPE) {
-		_ = out.Close()
-	}
-
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
@@ -159,7 +132,7 @@ func (out *output) setupPcm() error {
 	if err := C.snd_pcm_hw_params_get_buffer_size(hwparams, &bufferSize); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
 	}
-	var periodSize C.snd_pcm_uframes_t = C.snd_pcm_uframes_t(bufferSize) / 4
+	var periodSize C.snd_pcm_uframes_t = C.snd_pcm_uframes_t(bufferSize) / NumPeriods
 	if err := C.snd_pcm_hw_params_set_period_size_near(out.pcmHandle, hwparams, &periodSize, nil); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_period_size_near", err)
 	}
@@ -169,16 +142,6 @@ func (out *output) setupPcm() error {
 	}
 
 	_ = out.logParams(hwparams)
-
-	if DisableHardwarePause {
-		out.canPause = false
-	} else {
-		if err := C.snd_pcm_hw_params_can_pause(hwparams); err < 0 {
-			return out.alsaError("snd_pcm_hw_params_can_pause", err)
-		} else {
-			out.canPause = err == 1
-		}
-	}
 
 	var dir C.int
 	var frames C.snd_pcm_uframes_t
@@ -213,6 +176,18 @@ func (out *output) setupPcm() error {
 	if err := C.snd_pcm_sw_params(out.pcmHandle, swparams); err < 0 {
 		return out.alsaError("snd_pcm_sw_params", err)
 	}
+
+	// Move samples from the reader out to the ALSA device.
+	// This loop continues until the PCM handle is closed and set to nil
+	// (Pause() or Close()) or there is an error.
+	pcmHandle := out.pcmHandle
+	go func() {
+		err := out.outputLoop(pcmHandle)
+		if err != nil {
+			out.err <- err
+			_ = out.Close()
+		}
+	}()
 
 	return nil
 }
@@ -256,156 +231,128 @@ func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
 	return nil
 }
 
-func (out *output) readLoop() error {
+func (out *output) outputLoop(pcmHandle *C.snd_pcm_t) error {
+	floats := make([]float32, out.channels*out.periodSize)
+
 	for {
-		floats := make([]float32, out.channels*out.periodSize)
+		// Calculate how long we should wait until there's enough space in the
+		// ALSA buffer for writing.
+		// Note: we'll wait until periodSize*1.125 frames can be written,
+		// because in that case snd_pcm_writei won't be delayed (for some
+		// reason, it will be delayed when waiting for exactly periodSize -
+		// apparently not enough frames are ready to write even when waiting for
+		// the appropriate amount of time).
+		out.lock.Lock()
+		if pcmHandle != out.pcmHandle {
+			// Either out.pcmHandle is nil, or it is a new pcm handle entirely
+			// (with a very fast pause+resume). In both cases, the loop should
+			// be stopped.
+			out.lock.Unlock()
+			return nil
+		}
+		availableFrames := int(C.snd_pcm_avail(pcmHandle))
+		waitForFrames := (out.periodSize + out.periodSize/8) - availableFrames
+		waitTime := time.Duration(waitForFrames) * time.Second / time.Duration(out.sampleRate)
+		out.lock.Unlock()
+
+		// Wait until enough frames are available, with the output unlocked so
+		// that things like pause can still happen in the meantime.
+		time.Sleep(waitTime)
+
+		// Make sure we're either ready to play, or we need to stop this loop
+		// (because the ALSA output is paused/closed).
+		out.lock.Lock()
+		if pcmHandle != out.pcmHandle {
+			out.lock.Unlock()
+			return nil
+		}
+
+		// Read audio data. This can take a few milliseconds because it needs to
+		// decode the audio data.
 		n, err := out.reader.Read(floats)
-		if n > 0 {
-			floats = floats[:n]
-			if err := out.samples.PutWait(floats); errors.Is(err, ErrBufferClosed) {
-				return nil
-			} else if err != nil {
-				_ = out.samples.Close()
-				return err
-			}
-		}
 
-		if errors.Is(err, io.EOF) {
-			_ = out.samples.Close()
-			return nil
-		} else if err != nil {
-			_ = out.samples.Close()
-			return err
-		}
-	}
-}
-
-func (out *output) writeLoop() error {
-	for {
-		floats, err := out.samples.GetWait()
-		if errors.Is(err, ErrBufferClosed) {
-			out.cond.L.Lock()
-			C.snd_pcm_drain(out.pcmHandle)
-			out.cond.L.Unlock()
-
-			return nil
-		} else if err != nil {
-			_ = out.samples.Close()
-			return err
-		}
-
+		// Apply volume.
 		if !out.mixerEnabled && !out.externalVolume {
 			// Map volume (in percent) to what is perceived as linear by
 			// humans. This is the same as math.Pow(out.volume, 2) but simpler.
 			volume := out.volume * out.volume
 
-			for i := 0; i < len(floats); i++ {
+			for i := 0; i < n; i++ {
 				floats[i] *= volume
 			}
 		}
 
-		out.cond.L.Lock()
-		for !(!out.paused || out.closed || !out.released) {
-			out.cond.Wait()
-		}
-
-		if out.closed {
-			out.cond.L.Unlock()
-			return nil
-		}
-
-		if nn := C.snd_pcm_writei(out.pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(len(floats)/out.channels)); nn < 0 {
-			nn = C.long(C.snd_pcm_recover(out.pcmHandle, C.int(nn), 1))
-			if nn < 0 {
-				out.cond.L.Unlock()
-				return out.alsaError("snd_pcm_recover", C.int(nn))
+		// Write audio data to the device. This just copies a buffer, so should
+		// be very fast. It might be delayed a bit however if the sleep above
+		// didn't sleep long enough to wait for room in the buffer.
+		if n > 0 {
+			if nn := C.snd_pcm_writei(pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
+				// Got an error, so must recover (even for an underrun).
+				errCode := C.snd_pcm_recover(pcmHandle, C.int(nn), 1)
+				if errCode < 0 {
+					// Failed to recover from this error.
+					out.lock.Unlock()
+					return out.alsaError("snd_pcm_recover", C.int(errCode))
+				}
 			}
 		}
 
-		out.cond.L.Unlock()
+		if errors.Is(err, io.EOF) {
+			out.lock.Unlock()
+			return nil
+		} else if err != nil {
+			out.lock.Unlock()
+			return err
+		}
+
+		out.lock.Unlock()
 	}
 }
 
 func (out *output) Pause() error {
-	// Do not use snd_pcm_drop as this might hang (https://github.com/libsdl-org/SDL/blob/a5c610b0a3857d3138f3f3da1f6dc3172c5ea4a8/src/audio/alsa/SDL_alsa_audio.c#L478).
+	out.lock.Lock()
+	defer out.lock.Unlock()
 
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	if out.closed || out.paused {
+	if out.closed || out.pcmHandle == nil {
 		return nil
 	}
 
-	if ReleasePcmOnPause {
-		if !out.released {
-			if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
-				return out.alsaError("snd_pcm_close", err)
-			}
-		}
-
-		out.released = true
-	} else if out.canPause {
-		if C.snd_pcm_state(out.pcmHandle) != C.SND_PCM_STATE_RUNNING {
-			return nil
-		}
-
-		if err := C.snd_pcm_pause(out.pcmHandle, 1); err < 0 {
-			return out.alsaError("snd_pcm_pause", err)
-		}
+	if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
+		return out.alsaError("snd_pcm_close", err)
 	}
-
-	out.paused = true
+	out.pcmHandle = nil
 
 	return nil
 }
 
 func (out *output) Resume() error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
+	out.lock.Lock()
+	defer out.lock.Unlock()
 
-	if out.closed || !out.paused {
+	if out.closed || out.pcmHandle != nil {
 		return nil
 	}
 
-	if ReleasePcmOnPause {
-		if out.released {
-			if err := out.setupPcm(); err != nil {
-				return err
-			}
-		}
-
-		out.released = false
-	} else if out.canPause {
-		if C.snd_pcm_state(out.pcmHandle) != C.SND_PCM_STATE_PAUSED {
-			return nil
-		}
-
-		if err := C.snd_pcm_pause(out.pcmHandle, 0); err < 0 {
-			return out.alsaError("snd_pcm_pause", err)
-		}
+	if err := out.setupPcm(); err != nil {
+		return err
 	}
-
-	out.paused = false
-	out.cond.Signal()
 
 	return nil
 }
 
 func (out *output) Drop() error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
+	out.lock.Lock()
+	defer out.lock.Unlock()
 
-	if out.closed || out.released {
+	if out.closed || out.pcmHandle == nil {
 		return nil
 	}
-
-	out.samples.Clear()
 
 	if err := C.snd_pcm_drop(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_drop", err)
 	}
 
-	// since we are not actually stopping the stream, prepare it again
+	// Since we are not actually stopping the stream, prepare it again.
 	if err := C.snd_pcm_prepare(out.pcmHandle); err < 0 {
 		return out.alsaError("snd_pcm_prepare", err)
 	}
@@ -414,10 +361,10 @@ func (out *output) Drop() error {
 }
 
 func (out *output) DelayMs() (int64, error) {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
+	out.lock.Lock()
+	defer out.lock.Unlock()
 
-	if out.closed || out.released {
+	if out.closed || out.pcmHandle == nil {
 		return 0, nil
 	}
 
@@ -449,23 +396,23 @@ func (out *output) SetVolume(vol float32) {
 }
 
 func (out *output) Error() <-chan error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
+	// No need to lock here (out.err is only set in newOutput).
 	return out.err
 }
 
 func (out *output) Close() error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
+	out.lock.Lock()
+	defer out.lock.Unlock()
 
-	if out.closed || out.released {
-		out.closed = true
+	if out.closed {
 		return nil
 	}
 
-	if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
-		return out.alsaError("snd_pcm_close", err)
+	if out.pcmHandle != nil {
+		if err := C.snd_pcm_close(out.pcmHandle); err < 0 {
+			return out.alsaError("snd_pcm_close", err)
+		}
+		out.pcmHandle = nil
 	}
 
 	if out.mixerEnabled {
@@ -475,7 +422,6 @@ func (out *output) Close() error {
 	}
 
 	out.closed = true
-	out.cond.Signal()
 
 	return nil
 }
