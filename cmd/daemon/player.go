@@ -298,26 +298,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	case "skip_prev":
 		return p.skipPrev(req.Command.Options.AllowSeeking)
 	case "skip_next":
-		if req.Command.Track != nil {
-			contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
-			if err := p.state.tracks.TrySeek(tracks.ContextTrackComparator(contextSpotType, req.Command.Track)); err != nil {
-				return err
-			}
-
-			p.state.player.Timestamp = time.Now().UnixMilli()
-			p.state.player.PositionAsOfTimestamp = 0
-
-			p.state.player.Track = p.state.tracks.CurrentTrack()
-			p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-			p.state.player.NextTracks = p.state.tracks.NextTracks()
-			p.state.player.Index = p.state.tracks.Index()
-
-			if err := p.loadCurrentTrack(p.state.player.IsPaused, true); err != nil {
-				return err
-			}
-			return nil
-		}
-		return p.skipNext()
+		return p.skipNext(req.Command.Track)
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
 			log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
@@ -463,7 +444,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		_ = p.skipPrev(true)
 		return nil, nil
 	case ApiRequestTypeNext:
-		_ = p.skipNext()
+		_ = p.skipNext(nil)
 		return nil, nil
 	case ApiRequestTypePlay:
 		data := req.Data.(ApiRequestDataPlay)

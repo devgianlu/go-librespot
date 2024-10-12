@@ -448,23 +448,43 @@ func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 	return nil
 }
 
-func (p *AppPlayer) skipNext() error {
-	hasNextTrack, err := p.advanceNext(true, true)
-	if err != nil {
-		return fmt.Errorf("failed skipping to next track: %w", err)
-	}
+func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
+	if track != nil {
+		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
+		if err := p.state.tracks.TrySeek(tracks.ContextTrackComparator(contextSpotType, track)); err != nil {
+			return err
+		}
 
-	// if no track to be played, just stop
-	if !hasNextTrack {
-		p.app.server.Emit(&ApiEvent{
-			Type: ApiEventTypeStopped,
-			Data: ApiEventDataStopped{
-				PlayOrigin: p.state.playOrigin(),
-			},
-		})
-	}
+		p.state.player.Timestamp = time.Now().UnixMilli()
+		p.state.player.PositionAsOfTimestamp = 0
 
-	return nil
+		p.state.player.Track = p.state.tracks.CurrentTrack()
+		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.state.player.Index = p.state.tracks.Index()
+
+		if err := p.loadCurrentTrack(p.state.player.IsPaused, true); err != nil {
+			return err
+		}
+		return nil
+	} else {
+		hasNextTrack, err := p.advanceNext(true, true)
+		if err != nil {
+			return fmt.Errorf("failed skipping to next track: %w", err)
+		}
+
+		// if no track to be played, just stop
+		if !hasNextTrack {
+			p.app.server.Emit(&ApiEvent{
+				Type: ApiEventTypeStopped,
+				Data: ApiEventDataStopped{
+					PlayOrigin: p.state.playOrigin(),
+				},
+			})
+		}
+
+		return nil
+	}
 }
 
 func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
