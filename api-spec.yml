@@ -134,6 +134,15 @@ paths:
   /player/next:
     post:
       description: Skip to next track
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                uri:
+                  type: string
+                  description: The track URI to skip to
       responses:
         200:
           description: Successful response

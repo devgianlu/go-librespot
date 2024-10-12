@@ -118,6 +118,10 @@ type ApiRequestDataPlay struct {
 	Paused    bool   `json:"paused"`
 }
 
+type ApiRequestDataNext struct {
+	Uri *string `json:"uri"`
+}
+
 type apiResponse struct {
 	data any
 	err  error
@@ -401,7 +405,13 @@ func (s *ApiServer) serve() {
 			return
 		}
 
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeNext}, w)
+		var data ApiRequestDataNext
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeNext, Data: data}, w)
 	})
 	m.HandleFunc("/player/prev", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {

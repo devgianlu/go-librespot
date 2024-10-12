@@ -444,7 +444,12 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		_ = p.skipPrev(true)
 		return nil, nil
 	case ApiRequestTypeNext:
-		_ = p.skipNext(nil)
+		data := req.Data.(ApiRequestDataNext)
+		if data.Uri != nil {
+			_ = p.skipNext(&connectpb.ContextTrack{Uri: *data.Uri})
+		} else {
+			_ = p.skipNext(nil)
+		}
 		return nil, nil
 	case ApiRequestTypePlay:
 		data := req.Data.(ApiRequestDataPlay)
