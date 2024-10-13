@@ -84,8 +84,14 @@ You can install a newer Go version from the [Go website](https://go.dev/dl/).
 
 ## Development
 
-To recompile protobuf definitions use:
+Protobuf definitions are managed through [Buf](https://buf.build). To recompile:
 
 ```shell
-protoc --go_out=proto --go_opt module=github.com/devgianlu/go-librespot/proto -I proto proto/*.proto
+buf generate
+```
+
+or
+
+```shell
+go generate ./...
 ```

@@ -2,9 +2,7 @@ syntax = "proto3";
 
 package spotify.clienttoken.http.v0;
 
-import "connectivity.proto";
-
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/http/v0";
+import "spotify/clienttoken/data/v0/connectivity.proto";
 
 message ClientTokenRequest {
   ClientTokenRequestType request_type = 1;

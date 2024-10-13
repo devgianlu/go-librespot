@@ -2,8 +2,6 @@ syntax = "proto2";
 
 package spotify.player;
 
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/player";
-
 message AutoplayContextRequest {
     required string context_uri = 1;
     repeated string recent_track_uri = 2;

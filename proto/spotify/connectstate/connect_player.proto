@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package spotify.connectstate;
 
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/connectstate";
-
 message PlayerState {
   int64 timestamp = 1;
   string context_uri = 2;

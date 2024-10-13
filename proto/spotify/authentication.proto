@@ -2,8 +2,6 @@ syntax = "proto2";
 
 package spotify;
 
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/";
-
 message ClientResponseEncrypted {
     required LoginCredentials login_credentials = 0xa;
     optional AccountCreation account_creation = 0x14;

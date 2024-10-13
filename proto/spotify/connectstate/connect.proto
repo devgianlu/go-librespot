@@ -2,10 +2,8 @@ syntax = "proto3";
 
 package spotify.connectstate;
 
-import "connect_player.proto";
-import "connect_devices.proto";
-
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/connectstate";
+import "spotify/connectstate/connect_player.proto";
+import "spotify/connectstate/devices/connect_devices.proto";
 
 message ClusterUpdate {
   Cluster cluster = 1;

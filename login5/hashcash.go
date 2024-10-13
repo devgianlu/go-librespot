@@ -2,10 +2,10 @@ package login5
 
 import (
 	"crypto/sha1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"math/bits"
 	"time"
 
-	"github.com/devgianlu/go-librespot/proto/google"
 	challengespb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/challenges"
 )
 
@@ -49,7 +49,7 @@ func solveHashcash(loginContext []byte, challenge *challengespb.HashcashChalleng
 			duration := time.Since(start)
 			return &challengespb.HashcashSolution{
 				Suffix: suffix,
-				Duration: &google.Duration{
+				Duration: &durationpb.Duration{
 					Seconds: int64(duration / time.Second),
 					Nanos:   int32(duration % time.Second),
 				},

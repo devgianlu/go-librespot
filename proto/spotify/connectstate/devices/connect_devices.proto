@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package spotify.connectstate.devices;
 
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices";
-
 message DeviceAlias {
   uint32 id = 1;
   string display_name = 2;

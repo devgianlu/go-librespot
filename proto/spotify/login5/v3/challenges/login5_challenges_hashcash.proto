@@ -2,9 +2,7 @@ syntax = "proto3";
 
 package spotify.login5.v3.challenges;
 
-import "google_duration.proto";
-
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/challenges";
+import "google/protobuf/duration.proto";
 
 message HashcashChallenge {
   bytes prefix = 1;

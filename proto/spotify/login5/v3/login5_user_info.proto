@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package spotify.login5.v3;
 
-option go_package = "github.com/devgianlu/go-librespot/proto/spotify/login5/v3";
-
 message UserInfo {
   string name = 1;
   string email = 2;
