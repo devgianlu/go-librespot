@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package spotify.lens.model;
+
+message Lens {
+    string identifier = 1;
+}
+
+message LensState {
+    string identifier = 1;
+    bytes revision = 2;
+}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"io"
 	"net/http"
 	"net/url"
@@ -276,6 +277,42 @@ func (c *Spclient) MetadataForEpisode(episode librespot.SpotifyId) (*metadatapb.
 	var protoResp metadatapb.Episode
 	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
 		return nil, fmt.Errorf("failed unmarshalling Episode: %w", err)
+	}
+
+	return &protoResp, nil
+}
+
+func (c *Spclient) PlaylistSignals(playlist librespot.SpotifyId, reqProto *playlist4pb.ListSignals, lenses []string) (*playlist4pb.SelectedListContent, error) {
+	if playlist.Type() != librespot.SpotifyIdTypePlaylist {
+		panic(fmt.Sprintf("invalid type: %s", playlist.Type()))
+	}
+
+	reqBody, err := proto.Marshal(reqProto)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling ListSignals: %w", err)
+	}
+
+	resp, err := c.request("POST", fmt.Sprintf("/playlist/v2/playlist/%s/signals", playlist.Base62()), nil, http.Header{
+		"Spotify-Apply-Lenses": lenses,
+	}, reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from playlist signals: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var protoResp playlist4pb.SelectedListContent
+	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling SelectedListContent: %w", err)
 	}
 
 	return &protoResp, nil
