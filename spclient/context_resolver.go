@@ -143,10 +143,6 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
 	}
 
 	page := r.ctx.Pages[idx]
-	if page.Loading {
-		return nil, fmt.Errorf("context page is loading")
-	}
-
 	if len(page.Tracks) == 0 {
 		if len(page.PageUrl) == 0 {
 			return nil, fmt.Errorf("invalid empty page without url")

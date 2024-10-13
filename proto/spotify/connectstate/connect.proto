@@ -33,6 +33,8 @@ message Cluster {
   int64 not_playing_since_timestamp = 7;
   bool need_full_player_state = 8;
   int64 server_timestamp_ms = 9;
+  optional bool needs_state_updates = 10;
+  optional uint64 started_playing_at_timestamp = 11;
 }
 
 message PutStateRequest {
@@ -81,24 +83,16 @@ message DeviceInfo {
   bool is_offline = 21;
   string public_ip = 22;
   string license = 23;
+  optional AudioOutputDeviceInfo audio_output_device_info = 24;
   bool is_group = 25;
   bool is_dynamic_device = 26;
   repeated string disallow_playback_reasons = 27;
   repeated string disallow_transfer_reasons = 28;
-
-  oneof _audio_output_device_info {
-    AudioOutputDeviceInfo audio_output_device_info = 24;
-  }
 }
 
 message AudioOutputDeviceInfo {
-  oneof _audio_output_device_type {
-    AudioOutputDeviceType audio_output_device_type = 1;
-  }
-
-  oneof _device_name {
-    string device_name = 2;
-  }
+  optional AudioOutputDeviceType audio_output_device_type = 1;
+  optional string device_name = 2;
 }
 
 message DeviceMetadata {
@@ -193,6 +187,7 @@ enum AudioOutputDeviceType {
   LINE_OUT = 2;
   BLUETOOTH = 3;
   AIRPLAY = 4;
+  AUTOMOTIVE = 5;
 }
 
 enum PutStateReason {
@@ -228,6 +223,7 @@ enum ClusterUpdateReason {
   NEW_DEVICE_APPEARED = 3;
   DEVICE_VOLUME_CHANGED = 4;
   DEVICE_ALIAS_CHANGED = 5;
+  DEVICE_NEW_CONNECTION = 6;
 }
 
 enum SendCommandResult {

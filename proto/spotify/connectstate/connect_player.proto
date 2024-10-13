@@ -28,13 +28,11 @@ message PlayerState {
   string session_id = 23;
   string queue_revision = 24;
   int64 position = 25;
-  string entity_uri = 26;
-  repeated ProvidedTrack reverse = 27;
-  repeated ProvidedTrack future = 28;
-  string audio_stream = 29;
-  bool is_optional = 30 [deprecated = true];
-  int64 bitrate = 31 [deprecated = true];
   PlaybackQuality playback_quality = 32;
+  repeated string signals = 33;
+  string session_command_id = 35;
+
+  reserved 26, 27, 28, 29, 30, 31, 34;
 }
 
 message ProvidedTrack {
@@ -54,6 +52,14 @@ message ProvidedTrack {
 message ContextIndex {
   uint32 page = 1;
   uint32 track = 2;
+}
+
+message ModeRestrictions {
+  map<string, RestrictionReasons> values = 1;
+}
+
+message RestrictionReasons {
+  repeated string reasons = 1;
 }
 
 message Restrictions {
@@ -80,6 +86,12 @@ message Restrictions {
   repeated string disallow_updating_context_reasons = 21;
   repeated string disallow_playing_reasons = 22;
   repeated string disallow_stopping_reasons = 23;
+  repeated string disallow_add_to_queue_reasons = 24;
+  repeated string disallow_setting_playback_speed_reasons = 25;
+  map<string, ModeRestrictions> disallow_setting_modes = 28;
+  map<string, RestrictionReasons> disallow_signals = 29;
+
+  reserved 26, 27;
 }
 
 message PlayOrigin {
@@ -90,12 +102,15 @@ message PlayOrigin {
   string referrer_identifier = 5;
   string device_identifier = 6;
   repeated string feature_classes = 7;
+  optional string restriction_identifier = 8;
 }
 
 message ContextPlayerOptions {
   bool shuffling_context = 1;
   bool repeating_context = 2;
   bool repeating_track = 3;
+  optional float playback_speed = 4;
+  map<string, string> modes = 5;
 }
 
 message Suppressions {
@@ -113,6 +128,8 @@ message Playback {
   double playback_speed = 3;
   bool is_paused = 4;
   ContextTrack current_track = 5;
+  optional ContextTrack associated_current_track = 6;
+  optional int32 associated_position_as_of_timestamp = 7;
 }
 
 message Queue {
@@ -127,6 +144,9 @@ message Session {
   ContextPlayerOptionOverrides option_overrides = 4;
   Suppressions suppressions = 5;
   InstrumentationParams instrumentation_params = 6;
+  optional string shuffle_seed = 7;
+  optional Context main_context = 8;
+  optional string original_session_id = 9;
 }
 
 message TransferState {
@@ -147,6 +167,8 @@ message ContextPlayerOptionOverrides {
   bool shuffling_context = 1;
   bool repeating_context = 2;
   bool repeating_track = 3;
+  optional float playback_speed = 4;
+  map<string, string> modes = 5;
 }
 
 message Context {
@@ -163,14 +185,8 @@ message ContextPage {
   string next_page_url = 2;
   map<string, string> metadata = 3;
   repeated ContextTrack tracks = 4;
-  bool loading = 5;
-}
 
-message PlayerQueue {
-  string revision = 1;
-  repeated ProvidedTrack next_tracks = 2;
-  repeated ProvidedTrack prev_tracks = 3;
-  ProvidedTrack track = 4;
+  reserved 5;
 }
 
 message PlaybackQuality {
