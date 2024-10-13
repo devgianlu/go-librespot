@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	lenspb "github.com/devgianlu/go-librespot/proto/spotify/lens"
+	signalpb "github.com/devgianlu/go-librespot/proto/spotify/playlist/signal"
+	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -303,12 +307,54 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			return nil
 		}
 
+		p.state.player.ContextUrl = req.Command.Context.Url
 		p.state.player.ContextRestrictions = req.Command.Context.Restrictions
-		if p.state.player.ContextMetadata == nil {
-			p.state.player.ContextMetadata = map[string]string{}
-		}
-		for k, v := range req.Command.Context.Metadata {
-			p.state.player.ContextMetadata[k] = v
+		p.state.player.ContextMetadata = req.Command.Context.Metadata
+
+		if strings.HasPrefix(req.Command.Context.Url, "context://") {
+			parts := strings.Split(req.Command.Context.Url, "?")
+			if len(parts) > 1 {
+				query, err := url.ParseQuery(parts[1])
+				if err != nil {
+					return fmt.Errorf("failed to parse context URL query: %w", err)
+				}
+
+				applyLenses := query["spotify-apply-lenses"]
+				if len(applyLenses) > 0 {
+					if len(applyLenses) > 1 {
+						log.Warnf("ignoring multiple spotify-apply-lenses: %v", applyLenses)
+					}
+
+					lensBytes, err := proto.Marshal(&lenspb.Lens{Identifier: applyLenses[0]})
+					if err != nil {
+						return fmt.Errorf("failed to marshal lens: %w", err)
+					}
+
+					resp, err := p.sess.Spclient().PlaylistSignals(
+						librespot.SpotifyIdFromUri(p.state.player.ContextUri),
+						&playlist4pb.ListSignals{
+							BaseRevision: nil, // FIXME?
+							EmittedSignals: []*signalpb.Signal{{
+								Identifier: "reset",
+								Data:       lensBytes,
+							}},
+						},
+						applyLenses,
+					)
+					if err != nil {
+						return fmt.Errorf("failed to list playlist signals: %w", err)
+					}
+
+					if p.state.player.ContextMetadata == nil {
+						p.state.player.ContextMetadata = make(map[string]string)
+					}
+					for _, attr := range resp.Attributes.FormatAttributes {
+						p.state.player.ContextMetadata[*attr.Key] = *attr.Value
+					}
+
+					p.state.tracks.ApplySelectedListContent(resp)
+				}
+			}
 		}
 
 		p.updateState()
