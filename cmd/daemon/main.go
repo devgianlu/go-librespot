@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/devgianlu/go-librespot/apresolve"
-	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/player"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/devgianlu/go-librespot/session"
@@ -101,11 +100,11 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
-		app:                  app,
-		stop:                 make(chan struct{}, 1),
-		logout:               app.logoutCh,
-		countryCode:          new(string),
-		externalVolumeUpdate: output.NewRingBuffer[float32](1),
+		app:          app,
+		stop:         make(chan struct{}, 1),
+		logout:       app.logoutCh,
+		countryCode:  new(string),
+		volumeUpdate: make(chan float32, 1),
 	}
 
 	// start a dummy timer for prefetching next media
@@ -126,29 +125,10 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	if appPlayer.player, err = player.NewPlayer(
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, app.cfg.NormalisationPregain,
-		appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
-		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
+		appPlayer.countryCode, app.cfg.AudioBackend, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
+		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.volumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
-	}
-
-	// only update the "spotify volume", when external volume is enabled or a mixer is defined
-	// try to keep synchronized with the device volume
-	if app.cfg.ExternalVolume || len(app.cfg.MixerDevice) > 0 {
-		// listen on external volume changes (for example the alsa driver)
-		go func() {
-			for {
-				v, err := appPlayer.externalVolumeUpdate.GetWait()
-				if errors.Is(err, output.ErrBufferClosed) {
-					break
-				}
-
-				appPlayer.updateVolume(uint32(v * player.MaxStateVolume))
-
-				// prevent "too many requests"
-				time.Sleep(2 * time.Second)
-			}
-		}()
 	}
 
 	return appPlayer, nil
@@ -356,6 +336,7 @@ type Config struct {
 	DeviceName            string    `koanf:"device_name"`
 	DeviceType            string    `koanf:"device_type"`
 	ClientToken           string    `koanf:"client_token"`
+	AudioBackend          string    `koanf:"audio_backend"`
 	AudioDevice           string    `koanf:"audio_device"`
 	MixerDevice           string    `koanf:"mixer_device"`
 	MixerControlName      string    `koanf:"mixer_control_name"`
@@ -429,6 +410,7 @@ func loadConfig(cfg *Config) error {
 	_ = k.Load(confmap.Provider(map[string]interface{}{
 		"log_level":          log.InfoLevel,
 		"device_type":        "computer",
+		"audio_backend":      "alsa",
 		"audio_device":       "default",
 		"mixer_control_name": "Master",
 		"bitrate":            160,

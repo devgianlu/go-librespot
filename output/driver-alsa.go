@@ -24,7 +24,7 @@ const (
 	NumPeriods      = 4 // number of periods requested
 )
 
-type output struct {
+type alsaOutput struct {
 	channels   int
 	sampleRate int
 	device     string
@@ -50,22 +50,22 @@ type output struct {
 	volume float32
 	closed bool
 
-	externalVolumeUpdate *RingBuffer[float32]
-	err                  chan error
+	volumeUpdate chan float32
+	err          chan error
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
-	out := &output{
-		reader:               reader,
-		channels:             channels,
-		sampleRate:           sampleRate,
-		device:               device,
-		mixer:                mixer,
-		control:              control,
-		volume:               initialVolume,
-		err:                  make(chan error, 2),
-		externalVolume:       externalVolume,
-		externalVolumeUpdate: externalVolumeUpdate,
+func newAlsaOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, volumeUpdate chan float32) (*alsaOutput, error) {
+	out := &alsaOutput{
+		reader:         reader,
+		channels:       channels,
+		sampleRate:     sampleRate,
+		device:         device,
+		mixer:          mixer,
+		control:        control,
+		volume:         initialVolume,
+		err:            make(chan error, 2),
+		externalVolume: externalVolume,
+		volumeUpdate:   volumeUpdate,
 	}
 
 	if err := out.setupMixer(); err != nil {
@@ -80,11 +80,11 @@ func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, dev
 	return out, nil
 }
 
-func (out *output) alsaError(name string, err C.int) error {
+func (out *alsaOutput) alsaError(name string, err C.int) error {
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
-func (out *output) setupPcm() error {
+func (out *alsaOutput) setupPcm() error {
 	cdevice := C.CString(out.device)
 	defer C.free(unsafe.Pointer(cdevice))
 	if err := C.snd_pcm_open(&out.pcmHandle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
@@ -192,7 +192,7 @@ func (out *output) setupPcm() error {
 	return nil
 }
 
-func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
+func (out *alsaOutput) logParams(params *C.snd_pcm_hw_params_t) error {
 	var dir C.int
 
 	var rate C.uint
@@ -231,7 +231,7 @@ func (out *output) logParams(params *C.snd_pcm_hw_params_t) error {
 	return nil
 }
 
-func (out *output) outputLoop(pcmHandle *C.snd_pcm_t) error {
+func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) error {
 	floats := make([]float32, out.channels*out.periodSize)
 
 	for {
@@ -309,7 +309,7 @@ func (out *output) outputLoop(pcmHandle *C.snd_pcm_t) error {
 	}
 }
 
-func (out *output) Pause() error {
+func (out *alsaOutput) Pause() error {
 	out.lock.Lock()
 	defer out.lock.Unlock()
 
@@ -325,7 +325,7 @@ func (out *output) Pause() error {
 	return nil
 }
 
-func (out *output) Resume() error {
+func (out *alsaOutput) Resume() error {
 	out.lock.Lock()
 	defer out.lock.Unlock()
 
@@ -340,7 +340,7 @@ func (out *output) Resume() error {
 	return nil
 }
 
-func (out *output) Drop() error {
+func (out *alsaOutput) Drop() error {
 	out.lock.Lock()
 	defer out.lock.Unlock()
 
@@ -360,7 +360,7 @@ func (out *output) Drop() error {
 	return nil
 }
 
-func (out *output) DelayMs() (int64, error) {
+func (out *alsaOutput) DelayMs() (int64, error) {
 	out.lock.Lock()
 	defer out.lock.Unlock()
 
@@ -376,12 +376,13 @@ func (out *output) DelayMs() (int64, error) {
 	return int64(frames) * 1000 / int64(out.sampleRate), nil
 }
 
-func (out *output) SetVolume(vol float32) {
+func (out *alsaOutput) SetVolume(vol float32) {
 	if vol < 0 || vol > 1 {
 		panic(fmt.Sprintf("invalid volume value: %0.2f", vol))
 	}
 
 	out.volume = vol
+	sendVolumeUpdate(out.volumeUpdate, vol)
 
 	if out.mixerEnabled && !out.externalVolume {
 		placeholder := C.float(-1)
@@ -395,12 +396,12 @@ func (out *output) SetVolume(vol float32) {
 	}
 }
 
-func (out *output) Error() <-chan error {
+func (out *alsaOutput) Error() <-chan error {
 	// No need to lock here (out.err is only set in newOutput).
 	return out.err
 }
 
-func (out *output) Close() error {
+func (out *alsaOutput) Close() error {
 	out.lock.Lock()
 	defer out.lock.Unlock()
 
