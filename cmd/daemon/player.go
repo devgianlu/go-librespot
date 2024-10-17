@@ -14,7 +14,6 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/dealer"
-	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
@@ -30,9 +29,9 @@ type AppPlayer struct {
 	stop   chan struct{}
 	logout chan *AppPlayer
 
-	player               *player.Player
-	initialVolumeOnce    sync.Once
-	externalVolumeUpdate *output.RingBuffer[float32]
+	player            *player.Player
+	initialVolumeOnce sync.Once
+	volumeUpdate      chan float32
 
 	spotConnId string
 
@@ -553,6 +552,10 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
 	playerRecv := p.player.Receive()
 
+	var updatedVolume float32
+	volumeTimer := time.NewTimer(time.Minute)
+	volumeTimer.Stop() // don't emit a volume change event at start
+
 	for {
 		select {
 		case <-p.stop:
@@ -578,6 +581,18 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 			req.Reply(data, err)
 		case ev := <-playerRecv:
 			p.handlePlayerEvent(&ev)
+		case volume := <-p.volumeUpdate:
+			// Received a new volume: from Spotify Connect, from the REST API,
+			// or from the system volume mixer.
+			// Because these updates can be quite frequent, we have to rate
+			// limit them (otherwise we get HTTP error 429: Too many requests
+			// for user). Sending the new value after 1 second of no updates
+			// matches the Spotify Web Player.
+			updatedVolume = volume
+			volumeTimer.Reset(time.Second)
+		case <-volumeTimer.C:
+			// We've gone 1 second without update, send the new value now.
+			p.volumeUpdated(uint32(updatedVolume * player.MaxStateVolume))
 		}
 	}
 }

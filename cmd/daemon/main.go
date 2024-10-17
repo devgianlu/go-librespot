@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/devgianlu/go-librespot/apresolve"
-	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/player"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/devgianlu/go-librespot/session"
@@ -102,11 +101,11 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
-		app:                  app,
-		stop:                 make(chan struct{}, 1),
-		logout:               app.logoutCh,
-		countryCode:          new(string),
-		externalVolumeUpdate: output.NewRingBuffer[float32](1),
+		app:          app,
+		stop:         make(chan struct{}, 1),
+		logout:       app.logoutCh,
+		countryCode:  new(string),
+		volumeUpdate: make(chan float32, 1),
 	}
 
 	// start a dummy timer for prefetching next media
@@ -128,28 +127,9 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, app.cfg.NormalisationPregain,
 		appPlayer.countryCode, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
-		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.externalVolumeUpdate,
+		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.volumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
-	}
-
-	// only update the "spotify volume", when external volume is enabled or a mixer is defined
-	// try to keep synchronized with the device volume
-	if app.cfg.ExternalVolume || len(app.cfg.MixerDevice) > 0 {
-		// listen on external volume changes (for example the alsa driver)
-		go func() {
-			for {
-				v, err := appPlayer.externalVolumeUpdate.GetWait()
-				if errors.Is(err, output.ErrBufferClosed) {
-					break
-				}
-
-				appPlayer.updateVolume(uint32(v * player.MaxStateVolume))
-
-				// prevent "too many requests"
-				time.Sleep(2 * time.Second)
-			}
-		}()
 	}
 
 	return appPlayer, nil

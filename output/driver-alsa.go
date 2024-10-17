@@ -50,22 +50,22 @@ type alsaOutput struct {
 	volume float32
 	closed bool
 
-	externalVolumeUpdate *RingBuffer[float32]
-	err                  chan error
+	volumeUpdate chan float32
+	err          chan error
 }
 
-func newAlsaOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*alsaOutput, error) {
+func newAlsaOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, volumeUpdate chan float32) (*alsaOutput, error) {
 	out := &alsaOutput{
-		reader:               reader,
-		channels:             channels,
-		sampleRate:           sampleRate,
-		device:               device,
-		mixer:                mixer,
-		control:              control,
-		volume:               initialVolume,
-		err:                  make(chan error, 2),
-		externalVolume:       externalVolume,
-		externalVolumeUpdate: externalVolumeUpdate,
+		reader:         reader,
+		channels:       channels,
+		sampleRate:     sampleRate,
+		device:         device,
+		mixer:          mixer,
+		control:        control,
+		volume:         initialVolume,
+		err:            make(chan error, 2),
+		externalVolume: externalVolume,
+		volumeUpdate:   volumeUpdate,
 	}
 
 	if err := out.setupMixer(); err != nil {
@@ -379,6 +379,7 @@ func (out *alsaOutput) SetVolume(vol float32) {
 	}
 
 	out.volume = vol
+	sendVolumeUpdate(out.volumeUpdate, vol)
 
 	if out.mixerEnabled && !out.externalVolume {
 		placeholder := C.float(-1)

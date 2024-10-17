@@ -586,6 +586,7 @@ func (p *AppPlayer) apiVolume() uint32 {
 	return uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
 }
 
+// Set the player volume to the new volume.
 func (p *AppPlayer) updateVolume(newVal uint32) {
 	if newVal > player.MaxStateVolume {
 		newVal = player.MaxStateVolume
@@ -593,13 +594,19 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 		newVal = 0
 	}
 
+	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
+	p.player.SetVolume(newVal)
+}
+
+// Send notification that the volume changed.
+// The original change can come from anywhere: from Spotify Connect, from the
+// REST API, or from a volume mixer.
+func (p *AppPlayer) volumeUpdated(newVal uint32) {
 	// skip volume update
 	if newVal == p.state.device.Volume {
 		return
 	}
 
-	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
-	p.player.SetVolume(newVal)
 	p.state.device.Volume = newVal
 
 	if err := p.putConnectState(connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
