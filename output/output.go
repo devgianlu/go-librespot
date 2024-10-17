@@ -68,14 +68,39 @@ type NewOutputOptions struct {
 	// ExternalVolume specifies, if the volume is controlled outside of the app.
 	ExternalVolume bool
 
-	ExternalVolumeUpdate *RingBuffer[float32]
+	// VolumeUpdate is a channel on which volume updates will be sent back to
+	// Spotify. All updates come through this channel, including those sent by
+	// Spotify.
+	// This must be a buffered channel.
+	VolumeUpdate chan float32
 }
 
 func NewOutput(options *NewOutputOptions) (Output, error) {
-	out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.ExternalVolumeUpdate)
+	out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.VolumeUpdate)
 	if err != nil {
 		return nil, err
 	}
 
 	return out, nil
+}
+
+// Do a non-blocking send on the channel to send a volume update.
+// The channel must be a buffered channel, and this function must not be run
+// concurrently. If so, it will do a non-blocking send removing old values from
+// the start of the queue.
+func sendVolumeUpdate(ch chan float32, val float32) {
+	if cap(ch) == 0 {
+		panic("channel must be buffered") // sanity check
+	}
+
+	// If there is a value in the channel buffer, remove it.
+	select {
+	case <-ch:
+	default:
+	}
+
+	// Send the new value.
+	// This should be non-blocking, assuming there's only a single call to
+	// sendVolumeUpdate at a time.
+	ch <- val
 }

@@ -61,7 +61,7 @@ func (out *alsaOutput) setupMixer() error {
 	C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
 	out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
 
-	_ = out.externalVolumeUpdate.Put(out.volume)
+	sendVolumeUpdate(out.volumeUpdate, out.volume)
 
 	// set callback and initialize private
 	var cb C.snd_mixer_elem_callback_t = (C.snd_mixer_elem_callback_t)(C.alsaMixerCallback)
@@ -104,7 +104,7 @@ func (out *alsaOutput) waitForMixerEvents() {
 				continue
 			}
 
-			_ = out.externalVolumeUpdate.Put(priv)
+			sendVolumeUpdate(out.volumeUpdate, priv)
 		} else {
 			errStrPtr := C.snd_strerror(res)
 			log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
