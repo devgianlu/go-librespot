@@ -11,10 +11,13 @@ Yet another open-source Spotify Connect compatible client, written in Go.
 
 ## Getting Started
 
-### Using prebuild binary
+### Using prebuilt binary
 
-To get started you can download prebuild binaries for
+To get started you can download prebuilt binaries for
 the [latest release](https://github.com/devgianlu/go-librespot/releases/latest).
+
+Development prebuilt binaries are also available
+as [GitHub Actions artifacts](https://github.com/devgianlu/go-librespot/blob/249b8fee709e2d08fe9c39a16ad0fc4b737cb967/.github/workflows/release.yml#L62).
 
 ### Building from source
 
