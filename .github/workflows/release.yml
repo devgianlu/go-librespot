@@ -3,6 +3,9 @@ name: Release
 on:
   push:
     tags: [ 'v*' ]
+    branches: [ 'master' ]
+  pull_request:
+    branches: [ 'master' ]
 
 permissions:
   contents: write
@@ -37,7 +40,7 @@ jobs:
       - run: git fetch --force --tags
 
       - name: Build image
-        run: | 
+        run: |
           docker build \
             --build-arg TARGET=${{ matrix.target }} \
             --build-arg GOARCH=${{ matrix.goarch }} \
@@ -48,6 +51,7 @@ jobs:
 
       - name: Compile binary
         run: |
+          mkdir -p /tmp/out
           docker run --rm \
             --env COMMIT=${{ github.sha }} \
             --env VERSION=${{ github.ref_name }} \
@@ -60,10 +64,11 @@ jobs:
         with:
           name: binaries
           path: /tmp/out
-          retention-days: 1
+          retention-days: 7
 
   publish:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
+    if: startsWith(github.ref, 'refs/tags/')
     needs:
       - build
     steps:
