@@ -32,8 +32,7 @@ type Player struct {
 	cmd chan playerCmd
 	ev  chan Event
 
-	externalVolume bool
-	volumeSteps    uint32
+	volumeSteps uint32
 
 	startedPlaying time.Time
 }
@@ -71,6 +70,7 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 		normalisationEnabled: normalisationEnabled,
 		normalisationPregain: normalisationPregain,
 		countryCode:          countryCode,
+		volumeSteps:          volumeSteps,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (*output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
 				Reader:               reader,
@@ -84,10 +84,9 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 				ExternalVolumeUpdate: externalVolumeUpdate,
 			})
 		},
-		externalVolume: externalVolume,
-		volumeSteps:    volumeSteps,
-		cmd:            make(chan playerCmd),
-		ev:             make(chan Event, 128), // FIXME: is too messy?
+
+		cmd: make(chan playerCmd),
+		ev:  make(chan Event, 128),
 	}
 
 	go p.manageLoop()
