@@ -60,7 +60,7 @@ func NewZeroconf(deviceName, deviceId string, deviceType devicespb.DeviceType) (
 	}
 
 	listenPort := z.listener.Addr().(*net.TCPAddr).Port
-	log.Debugf("zeroconf server listening on port %d", listenPort)
+	log.Infof("zeroconf server listening on port %d", listenPort)
 
 	z.server, err = zeroconf.Register(deviceName, "_spotify-connect._tcp", "local.", listenPort, []string{"CPath=/", "VERSION=1.0", "Stack=SP"}, nil)
 	if err != nil {
