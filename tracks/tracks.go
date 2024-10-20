@@ -2,7 +2,9 @@ package tracks
 
 import (
 	"fmt"
+	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"slices"
+	"strconv"
 
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -310,5 +312,25 @@ func (tl *List) ToggleShuffle(shuffle bool) error {
 			log.Debugf("unshuffled context by fetching pages (len: %d)", tl.tracks.len())
 			return nil
 		}
+	}
+}
+
+func (tl *List) ApplySelectedListContent(content *playlist4pb.SelectedListContent) {
+	for _, item := range content.Contents.Items {
+		spotId := librespot.SpotifyIdFromUri(item.GetUri())
+		track := connectpb.ContextTrack{
+			Uri: spotId.Uri(),
+			Gid: spotId.Id(),
+			Metadata: map[string]string{
+				"added_at":          strconv.FormatInt(item.Attributes.GetTimestamp(), 10),
+				"added_by_username": item.Attributes.GetAddedBy(),
+			},
+		}
+
+		for _, attr := range item.Attributes.FormatAttributes {
+			track.Metadata[*attr.Key] = *attr.Value
+		}
+
+		log.Infof("%v", &track) // TODO: no clue where these should be added
 	}
 }
