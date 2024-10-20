@@ -183,7 +183,7 @@
         },
         "initial_volume": {
           "type": "integer",
-          "description": "Initial volume in steps",
+          "description": "Initial volume in steps (not applied to the mixer device)",
           "min": 0,
           "default": 100
         },
