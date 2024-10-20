@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	"math"
 	"os"
 	"path/filepath"
@@ -559,6 +560,8 @@ func main() {
 
 	// set log level
 	log.SetLevel(cfg.LogLevel)
+
+	log.Infof("running go-librespot %s", librespot.VersionNumberString())
 
 	// create new app
 	app, err := NewApp(&cfg)
