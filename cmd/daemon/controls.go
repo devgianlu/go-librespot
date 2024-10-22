@@ -30,15 +30,17 @@ func (p *AppPlayer) prefetchNext() {
 		return
 	}
 
-	nextId := librespot.SpotifyIdFromUri(next.Uri)
-	if p.secondaryStream != nil && p.secondaryStream.Is(nextId) {
+	nextId, err := librespot.SpotifyIdFromUri(next.Uri)
+	if err != nil {
+		log.WithError(err).WithField("uri", next.Uri).Warn("failed parsing prefetch uri")
+		return
+	} else if p.secondaryStream != nil && p.secondaryStream.Is(*nextId) {
 		return
 	}
 
 	log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
-	var err error
-	p.secondaryStream, err = p.player.NewStream(nextId, p.app.cfg.Bitrate, 0)
+	p.secondaryStream, err = p.player.NewStream(*nextId, p.app.cfg.Bitrate, 0)
 	if err != nil {
 		log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
 		return
@@ -196,8 +198,10 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	p.primaryStream = nil
 
-	spotId := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
-	if spotId.Type() != librespot.SpotifyIdTypeTrack && spotId.Type() != librespot.SpotifyIdTypeEpisode {
+	spotId, err := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
+	if err != nil {
+		return fmt.Errorf("failed parsing uri: %w", err)
+	} else if spotId.Type() != librespot.SpotifyIdTypeTrack && spotId.Type() != librespot.SpotifyIdTypeEpisode {
 		return fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
 
@@ -221,7 +225,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	})
 
 	var prefetched bool
-	if p.secondaryStream != nil && p.secondaryStream.Is(spotId) {
+	if p.secondaryStream != nil && p.secondaryStream.Is(*spotId) {
 		p.primaryStream = p.secondaryStream
 		p.secondaryStream = nil
 		prefetched = true
@@ -230,7 +234,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 		prefetched = false
 
 		var err error
-		p.primaryStream, err = p.player.NewStream(spotId, p.app.cfg.Bitrate, trackPosition)
+		p.primaryStream, err = p.player.NewStream(*spotId, p.app.cfg.Bitrate, trackPosition)
 		if err != nil {
 			return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
 		}

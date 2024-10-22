@@ -468,7 +468,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 
 		var skipTo skipToFunc
 		if len(data.SkipToUri) > 0 {
-			skipToId, err := librespot.SpotifyIdFromUriSafe(data.SkipToUri)
+			skipToId, err := librespot.SpotifyIdFromUri(data.SkipToUri)
 			if err != nil {
 				log.WithError(err).Warnf("trying to skip to invalid uri: %s", data.SkipToUri)
 				skipToId = nil

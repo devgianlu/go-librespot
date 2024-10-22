@@ -93,7 +93,7 @@ func SpotifyIdFromGid(typ SpotifyIdType, id []byte) SpotifyId {
 	return SpotifyId{typ, id}
 }
 
-func SpotifyIdFromUriSafe(uri string) (_ *SpotifyId, err error) {
+func SpotifyIdFromUri(uri string) (_ *SpotifyId, err error) {
 	matches := UriRegexp.FindStringSubmatch(uri)
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("invalid uri: %s", uri)
@@ -106,13 +106,4 @@ func SpotifyIdFromUriSafe(uri string) (_ *SpotifyId, err error) {
 	}
 
 	return &SpotifyId{SpotifyIdType(matches[1]), i.FillBytes(make([]byte, 16))}, nil
-}
-
-func SpotifyIdFromUri(uri string) SpotifyId {
-	id, err := SpotifyIdFromUriSafe(uri)
-	if err != nil {
-		panic(err)
-	}
-
-	return *id
 }
