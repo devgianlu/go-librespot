@@ -1,6 +1,8 @@
 # Cross Compiling
 
-Cross compilation is currently described for Linux only. All the commands below assume that the host is `x86_64`.
+Cross compilation is currently described for Linux only. All the commands below rely on the host platform being
+`linux/amd64`: this is currently enforced by the Dockerfile. If you are not on a `linux/amd64` system, have a look
+at [Multi-platform builds](https://docs.docker.com/build/building/multi-platform/).
 
 ## Create Docker images for (cross-)compiling
 

@@ -1,4 +1,4 @@
-FROM docker.io/golang:1.22.2-bookworm
+FROM --platform=linux/amd64 docker.io/golang:1.22.2-bookworm
 
 ENV COMMIT=dev
 ENV VERSION=0.0.0
