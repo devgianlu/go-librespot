@@ -134,9 +134,15 @@ loop:
 				// set source
 				source.SetPrimary(data.source)
 				if data.paused {
-					_ = out.Pause()
+					if err := out.Pause(); err != nil {
+						cmd.resp <- err
+						break
+					}
 				} else {
-					_ = out.Resume()
+					if err := out.Resume(); err != nil {
+						cmd.resp <- err
+						break
+					}
 				}
 
 				if data.drop {
@@ -154,21 +160,21 @@ loop:
 			case playerCmdPlay:
 				if out != nil {
 					if err := out.Resume(); err != nil {
-						log.WithError(err).Errorf("failed resuming playback")
+						cmd.resp <- err
+					} else {
+						cmd.resp <- nil
+						p.ev <- Event{Type: EventTypePlaying}
 					}
 				}
-
-				cmd.resp <- struct{}{}
-				p.ev <- Event{Type: EventTypePlaying}
 			case playerCmdPause:
 				if out != nil {
 					if err := out.Pause(); err != nil {
-						log.WithError(err).Errorf("failed pausing playback")
+						cmd.resp <- err
+					} else {
+						cmd.resp <- nil
+						p.ev <- Event{Type: EventTypePaused}
 					}
 				}
-
-				cmd.resp <- struct{}{}
-				p.ev <- Event{Type: EventTypePaused}
 			case playerCmdStop:
 				if out != nil {
 					_ = out.Close()
@@ -264,16 +270,24 @@ func (p *Player) SetVolume(val uint32) {
 	p.cmd <- playerCmd{typ: playerCmdVolume, data: vol}
 }
 
-func (p *Player) Play() {
+func (p *Player) Play() error {
 	resp := make(chan any, 1)
 	p.cmd <- playerCmd{typ: playerCmdPlay, resp: resp}
-	<-resp
+	if err := <-resp; err != nil {
+		return err.(error)
+	}
+
+	return nil
 }
 
-func (p *Player) Pause() {
+func (p *Player) Pause() error {
 	resp := make(chan any, 1)
 	p.cmd <- playerCmd{typ: playerCmdPause, resp: resp}
-	<-resp
+	if err := <-resp; err != nil {
+		return err.(error)
+	}
+
+	return nil
 }
 
 func (p *Player) Stop() {

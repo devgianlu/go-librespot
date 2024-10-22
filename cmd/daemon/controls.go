@@ -363,7 +363,9 @@ func (p *AppPlayer) play() error {
 		return fmt.Errorf("failed seeking before play: %w", err)
 	}
 
-	p.player.Play()
+	if err := p.player.Play(); err != nil {
+		return fmt.Errorf("failed starting playback: %w", err)
+	}
 
 	streamPos := p.player.PositionMs()
 	log.Debugf("resume track at %dms", streamPos)
@@ -385,7 +387,9 @@ func (p *AppPlayer) pause() error {
 	streamPos := p.player.PositionMs()
 	log.Debugf("pause track at %dms", streamPos)
 
-	p.player.Pause()
+	if err := p.player.Pause(); err != nil {
+		return fmt.Errorf("failed pausing playback: %w", err)
+	}
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
