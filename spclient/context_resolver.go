@@ -50,19 +50,21 @@ func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (_ *ContextResolve
 	typ := librespot.InferSpotifyIdTypeFromContextUri(ctx.Uri)
 
 	if len(ctx.Pages) == 0 || !isTracksComplete(ctx) {
-		ctx, err = sp.ContextResolve(ctx.Uri)
+		newCtx, err := sp.ContextResolve(ctx.Uri)
 		if err != nil {
 			return nil, fmt.Errorf("failed resolving context %s: %w", ctx.Uri, err)
-		} else if ctx.Loading {
-			return nil, fmt.Errorf("context %s is loading", ctx.Uri)
+		} else if newCtx.Loading {
+			return nil, fmt.Errorf("context %s is loading", newCtx.Uri)
 		}
 
-		if ctx.Metadata == nil {
-			ctx.Metadata = map[string]string{}
+		if newCtx.Metadata == nil {
+			newCtx.Metadata = map[string]string{}
 		}
 		for key, val := range ctx.Metadata {
-			ctx.Metadata[key] = val
+			newCtx.Metadata[key] = val
 		}
+
+		ctx = newCtx
 	}
 
 	autoplay := strings.HasPrefix(ctx.Uri, "spotify:station:")
