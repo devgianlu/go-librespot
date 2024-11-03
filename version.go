@@ -3,13 +3,14 @@ package go_librespot
 import (
 	"fmt"
 	"runtime"
+	"strings"
 )
 
 var commit, version string
 
 func VersionNumberString() string {
 	if len(version) > 0 {
-		return version
+		return strings.TrimPrefix(version, "v")
 	} else if len(commit) >= 8 {
 		return commit[:8]
 	} else {
@@ -38,5 +39,5 @@ func SystemInfoString() string {
 }
 
 func UserAgent() string {
-	return fmt.Sprintf("github.com/devgianlu/go-librespot/%s Go/%s", VersionNumberString(), runtime.Version())
+	return fmt.Sprintf("go-librespot/%s Go/%s", VersionNumberString(), runtime.Version())
 }
