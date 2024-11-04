@@ -54,7 +54,7 @@ jobs:
           mkdir -p /tmp/out
           docker run --rm \
             --env COMMIT=${{ github.sha }} \
-            --env VERSION=${{ github.ref_name }} \
+            --env VERSION=${{ startsWith(github.ref_name, 'v') && github.ref_name || '' }} \
             -v $PWD:/src \
             go-librespot-build-${{ matrix.target }}
           tar -zcvf /tmp/out/go-librespot_${{ matrix.tar }}.tar.gz go-librespot README.md
