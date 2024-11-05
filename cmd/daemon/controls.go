@@ -530,7 +530,7 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
-	if !hasNextTrack && p.prodInfo.AutoplayEnabled() {
+	if !hasNextTrack && !p.app.cfg.DisableAutoplay {
 		p.state.player.Suppressions = &connectpb.Suppressions{}
 
 		var prevTrackUris []string

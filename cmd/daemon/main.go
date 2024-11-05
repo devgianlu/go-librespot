@@ -367,6 +367,7 @@ type Config struct {
 	NormalisationPregain  float32   `koanf:"normalisation_pregain"`
 	ExternalVolume        bool      `koanf:"external_volume"`
 	ZeroconfEnabled       bool      `koanf:"zeroconf_enabled"`
+	DisableAutoplay       bool      `koanf:"disable_autoplay"`
 	Server                struct {
 		Enabled     bool   `koanf:"enabled"`
 		Address     string `koanf:"address"`

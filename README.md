@@ -141,6 +141,7 @@ bitrate: 160 # Playback bitrate (96, 160, 320)
 volume_steps: 100 # Volume steps count
 initial_volume: 100 # Initial volume in steps (not applied to the mixer device)
 external_volume: false # Whether volume is controlled externally 
+disable_autoplay: false # Whether autoplay of more songs should be disabled
 ```
 
 Make sure to check [here](/config_schema.json) for the full list of options.

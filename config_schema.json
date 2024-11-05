@@ -201,6 +201,11 @@
           "type": "boolean",
           "description": "Whether volume is controlled externally, if true the app will not pre-multiply samples",
           "default": false
+        },
+        "disable_autoplay": {
+          "type": "boolean",
+          "description": "Whether autoplay of more songs should be disabled",
+          "default": false
         }
       },
       "required": [
