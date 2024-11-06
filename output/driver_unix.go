@@ -182,11 +182,8 @@ func (out *output) setupPcm() error {
 	// (Pause() or Close()) or there is an error.
 	pcmHandle := out.pcmHandle
 	go func() {
-		err := out.outputLoop(pcmHandle)
-		if err != nil {
-			out.err <- err
-			_ = out.Close()
-		}
+		out.err <- out.outputLoop(pcmHandle)
+		_ = out.Close()
 	}()
 
 	return nil
