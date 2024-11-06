@@ -533,11 +533,13 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 	if !hasNextTrack && !p.app.cfg.DisableAutoplay {
 		p.state.player.Suppressions = &connectpb.Suppressions{}
 
+		// Consider all tracks as recent because we got here by reaching the end of the context
 		var prevTrackUris []string
-		for _, track := range p.state.tracks.PrevTracks() {
+		for _, track := range p.state.tracks.AllTracks() {
 			prevTrackUris = append(prevTrackUris, track.Uri)
 		}
 
+		log.Debugf("resolving autoplay station for %d tracks", len(prevTrackUris))
 		ctx, err := p.sess.Spclient().ContextResolveAutoplay(&playerpb.AutoplayContextRequest{
 			ContextUri:     proto.String(p.state.player.ContextUri),
 			RecentTrackUri: prevTrackUris,

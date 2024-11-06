@@ -72,6 +72,22 @@ func (tl *List) Seek(f func(*connectpb.ContextTrack) bool) error {
 	return fmt.Errorf("could not find track")
 }
 
+func (tl *List) AllTracks() []*connectpb.ProvidedTrack {
+	tracks := make([]*connectpb.ProvidedTrack, 0, tl.tracks.len())
+
+	iter := tl.tracks.iterStart()
+	for iter.next() {
+		curr := iter.get()
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item, "context"))
+	}
+
+	if err := iter.error(); err != nil {
+		log.WithError(err).Error("failed fetching all tracks")
+	}
+
+	return tracks
+}
+
 const MaxTracksInContext = 32
 
 func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
