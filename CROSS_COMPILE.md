@@ -57,23 +57,23 @@ docker build \
 ### Target Linux x86_64
 
 ```bash
-docker run --rm -v $PWD:/src -e GOOUTSUFFIX=-x86_64 go-librespot-build-x86_64
+docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-x86_64 go-librespot-build-x86_64
 ```
 
 ### Target Linux on Raspberry Pi 1 / Zero
 
 ```bash
-docker run --rm -v $PWD:/src -e GOOUTSUFFIX=-armv6_rpi go-librespot-build-armv6_rpi
+docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-armv6_rpi go-librespot-build-armv6_rpi
 ```
 
 ### Target Linux ARM32 (Raspberry Pi 2 and above)
 
 ```bash
-docker run --rm -v $PWD:/src -e GOOUTSUFFIX=-armv6 go-librespot-build-armv6
+docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-armv6 go-librespot-build-armv6
 ```
 
 ### Target Linux ARM64
 
 ```bash
-docker run --rm -v $PWD:/src g-e GOOUTSUFFIX=-arm64 go-librespot-build-arm64
+docker run --rm -u $(id -u):$(id -g) -v $PWD:/src g-e GOOUTSUFFIX=-arm64 go-librespot-build-arm64
 ```
