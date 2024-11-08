@@ -182,8 +182,16 @@ func (out *alsaOutput) setupPcm() error {
 	// (Pause() or Close()) or there is an error.
 	pcmHandle := out.pcmHandle
 	go func() {
-		out.err <- out.outputLoop(pcmHandle)
-		_ = out.Close()
+		err := out.outputLoop(pcmHandle)
+		if out.pcmHandle != nil {
+			_ = C.snd_pcm_close(out.pcmHandle)
+			out.pcmHandle = nil
+		}
+
+		if err != nil {
+			_ = out.Close()
+			out.err <- err
+		}
 	}()
 
 	return nil
