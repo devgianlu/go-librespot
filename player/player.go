@@ -203,6 +203,7 @@ loop:
 					cmd.resp <- nil
 				}
 			case playerCmdPosition:
+				pos := source.PositionMs()
 				if out != nil {
 					delay, err := out.DelayMs()
 					if err != nil {
@@ -210,9 +211,9 @@ loop:
 						delay = 0
 					}
 
-					cmd.resp <- source.PositionMs() - delay
+					cmd.resp <- pos - delay
 				} else {
-					cmd.resp <- int64(0)
+					cmd.resp <- pos
 				}
 			case playerCmdVolume:
 				volume = cmd.data.(float32)
