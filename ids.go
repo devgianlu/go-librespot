@@ -20,7 +20,7 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 	return SpotifyIdTypeTrack
 }
 
-func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrack, provider string) *connectpb.ProvidedTrack {
+func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
 	var uri string
 	if len(track.Uri) > 0 {
 		uri = track.Uri
@@ -32,6 +32,13 @@ func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrac
 
 	artistUri, _ := track.Metadata["artist_uri"]
 	albumUri, _ := track.Metadata["album_uri"]
+
+	provider := "context"
+	if val := track.Metadata["is_queued"]; val == "true" {
+		provider = "queue"
+	} else if val = track.Metadata["autoplay.is_autoplay"]; val == "true" {
+		provider = "autoplay"
+	}
 
 	return &connectpb.ProvidedTrack{
 		Uri:       uri,

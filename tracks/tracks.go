@@ -78,7 +78,7 @@ func (tl *List) AllTracks() []*connectpb.ProvidedTrack {
 	iter := tl.tracks.iterStart()
 	for iter.next() {
 		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item, "context"))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
 	}
 
 	if err := iter.error(); err != nil {
@@ -96,7 +96,7 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	iter := tl.tracks.iterHere()
 	for len(tracks) < MaxTracksInContext && iter.prev() {
 		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item, "context"))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
 	}
 
 	if err := iter.error(); err != nil {
@@ -119,14 +119,14 @@ func (tl *List) NextTracks() []*connectpb.ProvidedTrack {
 		}
 
 		for i := 0; i < len(queue) && len(tracks) < MaxTracksInContext; i++ {
-			tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), queue[i], "queue"))
+			tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), queue[i]))
 		}
 	}
 
 	iter := tl.tracks.iterHere()
 	for len(tracks) < MaxTracksInContext && iter.next() {
 		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item, "context"))
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
 	}
 
 	if err := iter.error(); err != nil {
@@ -156,17 +156,7 @@ func (tl *List) current() *connectpb.ContextTrack {
 
 func (tl *List) CurrentTrack() *connectpb.ProvidedTrack {
 	item := tl.current()
-
-	var provider string
-	if autoplay, ok := item.Metadata["autoplay.is_autoplay"]; ok && autoplay == "true" {
-		provider = "autoplay"
-	} else if tl.playingQueue {
-		provider = "queue"
-	} else {
-		provider = "context"
-	}
-
-	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), item, provider)
+	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), item)
 }
 
 func (tl *List) GoStart() bool {
