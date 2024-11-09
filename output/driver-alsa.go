@@ -181,10 +181,7 @@ func (out *alsaOutput) setupPcm() error {
 	// This loop continues until the PCM handle is closed and set to nil
 	// (Pause() or Close()) or there is an error.
 	pcmHandle := out.pcmHandle
-	go func() {
-		out.err <- out.outputLoop(pcmHandle)
-		_ = out.Close()
-	}()
+	go out.outputLoop(pcmHandle)
 
 	return nil
 }
@@ -228,7 +225,7 @@ func (out *alsaOutput) logParams(params *C.snd_pcm_hw_params_t) error {
 	return nil
 }
 
-func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) error {
+func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 	floats := make([]float32, out.channels*out.periodSize)
 
 	for {
@@ -245,7 +242,7 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) error {
 			// (with a very fast pause+resume). In both cases, the loop should
 			// be stopped.
 			out.lock.Unlock()
-			return nil
+			return
 		}
 		availableFrames := int(C.snd_pcm_avail(pcmHandle))
 		waitForFrames := (out.periodSize + out.periodSize/8) - availableFrames
@@ -261,7 +258,7 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) error {
 		out.lock.Lock()
 		if pcmHandle != out.pcmHandle {
 			out.lock.Unlock()
-			return nil
+			return
 		}
 
 		// Read audio data. This can take a few milliseconds because it needs to
@@ -287,19 +284,31 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) error {
 				// Got an error, so must recover (even for an underrun).
 				errCode := C.snd_pcm_recover(pcmHandle, C.int(nn), 1)
 				if errCode < 0 {
-					// Failed to recover from this error.
+					// Failed to recover from this error. Close the output and
+					// report the error.
+					out.err <- out.alsaError("snd_pcm_recover", C.int(errCode))
+					out.closed = true
 					out.lock.Unlock()
-					return out.alsaError("snd_pcm_recover", C.int(errCode))
+					return
 				}
 			}
 		}
 
 		if errors.Is(err, io.EOF) {
+			// Reached EOF, move to a "paused" state.
+			out.pcmHandle = nil
+			if errCode := C.snd_pcm_close(pcmHandle); errCode < 0 {
+				out.err <- out.alsaError("snd_pcm_close", errCode)
+				out.lock.Unlock()
+			}
 			out.lock.Unlock()
-			return nil
+			return
 		} else if err != nil {
+			// Got some other error. Close the output and report the error.
+			out.err <- err
+			out.closed = true
 			out.lock.Unlock()
-			return err
+			return
 		}
 
 		out.lock.Unlock()
