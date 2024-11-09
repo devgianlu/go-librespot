@@ -24,6 +24,12 @@ const (
 	NumPeriods      = 4 // number of periods requested
 )
 
+// How samples to take for ramping up/down the volume on volume changes.
+// 4096 samples (46ms at stereo 44100 sample rate) is almost entirely inaudible
+// with low bass sounds. Normal music would be fine with a much shorter volume
+// ramp.
+const volumeRamp = 4096
+
 type alsaOutput struct {
 	channels   int
 	sampleRate int
@@ -47,8 +53,10 @@ type alsaOutput struct {
 	mixerMinVolume  C.long
 	mixerMaxVolume  C.long
 
-	volume float32
-	closed bool
+	volume         float32
+	oldVolume      float32
+	volSamplesLeft int
+	closed         bool
 
 	volumeUpdate chan float32
 	err          chan error
@@ -270,12 +278,20 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) error {
 
 		// Apply volume.
 		if !out.mixerEnabled && !out.externalVolume {
-			// Map volume (in percent) to what is perceived as linear by
-			// humans. This is the same as math.Pow(out.volume, 2) but simpler.
-			volume := out.volume * out.volume
+			// Map linearVolume (in percent) to what is perceived as linear by
+			// humans. This is the same as math.Pow(out.linearVolume, 2) but simpler.
+			linearVolume := out.volume * out.volume
+			oldLinearVolume := out.oldVolume * out.oldVolume
 
 			for i := 0; i < n; i++ {
-				floats[i] *= volume
+				// Ramp volume up/down over a few samples to avoid popping noises.
+				v := linearVolume
+				if out.volSamplesLeft != 0 {
+					v = (oldLinearVolume*float32(out.volSamplesLeft) + v*float32(volumeRamp-out.volSamplesLeft)) / volumeRamp
+					out.volSamplesLeft--
+				}
+
+				floats[i] *= v
 			}
 		}
 
@@ -378,7 +394,11 @@ func (out *alsaOutput) SetVolume(vol float32) {
 		panic(fmt.Sprintf("invalid volume value: %0.2f", vol))
 	}
 
+	// TODO: if the volume changes in quick succession, the volume ramp won't
+	// work properly.
+	out.oldVolume = out.volume
 	out.volume = vol
+	out.volSamplesLeft = volumeRamp - 1
 	sendVolumeUpdate(out.volumeUpdate, vol)
 
 	if out.mixerEnabled && !out.externalVolume {
