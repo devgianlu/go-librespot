@@ -79,9 +79,11 @@ func (ap *Accesspoint) init() (err error) {
 		attempts++
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		addr := ap.addr()
-		ap.conn, err = proxy.Dial(ctx, "tcp", addr)
+		conn, err := proxy.Dial(ctx, "tcp", addr)
 		cancel()
 		if err == nil {
+			// we assign to ap.conn after because if Dial fails we'll have a nil ap.conn which we don't want
+			ap.conn = conn
 			// Successfully connected.
 			log.Debugf("connected to %s", addr)
 			return nil
