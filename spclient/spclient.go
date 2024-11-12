@@ -108,7 +108,7 @@ func (c *Spclient) WebApiRequest(method string, path string, query url.Values, h
 	return c.innerRequest(method, reqURL, query, header, body)
 }
 
-func (c *Spclient) request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+func (c *Spclient) Request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqUrl := c.baseUrl.JoinPath(path)
 	return c.innerRequest(method, reqUrl, query, header, body)
 }
@@ -119,7 +119,7 @@ type putStateError struct {
 }
 
 func (c *Spclient) PutConnectStateInactive(spotConnId string, notify bool) error {
-	resp, err := c.request(
+	resp, err := c.Request(
 		"PUT",
 		fmt.Sprintf("/connect-state/v1/devices/%s/inactive", c.deviceId),
 		url.Values{"notify": []string{strconv.FormatBool(notify)}},
@@ -148,7 +148,7 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutSta
 		return fmt.Errorf("failed marshalling PutStateRequest: %w", err)
 	}
 	_, err = backoff.RetryWithData(func() (*http.Response, error) {
-		resp, err := c.request(
+		resp, err := c.Request(
 			"PUT",
 			fmt.Sprintf("/connect-state/v1/devices/%s", c.deviceId),
 			nil,
@@ -190,7 +190,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 		path = fmt.Sprintf("/storage-resolve/files/audio/interactive/%s", hex.EncodeToString(fileId))
 	}
 
-	resp, err := c.request("GET", path, nil, nil, nil)
+	resp, err := c.Request("GET", path, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 		log.Debugf("storage resolve returned service unavailable, retrying...")
 		_ = resp.Body.Close()
 
-		resp, err = c.request("GET", path, nil, nil, nil)
+		resp, err = c.Request("GET", path, nil, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -229,7 +229,7 @@ func (c *Spclient) MetadataForTrack(track librespot.SpotifyId) (*metadatapb.Trac
 		panic(fmt.Sprintf("invalid type: %s", track.Type()))
 	}
 
-	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
+	resp, err := c.Request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func (c *Spclient) MetadataForEpisode(episode librespot.SpotifyId) (*metadatapb.
 		panic(fmt.Sprintf("invalid type: %s", episode.Type()))
 	}
 
-	resp, err := c.request("GET", fmt.Sprintf("/metadata/4/episode/%s", episode.Hex()), nil, nil, nil)
+	resp, err := c.Request("GET", fmt.Sprintf("/metadata/4/episode/%s", episode.Hex()), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +292,7 @@ func (c *Spclient) PlaylistSignals(playlist librespot.SpotifyId, reqProto *playl
 		return nil, fmt.Errorf("failed marshalling ListSignals: %w", err)
 	}
 
-	resp, err := c.request("POST", fmt.Sprintf("/playlist/v2/playlist/%s/signals", playlist.Base62()), nil, http.Header{
+	resp, err := c.Request("POST", fmt.Sprintf("/playlist/v2/playlist/%s/signals", playlist.Base62()), nil, http.Header{
 		"Spotify-Apply-Lenses": lenses,
 	}, reqBody)
 	if err != nil {
@@ -319,7 +319,7 @@ func (c *Spclient) PlaylistSignals(playlist librespot.SpotifyId, reqProto *playl
 }
 
 func (c *Spclient) ContextResolve(uri string) (*connectpb.Context, error) {
-	resp, err := c.request("GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
+	resp, err := c.Request("GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (c *Spclient) ContextResolveAutoplay(reqProto *playerpb.AutoplayContextRequ
 		return nil, fmt.Errorf("failed marshalling AutoplayContextRequest: %w", err)
 	}
 
-	resp, err := c.request("POST", "/context-resolve/v1/autoplay", nil, nil, reqBody)
+	resp, err := c.Request("POST", "/context-resolve/v1/autoplay", nil, nil, reqBody)
 	if err != nil {
 		return nil, err
 	}

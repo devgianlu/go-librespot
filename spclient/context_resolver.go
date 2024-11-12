@@ -101,7 +101,7 @@ func (r *ContextResolver) loadPage(url string) (*connectpb.ContextPage, error) {
 	}
 
 	url = url[5:]
-	resp, err := r.sp.request("GET", url, nil, nil, nil)
+	resp, err := r.sp.Request("GET", url, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting page at %s: %w", url, err)
 	}
