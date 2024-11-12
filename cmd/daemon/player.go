@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/dealer"
@@ -18,8 +21,6 @@ import (
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
 	"github.com/devgianlu/go-librespot/tracks"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 )
 
 type AppPlayer struct {
@@ -160,13 +161,13 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		// options
 		p.state.player.Options = transferState.Options
-
+		pause := transferState.Playback.IsPaused && req.Command.Options.RestorePaused == "pause"
 		// playback
 		// Note: this sets playback speed to 0 or 1 because that's all we're
 		// capable of, depending on whether the playback is paused or not.
 		p.state.player.Timestamp = transferState.Playback.Timestamp
 		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
-		p.state.setPaused(transferState.Playback.IsPaused)
+		p.state.setPaused(pause)
 
 		// current session
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
@@ -225,7 +226,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.player.Index = ctxTracks.Index()
 
 		// load current track into stream
-		if err := p.loadCurrentTrack(transferState.Playback.IsPaused, true); err != nil {
+		if err := p.loadCurrentTrack(pause, true); err != nil {
 			return fmt.Errorf("failed loading current track (transfer): %w", err)
 		}
 
