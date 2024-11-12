@@ -11,6 +11,9 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+	"google.golang.org/protobuf/proto"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/dealer"
@@ -18,8 +21,6 @@ import (
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
 	"github.com/devgianlu/go-librespot/tracks"
-	log "github.com/sirupsen/logrus"
-	"google.golang.org/protobuf/proto"
 )
 
 type AppPlayer struct {
@@ -43,6 +44,9 @@ type AppPlayer struct {
 	secondaryStream *player.Stream
 
 	prefetchTimer *time.Timer
+
+	lastVolumeUpdateTime time.Time
+	lastVolumeUpdateVal  int32
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -498,12 +502,20 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 
 		var volume int32
 		if data.Relative {
-			volume = int32(p.apiVolume())
+			if p.lastVolumeUpdateTime.IsZero() || time.Since(p.lastVolumeUpdateTime).Seconds() > 1 {
+				volume = int32(p.apiVolume())
+			} else {
+				volume = p.lastVolumeUpdateVal
+			}
 			volume += data.Volume
 			volume = max(min(volume, int32(p.app.cfg.VolumeSteps)), 0)
 		} else {
 			volume = data.Volume
 		}
+
+		// TODO: we should only store it if the update was successful
+		p.lastVolumeUpdateTime = time.Now()
+		p.lastVolumeUpdateVal = volume
 
 		p.updateVolume(uint32(volume) * player.MaxStateVolume / p.app.cfg.VolumeSteps)
 		return nil, nil
