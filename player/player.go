@@ -425,7 +425,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
 	}
 
-	audioStream, meta, err := audio.ExtractMetadataPage(decryptedStream, rawStream.Size())
+	audioStream, meta, err := vorbis.ExtractMetadataPage(decryptedStream, rawStream.Size())
 	if err != nil {
 		return nil, fmt.Errorf("failed reading metadata page: %w", err)
 	}

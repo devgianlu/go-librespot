@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	librespot "github.com/devgianlu/go-librespot"
-	"github.com/devgianlu/go-librespot/audio"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/xlab/vorbis-go/vorbis"
@@ -29,7 +28,7 @@ type Decoder struct {
 	Channels   int32
 
 	// meta is the associated metadata (for seeking)
-	meta *audio.MetadataPage
+	meta *MetadataPage
 
 	// gain is the default track gain.
 	gain float32
@@ -85,7 +84,7 @@ type Info struct {
 }
 
 // New creates and initialises a new OggVorbis decoder for the provided bytestream.
-func New(log *log.Entry, r librespot.SizedReadAtSeeker, meta *audio.MetadataPage, gain float32) (*Decoder, error) {
+func New(log *log.Entry, r librespot.SizedReadAtSeeker, meta *MetadataPage, gain float32) (*Decoder, error) {
 	d := &Decoder{
 		log:      log,
 		input:    r,
