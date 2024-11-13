@@ -161,7 +161,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		// options
 		p.state.player.Options = transferState.Options
-		pause := transferState.Playback.IsPaused && req.Command.Options.RestorePaused == "pause"
+		pause := transferState.Playback.IsPaused && req.Command.Options.RestorePaused != "resume"
 		// playback
 		// Note: this sets playback speed to 0 or 1 because that's all we're
 		// capable of, depending on whether the playback is paused or not.
