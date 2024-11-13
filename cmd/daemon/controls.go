@@ -601,14 +601,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 // Send notification that the volume changed.
 // The original change can come from anywhere: from Spotify Connect, from the
 // REST API, or from a volume mixer.
-func (p *AppPlayer) volumeUpdated(newVal uint32) {
-	// skip volume update
-	if newVal == p.state.device.Volume {
-		return
-	}
-
-	p.state.device.Volume = newVal
-
+func (p *AppPlayer) volumeUpdated() {
 	if err := p.putConnectState(connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after volume change")
 	}
