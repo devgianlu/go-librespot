@@ -552,7 +552,6 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
 	playerRecv := p.player.Receive()
 
-	var updatedVolume float32
 	volumeTimer := time.NewTimer(time.Minute)
 	volumeTimer.Stop() // don't emit a volume change event at start
 
@@ -588,11 +587,11 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 			// limit them (otherwise we get HTTP error 429: Too many requests
 			// for user). Sending the new value after 1 second of no updates
 			// matches the Spotify Web Player.
-			updatedVolume = volume
+			p.state.device.Volume = uint32(volume * player.MaxStateVolume)
 			volumeTimer.Reset(time.Second)
 		case <-volumeTimer.C:
 			// We've gone 1 second without update, send the new value now.
-			p.volumeUpdated(uint32(updatedVolume * player.MaxStateVolume))
+			p.volumeUpdated()
 		}
 	}
 }
