@@ -12,6 +12,7 @@ at [Multi-platform builds](https://docs.docker.com/build/building/multi-platform
 docker build \
   --build-arg TARGET=x86-64-linux-gnu \
   --build-arg GOARCH=amd64 \
+  --build-arg GOAMD64=v1 \
   --build-arg CC=gcc \
   -f Dockerfile.build \
   -t go-librespot-build-x86_64 .
@@ -23,6 +24,7 @@ docker build \
 docker build \
   --build-arg TARGET=arm-rpi-linux-gnueabihf \
   --build-arg GOARCH=arm \
+  --build-arg GOARM=6 \
   --build-arg CC=arm-rpi-linux-gnueabihf-gcc \
   -f Dockerfile.build \
   -t go-librespot-build-armv6_rpi .
@@ -34,6 +36,7 @@ docker build \
 docker build \
   --build-arg TARGET=arm-linux-gnueabihf \
   --build-arg GOARCH=arm \
+  --build-arg GOARM=6 \
   --build-arg CC=arm-linux-gnueabihf-gcc \
   -f Dockerfile.build \
   -t go-librespot-build-armv6 .

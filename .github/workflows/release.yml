@@ -18,14 +18,17 @@ jobs:
         include:
           - target: x86-64-linux-gnu
             goarch: amd64
+            goamd64: v1
             cc: gcc
             tar: linux_x86_64
           - target: arm-rpi-linux-gnueabihf
             goarch: arm
+            goarm: 6
             cc: arm-rpi-linux-gnueabihf-gcc
             tar: linux_armv6_rpi
           - target: arm-linux-gnueabihf
             goarch: arm
+            goarm: 6
             cc: arm-linux-gnueabihf-gcc
             tar: linux_armv6
           - target: aarch64-linux-gnu
@@ -44,6 +47,8 @@ jobs:
           docker build \
             --build-arg TARGET=${{ matrix.target }} \
             --build-arg GOARCH=${{ matrix.goarch }} \
+            --build-arg GOARM=${{ matrix.goarm }} \
+            --build-arg GOAMD64=${{ matrix.goamd64 }} \
             --build-arg CC=${{ matrix.cc }} \
             -t go-librespot-build-${{ matrix.target }} \
             -f Dockerfile.build \
