@@ -21,6 +21,8 @@ const (
 )
 
 type Dealer struct {
+	client *http.Client
+
 	addr        librespot.GetAddressFunc
 	accessToken librespot.GetLogin5TokenFunc
 
@@ -44,8 +46,18 @@ type Dealer struct {
 	requestReceiversLock sync.RWMutex
 }
 
-func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
-	return &Dealer{addr: dealerAddr, accessToken: accessToken, requestReceivers: map[string]requestReceiver{}}
+func NewDealer(client *http.Client, dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
+	return &Dealer{
+		client: &http.Client{
+			Transport:     client.Transport,
+			CheckRedirect: client.CheckRedirect,
+			Jar:           client.Jar,
+			Timeout:       timeout,
+		},
+		addr:             dealerAddr,
+		accessToken:      accessToken,
+		requestReceivers: map[string]requestReceiver{},
+	}
 }
 
 func (d *Dealer) Connect(ctx context.Context) error {
@@ -71,11 +83,9 @@ func (d *Dealer) connect(ctx context.Context) error {
 	}
 
 	if conn, _, err := websocket.Dial(context.Background(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(ctx), accessToken), &websocket.DialOptions{
+		HTTPClient: d.client,
 		HTTPHeader: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
-		},
-		HTTPClient: &http.Client{
-			Timeout: timeout,
 		},
 	}); err != nil {
 		return err

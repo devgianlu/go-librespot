@@ -8,6 +8,7 @@ import (
 	"fmt"
 	librespot "github.com/devgianlu/go-librespot"
 	"math"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,8 @@ var errAlreadyRunning = errors.New("go-librespot is already running")
 type App struct {
 	cfg *Config
 
+	client *http.Client
+
 	resolver *apresolve.ApResolver
 
 	deviceId    string
@@ -61,6 +64,8 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
+	app.client = &http.Client{}
+
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
 	if err != nil {
 		return nil, err
@@ -70,7 +75,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 		return nil, err
 	}
 
-	app.resolver = apresolve.NewApResolver()
+	app.resolver = apresolve.NewApResolver(app.client)
 
 	if cfg.DeviceId != "" {
 		// Use configured device ID.
@@ -117,6 +122,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		DeviceId:    app.deviceId,
 		ClientToken: app.clientToken,
 		Resolver:    app.resolver,
+		Client:      app.client,
 		Credentials: creds,
 	}); err != nil {
 		return nil, err

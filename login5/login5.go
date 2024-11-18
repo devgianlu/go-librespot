@@ -29,7 +29,7 @@ type Login5 struct {
 	loginOkLock sync.RWMutex
 }
 
-func NewLogin5(deviceId, clientToken string) *Login5 {
+func NewLogin5(client *http.Client, deviceId, clientToken string) *Login5 {
 	baseUrl, err := url.Parse("https://login5.spotify.com/")
 	if err != nil {
 		panic("invalid login5 base URL")
@@ -37,7 +37,7 @@ func NewLogin5(deviceId, clientToken string) *Login5 {
 
 	return &Login5{
 		baseUrl:     baseUrl,
-		client:      &http.Client{},
+		client:      client,
 		deviceId:    deviceId,
 		clientToken: clientToken,
 	}

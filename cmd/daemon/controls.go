@@ -43,7 +43,7 @@ func (p *AppPlayer) prefetchNext() {
 
 	log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
-	p.secondaryStream, err = p.player.NewStream(ctx, *nextId, p.app.cfg.Bitrate, 0)
+	p.secondaryStream, err = p.player.NewStream(ctx, p.app.client, *nextId, p.app.cfg.Bitrate, 0)
 	if err != nil {
 		log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
 		return
@@ -237,7 +237,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 		prefetched = false
 
 		var err error
-		p.primaryStream, err = p.player.NewStream(ctx, *spotId, p.app.cfg.Bitrate, trackPosition)
+		p.primaryStream, err = p.player.NewStream(ctx, p.app.client, *spotId, p.app.cfg.Bitrate, trackPosition)
 		if err != nil {
 			return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
 		}

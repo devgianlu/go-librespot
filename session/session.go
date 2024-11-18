@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
@@ -23,6 +24,8 @@ type Session struct {
 	deviceType  devicespb.DeviceType
 	deviceId    string
 	clientToken string
+
+	client *http.Client
 
 	resolver *apresolve.ApResolver
 	login5   *login5.Login5
@@ -49,6 +52,11 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	s := Session{
 		deviceType: opts.DeviceType,
 		deviceId:   opts.DeviceId,
+		client:     opts.Client,
+	}
+
+	if s.client == nil {
+		s.client = &http.Client{}
 	}
 
 	// use provided client token or retrieve a new one
@@ -66,11 +74,11 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	if opts.Resolver != nil {
 		s.resolver = opts.Resolver
 	} else {
-		s.resolver = apresolve.NewApResolver()
+		s.resolver = apresolve.NewApResolver(s.client)
 	}
 
 	// create new login5.Login5
-	s.login5 = login5.NewLogin5(s.deviceId, s.clientToken)
+	s.login5 = login5.NewLogin5(s.client, s.deviceId, s.clientToken)
 
 	// connect to the accesspoint
 	apAddr, err := s.resolver.GetAccesspoint(ctx)
@@ -170,7 +178,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	// initialize spclient
 	if spAddr, err := s.resolver.GetSpclient(ctx); err != nil {
 		return nil, fmt.Errorf("failed getting spclient from resolver: %w", err)
-	} else if s.sp, err = spclient.NewSpclient(ctx, spAddr, s.login5.AccessToken(), s.deviceId, s.clientToken); err != nil {
+	} else if s.sp, err = spclient.NewSpclient(ctx, s.client, spAddr, s.login5.AccessToken(), s.deviceId, s.clientToken); err != nil {
 		return nil, fmt.Errorf("failed initializing spclient: %w", err)
 	}
 
@@ -179,7 +187,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting dealer from resolver: %w", err)
 	}
-	s.dealer = dealer.NewDealer(dealerAddr, s.login5.AccessToken())
+	s.dealer = dealer.NewDealer(s.client, dealerAddr, s.login5.AccessToken())
 
 	// init audio key provider
 	s.audioKey = audio.NewAudioKeyProvider(s.ap)

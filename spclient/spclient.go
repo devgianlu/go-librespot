@@ -33,14 +33,14 @@ type Spclient struct {
 	accessToken librespot.GetLogin5TokenFunc
 }
 
-func NewSpclient(ctx context.Context, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
+func NewSpclient(ctx context.Context, client *http.Client, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
 	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid spclient base url: %w", err)
 	}
 
 	return &Spclient{
-		client:      &http.Client{},
+		client:      client,
 		baseUrl:     baseUrl,
 		clientToken: clientToken,
 		deviceId:    deviceId,

@@ -3,6 +3,7 @@ package player
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -337,7 +338,7 @@ func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
 
 const DisableCheckMediaRestricted = true
 
-func (p *Player) NewStream(ctx context.Context, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
+func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := log.WithField("uri", spotId.Uri())
 
 	var media *librespot.Media
@@ -416,7 +417,7 @@ func (p *Player) NewStream(ctx context.Context, spotId librespot.SpotifyId, bitr
 		return nil, fmt.Errorf("unknown storage resolve result: %s", storageResolve.Result)
 	}
 
-	rawStream, err := audio.NewHttpChunkedReader(log.WithField("uri", spotId.String()), trackUrl)
+	rawStream, err := audio.NewHttpChunkedReader(log.WithField("uri", spotId.String()), client, trackUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing chunked reader: %w", err)
 	}

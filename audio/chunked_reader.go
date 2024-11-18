@@ -63,8 +63,8 @@ type HttpChunkedReader struct {
 	pos int64
 }
 
-func NewHttpChunkedReader(log *log.Entry, audioUrl string) (_ *HttpChunkedReader, err error) {
-	r := &HttpChunkedReader{log: log, client: &http.Client{}}
+func NewHttpChunkedReader(log *log.Entry, client *http.Client, audioUrl string) (_ *HttpChunkedReader, err error) {
+	r := &HttpChunkedReader{log: log, client: client}
 
 	r.url, err = url.Parse(audioUrl)
 	if err != nil {

@@ -30,7 +30,7 @@ type ApResolver struct {
 	client *http.Client
 }
 
-func NewApResolver() *ApResolver {
+func NewApResolver(client *http.Client) *ApResolver {
 	baseUrl, err := url.Parse("https://apresolve.spotify.com/")
 	if err != nil {
 		panic("invalid apresolve base URL")
@@ -38,7 +38,7 @@ func NewApResolver() *ApResolver {
 
 	return &ApResolver{
 		baseUrl:      baseUrl,
-		client:       &http.Client{},
+		client:       client,
 		endpoints:    map[endpointType][]string{},
 		endpointsExp: map[endpointType]time.Time{},
 	}
