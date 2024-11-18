@@ -2,6 +2,7 @@ package spclient
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -32,8 +33,8 @@ type Spclient struct {
 	accessToken librespot.GetLogin5TokenFunc
 }
 
-func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
-	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr()))
+func NewSpclient(ctx context.Context, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
+	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid spclient base url: %w", err)
 	}
@@ -47,7 +48,7 @@ func NewSpclient(addr librespot.GetAddressFunc, accessToken librespot.GetLogin5T
 	}, nil
 }
 
-func (c *Spclient) innerRequest(method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	if query != nil {
 		reqUrl.RawQuery = query.Encode()
 	}
@@ -75,14 +76,14 @@ func (c *Spclient) innerRequest(method string, reqUrl *url.URL, query url.Values
 
 	var forceNewToken bool
 	resp, err := backoff.RetryWithData(func() (*http.Response, error) {
-		accessToken, err := c.accessToken(forceNewToken)
+		accessToken, err := c.accessToken(ctx, forceNewToken)
 		if err != nil {
 			return nil, fmt.Errorf("failed obtaining spclient access token: %w", err)
 		}
 
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
-		resp, err := c.client.Do(req)
+		resp, err := c.client.Do(req.WithContext(ctx))
 		if err != nil {
 			return nil, err
 		} else if resp.StatusCode == 401 {
@@ -99,18 +100,18 @@ func (c *Spclient) innerRequest(method string, reqUrl *url.URL, query url.Values
 	return resp, nil
 }
 
-func (c *Spclient) WebApiRequest(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+func (c *Spclient) WebApiRequest(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqPath, err := url.Parse("https://api.spotify.com/")
 	if err != nil {
 		panic("invalid api base url")
 	}
 	reqURL := reqPath.JoinPath(path)
-	return c.innerRequest(method, reqURL, query, header, body)
+	return c.innerRequest(ctx, method, reqURL, query, header, body)
 }
 
-func (c *Spclient) Request(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+func (c *Spclient) Request(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqUrl := c.baseUrl.JoinPath(path)
-	return c.innerRequest(method, reqUrl, query, header, body)
+	return c.innerRequest(ctx, method, reqUrl, query, header, body)
 }
 
 type putStateError struct {
@@ -118,8 +119,9 @@ type putStateError struct {
 	Message   string `json:"message"`
 }
 
-func (c *Spclient) PutConnectStateInactive(spotConnId string, notify bool) error {
+func (c *Spclient) PutConnectStateInactive(ctx context.Context, spotConnId string, notify bool) error {
 	resp, err := c.Request(
+		ctx,
 		"PUT",
 		fmt.Sprintf("/connect-state/v1/devices/%s/inactive", c.deviceId),
 		url.Values{"notify": []string{strconv.FormatBool(notify)}},
@@ -142,13 +144,14 @@ func (c *Spclient) PutConnectStateInactive(spotConnId string, notify bool) error
 	}
 }
 
-func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutStateRequest) error {
+func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqProto *connectpb.PutStateRequest) error {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {
 		return fmt.Errorf("failed marshalling PutStateRequest: %w", err)
 	}
 	_, err = backoff.RetryWithData(func() (*http.Response, error) {
 		resp, err := c.Request(
+			ctx,
 			"PUT",
 			fmt.Sprintf("/connect-state/v1/devices/%s", c.deviceId),
 			nil,
@@ -182,7 +185,7 @@ func (c *Spclient) PutConnectState(spotConnId string, reqProto *connectpb.PutSta
 	return nil
 }
 
-func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*storagepb.StorageResolveResponse, error) {
+func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte, prefetch bool) (*storagepb.StorageResolveResponse, error) {
 	var path string
 	if prefetch {
 		path = fmt.Sprintf("/storage-resolve/files/audio/interactive_prefetch/%s", hex.EncodeToString(fileId))
@@ -190,7 +193,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 		path = fmt.Sprintf("/storage-resolve/files/audio/interactive/%s", hex.EncodeToString(fileId))
 	}
 
-	resp, err := c.Request("GET", path, nil, nil, nil)
+	resp, err := c.Request(ctx, "GET", path, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +204,7 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 		log.Debugf("storage resolve returned service unavailable, retrying...")
 		_ = resp.Body.Close()
 
-		resp, err = c.Request("GET", path, nil, nil, nil)
+		resp, err = c.Request(ctx, "GET", path, nil, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -224,12 +227,12 @@ func (c *Spclient) ResolveStorageInteractive(fileId []byte, prefetch bool) (*sto
 	return &protoResp, nil
 }
 
-func (c *Spclient) MetadataForTrack(track librespot.SpotifyId) (*metadatapb.Track, error) {
+func (c *Spclient) MetadataForTrack(ctx context.Context, track librespot.SpotifyId) (*metadatapb.Track, error) {
 	if track.Type() != librespot.SpotifyIdTypeTrack {
 		panic(fmt.Sprintf("invalid type: %s", track.Type()))
 	}
 
-	resp, err := c.Request("GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
+	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -253,12 +256,12 @@ func (c *Spclient) MetadataForTrack(track librespot.SpotifyId) (*metadatapb.Trac
 	return &protoResp, nil
 }
 
-func (c *Spclient) MetadataForEpisode(episode librespot.SpotifyId) (*metadatapb.Episode, error) {
+func (c *Spclient) MetadataForEpisode(ctx context.Context, episode librespot.SpotifyId) (*metadatapb.Episode, error) {
 	if episode.Type() != librespot.SpotifyIdTypeEpisode {
 		panic(fmt.Sprintf("invalid type: %s", episode.Type()))
 	}
 
-	resp, err := c.Request("GET", fmt.Sprintf("/metadata/4/episode/%s", episode.Hex()), nil, nil, nil)
+	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/metadata/4/episode/%s", episode.Hex()), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +285,7 @@ func (c *Spclient) MetadataForEpisode(episode librespot.SpotifyId) (*metadatapb.
 	return &protoResp, nil
 }
 
-func (c *Spclient) PlaylistSignals(playlist librespot.SpotifyId, reqProto *playlist4pb.ListSignals, lenses []string) (*playlist4pb.SelectedListContent, error) {
+func (c *Spclient) PlaylistSignals(ctx context.Context, playlist librespot.SpotifyId, reqProto *playlist4pb.ListSignals, lenses []string) (*playlist4pb.SelectedListContent, error) {
 	if playlist.Type() != librespot.SpotifyIdTypePlaylist {
 		panic(fmt.Sprintf("invalid type: %s", playlist.Type()))
 	}
@@ -292,7 +295,7 @@ func (c *Spclient) PlaylistSignals(playlist librespot.SpotifyId, reqProto *playl
 		return nil, fmt.Errorf("failed marshalling ListSignals: %w", err)
 	}
 
-	resp, err := c.Request("POST", fmt.Sprintf("/playlist/v2/playlist/%s/signals", playlist.Base62()), nil, http.Header{
+	resp, err := c.Request(ctx, "POST", fmt.Sprintf("/playlist/v2/playlist/%s/signals", playlist.Base62()), nil, http.Header{
 		"Spotify-Apply-Lenses": lenses,
 	}, reqBody)
 	if err != nil {
@@ -318,8 +321,8 @@ func (c *Spclient) PlaylistSignals(playlist librespot.SpotifyId, reqProto *playl
 	return &protoResp, nil
 }
 
-func (c *Spclient) ContextResolve(uri string) (*connectpb.Context, error) {
-	resp, err := c.Request("GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
+func (c *Spclient) ContextResolve(ctx context.Context, uri string) (*connectpb.Context, error) {
+	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -343,13 +346,13 @@ func (c *Spclient) ContextResolve(uri string) (*connectpb.Context, error) {
 	return &context, nil
 }
 
-func (c *Spclient) ContextResolveAutoplay(reqProto *playerpb.AutoplayContextRequest) (*connectpb.Context, error) {
+func (c *Spclient) ContextResolveAutoplay(ctx context.Context, reqProto *playerpb.AutoplayContextRequest) (*connectpb.Context, error) {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {
 		return nil, fmt.Errorf("failed marshalling AutoplayContextRequest: %w", err)
 	}
 
-	resp, err := c.Request("POST", "/context-resolve/v1/autoplay", nil, nil, reqBody)
+	resp, err := c.Request(ctx, "POST", "/context-resolve/v1/autoplay", nil, nil, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -373,6 +376,6 @@ func (c *Spclient) ContextResolveAutoplay(reqProto *playerpb.AutoplayContextRequ
 	return &context, nil
 }
 
-func (c *Spclient) GetAccessToken(force bool) (string, error) {
-	return c.accessToken(force)
+func (c *Spclient) GetAccessToken(ctx context.Context, force bool) (string, error) {
+	return c.accessToken(ctx, force)
 }

@@ -1,5 +1,7 @@
 package go_librespot
 
+import "context"
+
 type PageResolver[T any] interface {
-	Page(idx int) ([]T, error)
+	Page(ctx context.Context, idx int) ([]T, error)
 }

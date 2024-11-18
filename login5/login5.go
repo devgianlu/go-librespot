@@ -2,6 +2,7 @@ package login5
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -42,13 +43,13 @@ func NewLogin5(deviceId, clientToken string) *Login5 {
 	}
 }
 
-func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
+func (c *Login5) request(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	body, err := proto.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed marhsalling LoginRequest: %w", err)
 	}
 
-	resp, err := c.client.Do(&http.Request{
+	httpReq := &http.Request{
 		Method: "POST",
 		URL:    c.baseUrl.JoinPath("/v3/login"),
 		Header: http.Header{
@@ -57,7 +58,9 @@ func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
 			"Client-Token": []string{c.clientToken},
 		},
 		Body: io.NopCloser(bytes.NewReader(body)),
-	})
+	}
+
+	resp, err := c.client.Do(httpReq.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting login5: %w", err)
 	}
@@ -77,7 +80,7 @@ func (c *Login5) request(req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	return &protoResp, nil
 }
 
-func (c *Login5) Login(credentials proto.Message) error {
+func (c *Login5) Login(ctx context.Context, credentials proto.Message) error {
 	c.loginOkLock.Lock()
 	defer c.loginOkLock.Unlock()
 
@@ -107,7 +110,7 @@ func (c *Login5) Login(credentials proto.Message) error {
 		return fmt.Errorf("invalid credentials: %v", lm)
 	}
 
-	resp, err := c.request(req)
+	resp, err := c.request(ctx, req)
 	if err != nil {
 		return fmt.Errorf("failed requesting login5 endpoint: %w", err)
 	}
@@ -129,7 +132,7 @@ func (c *Login5) Login(credentials proto.Message) error {
 			}
 		}
 
-		resp, err = c.request(req)
+		resp, err = c.request(ctx, req)
 		if err != nil {
 			return fmt.Errorf("failed requesting login5 endpoint with challenge solutions: %w", err)
 		}
@@ -168,7 +171,7 @@ func (c *Login5) StoredCredential() []byte {
 }
 
 func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {
-	return func(force bool) (string, error) {
+	return func(ctx context.Context, force bool) (string, error) {
 		c.loginOkLock.RLock()
 		if c.loginOk == nil {
 			panic("login5 not authenticated")
@@ -184,7 +187,7 @@ func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {
 		c.loginOkLock.RUnlock()
 
 		log.Debug("renewing login5 access token")
-		if err := c.Login(&credentialspb.StoredCredential{
+		if err := c.Login(ctx, &credentialspb.StoredCredential{
 			Username: username,
 			Data:     storedCred,
 		}); err != nil {

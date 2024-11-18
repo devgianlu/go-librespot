@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -138,15 +139,15 @@ func (p *AppPlayer) initState() {
 	p.state.reset()
 }
 
-func (p *AppPlayer) updateState() {
-	if err := p.putConnectState(connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
+func (p *AppPlayer) updateState(ctx context.Context) {
+	if err := p.putConnectState(ctx, connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after update")
 	}
 }
 
-func (p *AppPlayer) putConnectState(reason connectpb.PutStateReason) error {
+func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutStateReason) error {
 	if reason == connectpb.PutStateReason_BECAME_INACTIVE {
-		return p.sess.Spclient().PutConnectStateInactive(p.spotConnId, false)
+		return p.sess.Spclient().PutConnectStateInactive(ctx, p.spotConnId, false)
 	}
 
 	putStateReq := &connectpb.PutStateRequest{
@@ -174,5 +175,5 @@ func (p *AppPlayer) putConnectState(reason connectpb.PutStateReason) error {
 	}
 
 	// finally send the state update
-	return p.sess.Spclient().PutConnectState(p.spotConnId, putStateReq)
+	return p.sess.Spclient().PutConnectState(ctx, p.spotConnId, putStateReq)
 }

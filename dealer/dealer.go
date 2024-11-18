@@ -48,7 +48,7 @@ func NewDealer(dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLog
 	return &Dealer{addr: dealerAddr, accessToken: accessToken, requestReceivers: map[string]requestReceiver{}}
 }
 
-func (d *Dealer) Connect() error {
+func (d *Dealer) Connect(ctx context.Context) error {
 	d.connMu.Lock()
 	defer d.connMu.Unlock()
 
@@ -57,20 +57,20 @@ func (d *Dealer) Connect() error {
 		return nil
 	}
 
-	return d.connect()
+	return d.connect(ctx)
 }
 
-func (d *Dealer) connect() error {
+func (d *Dealer) connect(ctx context.Context) error {
 	d.recvLoopStop = make(chan struct{}, 1)
 	d.pingTickerStop = make(chan struct{}, 1)
 	d.stop = false
 
-	accessToken, err := d.accessToken(false)
+	accessToken, err := d.accessToken(ctx, false)
 	if err != nil {
 		return fmt.Errorf("failed obtaining dealer access token: %w", err)
 	}
 
-	if conn, _, err := websocket.Dial(context.Background(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(), accessToken), &websocket.DialOptions{
+	if conn, _, err := websocket.Dial(context.Background(), fmt.Sprintf("wss://%s/?access_token=%s", d.addr(ctx), accessToken), &websocket.DialOptions{
 		HTTPHeader: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
 		},
@@ -269,7 +269,7 @@ func (d *Dealer) sendReply(key string, success bool) error {
 }
 
 func (d *Dealer) reconnect() error {
-	if err := d.connect(); err != nil {
+	if err := d.connect(context.TODO()); err != nil {
 		return err
 	}
 

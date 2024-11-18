@@ -1,6 +1,7 @@
 package tracks
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -37,9 +38,9 @@ func (i *pagedListInterator[T]) prev() bool {
 	return true
 }
 
-func (i *pagedListInterator[T]) next() bool {
+func (i *pagedListInterator[T]) next(ctx context.Context) bool {
 	for i.pos+1 >= len(i.list.list) {
-		if pageIdx, err := i.list.fetchNextPage(); errors.Is(err, io.EOF) {
+		if pageIdx, err := i.list.fetchNextPage(ctx); errors.Is(err, io.EOF) {
 			i.err = nil
 			return false
 		} else if err != nil {
@@ -89,9 +90,9 @@ func (l *pagedList[T]) iterStart() *pagedListInterator[T] {
 	return &pagedListInterator[T]{list: l, pos: -1, err: nil}
 }
 
-func (l *pagedList[T]) moveStart() error {
+func (l *pagedList[T]) moveStart(ctx context.Context) error {
 	if len(l.list) == 0 {
-		if pageIdx, err := l.fetchNextPage(); errors.Is(err, io.EOF) {
+		if pageIdx, err := l.fetchNextPage(ctx); errors.Is(err, io.EOF) {
 			return fmt.Errorf("failed moving to start: no more pages as of %d", pageIdx)
 		} else if err != nil {
 			return fmt.Errorf("failed moving to start: %w", err)
@@ -173,7 +174,7 @@ func (l *pagedList[T]) unshuffle(rnd *rand.Rand) {
 	l.pos = idx
 }
 
-func (l *pagedList[T]) fetchNextPage() (int, error) {
+func (l *pagedList[T]) fetchNextPage(ctx context.Context) (int, error) {
 	var pageIdx int
 	if len(l.list) == 0 {
 		pageIdx = 0
@@ -182,7 +183,7 @@ func (l *pagedList[T]) fetchNextPage() (int, error) {
 		pageIdx = curr.pageIdx + 1
 	}
 
-	items, err := l.pages.Page(pageIdx)
+	items, err := l.pages.Page(ctx, pageIdx)
 	if err != nil {
 		return pageIdx, err
 	} else if len(items) == 0 {

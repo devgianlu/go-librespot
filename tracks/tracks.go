@@ -1,6 +1,7 @@
 package tracks
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
@@ -24,9 +25,9 @@ type List struct {
 	queue        []*connectpb.ContextTrack
 }
 
-func NewTrackListFromContext(sp *spclient.Spclient, ctx *connectpb.Context) (_ *List, err error) {
+func NewTrackListFromContext(ctx context.Context, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
 	tl := &List{}
-	tl.ctx, err = spclient.NewContextResolver(sp, ctx)
+	tl.ctx, err = spclient.NewContextResolver(ctx, sp, spotCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing context resolver: %w", err)
 	}
@@ -42,11 +43,11 @@ func (tl *List) Metadata() map[string]string {
 	return tl.ctx.Metadata()
 }
 
-func (tl *List) TrySeek(f func(track *connectpb.ContextTrack) bool) error {
-	if err := tl.Seek(f); err != nil {
+func (tl *List) TrySeek(ctx context.Context, f func(track *connectpb.ContextTrack) bool) error {
+	if err := tl.Seek(ctx, f); err != nil {
 		log.WithError(err).Warnf("failed seeking to track in context %s", tl.ctx.Uri())
 
-		err = tl.tracks.moveStart()
+		err = tl.tracks.moveStart(ctx)
 		if err != nil {
 			return err
 		}
@@ -55,9 +56,9 @@ func (tl *List) TrySeek(f func(track *connectpb.ContextTrack) bool) error {
 	return nil
 }
 
-func (tl *List) Seek(f func(*connectpb.ContextTrack) bool) error {
+func (tl *List) Seek(ctx context.Context, f func(*connectpb.ContextTrack) bool) error {
 	iter := tl.tracks.iterStart()
-	for iter.next() {
+	for iter.next(ctx) {
 		curr := iter.get()
 		if f(curr.item) {
 			tl.tracks.move(iter)
@@ -72,11 +73,11 @@ func (tl *List) Seek(f func(*connectpb.ContextTrack) bool) error {
 	return fmt.Errorf("could not find track")
 }
 
-func (tl *List) AllTracks() []*connectpb.ProvidedTrack {
+func (tl *List) AllTracks(ctx context.Context) []*connectpb.ProvidedTrack {
 	tracks := make([]*connectpb.ProvidedTrack, 0, tl.tracks.len())
 
 	iter := tl.tracks.iterStart()
-	for iter.next() {
+	for iter.next(ctx) {
 		curr := iter.get()
 		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
 	}
@@ -109,7 +110,7 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	return tracks
 }
 
-func (tl *List) NextTracks() []*connectpb.ProvidedTrack {
+func (tl *List) NextTracks(ctx context.Context) []*connectpb.ProvidedTrack {
 	tracks := make([]*connectpb.ProvidedTrack, 0, MaxTracksInContext)
 
 	if len(tl.queue) > 0 {
@@ -124,7 +125,7 @@ func (tl *List) NextTracks() []*connectpb.ProvidedTrack {
 	}
 
 	iter := tl.tracks.iterHere()
-	for len(tracks) < MaxTracksInContext && iter.next() {
+	for len(tracks) < MaxTracksInContext && iter.next(ctx) {
 		curr := iter.get()
 		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
 	}
@@ -159,8 +160,8 @@ func (tl *List) CurrentTrack() *connectpb.ProvidedTrack {
 	return librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), item)
 }
 
-func (tl *List) GoStart() bool {
-	if err := tl.tracks.moveStart(); err != nil {
+func (tl *List) GoStart(ctx context.Context) bool {
+	if err := tl.tracks.moveStart(ctx); err != nil {
 		log.WithError(err).Error("failed going to start")
 		return false
 	}
@@ -168,7 +169,7 @@ func (tl *List) GoStart() bool {
 	return true
 }
 
-func (tl *List) PeekNext() *connectpb.ContextTrack {
+func (tl *List) PeekNext(ctx context.Context) *connectpb.ContextTrack {
 	if tl.playingQueue && len(tl.queue) > 1 {
 		return tl.queue[1]
 	} else if !tl.playingQueue && len(tl.queue) > 0 {
@@ -176,14 +177,14 @@ func (tl *List) PeekNext() *connectpb.ContextTrack {
 	}
 
 	iter := tl.tracks.iterHere()
-	if iter.next() {
+	if iter.next(ctx) {
 		return iter.get().item
 	}
 
 	return nil
 }
 
-func (tl *List) GoNext() bool {
+func (tl *List) GoNext(ctx context.Context) bool {
 	if tl.playingQueue {
 		tl.queue = tl.queue[1:]
 	}
@@ -196,7 +197,7 @@ func (tl *List) GoNext() bool {
 	tl.playingQueue = false
 
 	iter := tl.tracks.iterHere()
-	if iter.next() {
+	if iter.next(ctx) {
 		tl.tracks.move(iter)
 		return true
 	}
@@ -256,7 +257,7 @@ func (tl *List) SetPlayingQueue(val bool) {
 	tl.playingQueue = len(tl.queue) > 0 && val
 }
 
-func (tl *List) ToggleShuffle(shuffle bool) error {
+func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 	if shuffle == tl.shuffled {
 		return nil
 	}
@@ -264,7 +265,7 @@ func (tl *List) ToggleShuffle(shuffle bool) error {
 	if shuffle {
 		// fetch all tracks
 		iter := tl.tracks.iterStart()
-		for iter.next() {
+		for iter.next(ctx) {
 			// TODO: check that we do not seek forever
 		}
 		if err := iter.error(); err != nil {
@@ -308,7 +309,7 @@ func (tl *List) ToggleShuffle(shuffle bool) error {
 
 			// clear tracks and seek to the current track
 			tl.tracks.clear()
-			if err := tl.Seek(ContextTrackComparator(tl.ctx.Type(), currentTrack)); err != nil {
+			if err := tl.Seek(ctx, ContextTrackComparator(tl.ctx.Type(), currentTrack)); err != nil {
 				return fmt.Errorf("failed seeking to current track: %w", err)
 			}
 

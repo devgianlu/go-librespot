@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
@@ -34,6 +35,6 @@ func (s *Session) Accesspoint() *ap.Accesspoint {
 	return s.ap
 }
 
-func (s *Session) WebApi(method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
-	return s.sp.WebApiRequest(method, path, query, header, body)
+func (s *Session) WebApi(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	return s.sp.WebApiRequest(ctx, method, path, query, header, body)
 }

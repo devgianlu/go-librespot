@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -99,7 +100,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 	return app, nil
 }
 
-func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
+func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
 		app:          app,
 		stop:         make(chan struct{}, 1),
@@ -111,7 +112,7 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	// start a dummy timer for prefetching next media
 	appPlayer.prefetchTimer = time.AfterFunc(time.Duration(math.MaxInt64), appPlayer.prefetchNext)
 
-	if appPlayer.sess, err = session.NewSessionFromOptions(&session.Options{
+	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		DeviceType:  app.deviceType,
 		DeviceId:    app.deviceId,
 		ClientToken: app.clientToken,
@@ -135,11 +136,11 @@ func (app *App) newAppPlayer(creds any) (_ *AppPlayer, err error) {
 	return appPlayer, nil
 }
 
-func (app *App) Zeroconf() error {
-	return app.withAppPlayer(func() (*AppPlayer, error) {
+func (app *App) Zeroconf(ctx context.Context) error {
+	return app.withAppPlayer(ctx, func(ctx context.Context) (*AppPlayer, error) {
 		if app.cfg.Credentials.Zeroconf.PersistCredentials && len(app.state.Credentials.Data) > 0 {
 			log.WithField("username", app.state.Credentials.Username).Infof("loading previously persisted zeroconf credentials")
-			return app.newAppPlayer(session.StoredCredentials{
+			return app.newAppPlayer(ctx, session.StoredCredentials{
 				Username: app.state.Credentials.Username,
 				Data:     app.state.Credentials.Data,
 			})
@@ -149,23 +150,23 @@ func (app *App) Zeroconf() error {
 	})
 }
 
-func (app *App) SpotifyToken(username, token string) error {
-	return app.withCredentials(session.SpotifyTokenCredentials{Username: username, Token: token})
+func (app *App) SpotifyToken(ctx context.Context, username, token string) error {
+	return app.withCredentials(ctx, session.SpotifyTokenCredentials{Username: username, Token: token})
 }
 
-func (app *App) Interactive(callbackPort int) error {
-	return app.withCredentials(session.InteractiveCredentials{CallbackPort: callbackPort})
+func (app *App) Interactive(ctx context.Context, callbackPort int) error {
+	return app.withCredentials(ctx, session.InteractiveCredentials{CallbackPort: callbackPort})
 }
 
-func (app *App) withCredentials(creds any) (err error) {
-	return app.withAppPlayer(func() (*AppPlayer, error) {
+func (app *App) withCredentials(ctx context.Context, creds any) (err error) {
+	return app.withAppPlayer(ctx, func(ctx context.Context) (*AppPlayer, error) {
 		if len(app.state.Credentials.Data) > 0 {
-			return app.newAppPlayer(session.StoredCredentials{
+			return app.newAppPlayer(ctx, session.StoredCredentials{
 				Username: app.state.Credentials.Username,
 				Data:     app.state.Credentials.Data,
 			})
 		} else {
-			appPlayer, err := app.newAppPlayer(creds)
+			appPlayer, err := app.newAppPlayer(ctx, creds)
 			if err != nil {
 				return nil, err
 			}
@@ -185,22 +186,22 @@ func (app *App) withCredentials(creds any) (err error) {
 	})
 }
 
-func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err error) {
+func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Context) (*AppPlayer, error)) (err error) {
 	// if zeroconf is disabled, there is not much we need to do
 	if !app.cfg.ZeroconfEnabled {
-		appPlayer, err := appPlayerFunc()
+		appPlayer, err := appPlayerFunc(ctx)
 		if err != nil {
 			return err
 		} else if appPlayer == nil {
 			panic("zeroconf is disabled and no credentials are present")
 		}
 
-		appPlayer.Run(app.server.Receive())
+		appPlayer.Run(ctx, app.server.Receive())
 		return nil
 	}
 
 	// pre fetch resolver endpoints
-	if err := app.resolver.FetchAll(); err != nil {
+	if err := app.resolver.FetchAll(ctx); err != nil {
 		return fmt.Errorf("failed getting endpoints from resolver: %w", err)
 	}
 
@@ -212,7 +213,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 
 	var apiCh chan ApiRequest
 
-	currentPlayer, err := appPlayerFunc()
+	currentPlayer, err := appPlayerFunc(ctx)
 	if err != nil {
 		return err
 	}
@@ -222,7 +223,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 		log.Debugf("initializing zeroconf session, username: %s", currentPlayer.sess.Username())
 
 		apiCh = make(chan ApiRequest)
-		go currentPlayer.Run(apiCh)
+		go currentPlayer.Run(ctx, apiCh)
 
 		// let zeroconf know that we already have a user
 		z.SetCurrentUser(currentPlayer.sess.Username())
@@ -262,7 +263,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 
 				// restore the session if there is one.
 				// we will restore the session even if it's for the same user, but it shouldn't be an issue
-				newAppPlayer, err := appPlayerFunc()
+				newAppPlayer, err := appPlayerFunc(ctx)
 				if err != nil {
 					log.WithError(err).Errorf("failed restoring session after logout")
 				} else if newAppPlayer == nil {
@@ -273,7 +274,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 					apiCh = make(chan ApiRequest)
 					currentPlayer = newAppPlayer
 
-					go newAppPlayer.Run(apiCh)
+					go newAppPlayer.Run(ctx, apiCh)
 
 					// let zeroconf know that we already have a user
 					z.SetCurrentUser(newAppPlayer.sess.Username())
@@ -295,7 +296,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 			// no need to unset the zeroconf user here as the new one will overwrite it anyway
 		}
 
-		newAppPlayer, err := app.newAppPlayer(session.BlobCredentials{
+		newAppPlayer, err := app.newAppPlayer(ctx, session.BlobCredentials{
 			Username: req.Username,
 			Blob:     req.AuthBlob,
 		})
@@ -320,7 +321,7 @@ func (app *App) withAppPlayer(appPlayerFunc func() (*AppPlayer, error)) (err err
 			log.WithField("username", newAppPlayer.sess.Username()).Debugf("persisted zeroconf credentials")
 		}
 
-		go newAppPlayer.Run(apiCh)
+		go newAppPlayer.Run(ctx, apiCh)
 		return true
 	})
 }
@@ -562,19 +563,21 @@ func main() {
 		app.server, _ = NewStubApiServer()
 	}
 
+	ctx := context.TODO()
+
 	switch cfg.Credentials.Type {
 	case "zeroconf":
 		// ensure zeroconf is enabled
 		app.cfg.ZeroconfEnabled = true
-		if err := app.Zeroconf(); err != nil {
+		if err := app.Zeroconf(ctx); err != nil {
 			log.WithError(err).Fatal("failed running zeroconf")
 		}
 	case "interactive":
-		if err := app.Interactive(cfg.Credentials.Interactive.CallbackPort); err != nil {
+		if err := app.Interactive(ctx, cfg.Credentials.Interactive.CallbackPort); err != nil {
 			log.WithError(err).Fatal("failed running with interactive auth")
 		}
 	case "spotify_token":
-		if err := app.SpotifyToken(cfg.Credentials.SpotifyToken.Username, cfg.Credentials.SpotifyToken.AccessToken); err != nil {
+		if err := app.SpotifyToken(ctx, cfg.Credentials.SpotifyToken.Username, cfg.Credentials.SpotifyToken.AccessToken); err != nil {
 			log.WithError(err).Fatal("failed running with username and spotify token")
 		}
 	default:

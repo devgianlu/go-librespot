@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -68,13 +69,13 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 	}
 }
 
-func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
+func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
 		log.Debugf("received connection id: %s", p.spotConnId)
 
 		// put the initial state
-		if err := p.putConnectState(connectpb.PutStateReason_NEW_DEVICE); err != nil {
+		if err := p.putConnectState(ctx, connectpb.PutStateReason_NEW_DEVICE); err != nil {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
 
@@ -119,7 +120,7 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 		p.secondaryStream = nil
 
 		p.state.reset()
-		if err := p.putConnectState(connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
+		if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
 			return fmt.Errorf("failed inactive state put: %w", err)
 		}
 
@@ -137,7 +138,7 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 	return nil
 }
 
-func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
+func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestPayload) error {
 	p.state.lastCommand = &req
 
 	log.Debugf("handling %s player command from %s", req.Command.Endpoint, req.SentByDeviceId)
@@ -150,7 +151,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		}
 		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
 
-		ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), transferState.CurrentSession.Context)
+		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
 			return fmt.Errorf("failed creating track list: %w", err)
 		}
@@ -186,12 +187,12 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
 		currentTrack := librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
-		if err := ctxTracks.TrySeek(tracks.ProvidedTrackComparator(contextSpotType, currentTrack)); err != nil {
+		if err := ctxTracks.TrySeek(ctx, tracks.ProvidedTrackComparator(contextSpotType, currentTrack)); err != nil {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
 
 		// shuffle the context if needed
-		if err := ctxTracks.ToggleShuffle(transferState.Options.ShufflingContext); err != nil {
+		if err := ctxTracks.ToggleShuffle(ctx, transferState.Options.ShufflingContext); err != nil {
 			return fmt.Errorf("failed shuffling context")
 		}
 
@@ -222,11 +223,11 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.tracks = ctxTracks
 		p.state.player.Track = ctxTracks.CurrentTrack()
 		p.state.player.PrevTracks = ctxTracks.PrevTracks()
-		p.state.player.NextTracks = ctxTracks.NextTracks()
+		p.state.player.NextTracks = ctxTracks.NextTracks(ctx)
 		p.state.player.Index = ctxTracks.Index()
 
 		// load current track into stream
-		if err := p.loadCurrentTrack(pause, true); err != nil {
+		if err := p.loadCurrentTrack(ctx, pause, true); err != nil {
 			return fmt.Errorf("failed loading current track (transfer): %w", err)
 		}
 
@@ -266,11 +267,11 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			}
 		}
 
-		return p.loadContext(req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true)
+		return p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true)
 	case "pause":
-		return p.pause()
+		return p.pause(ctx)
 	case "resume":
-		return p.play()
+		return p.play(ctx)
 	case "seek_to":
 		var position int64
 		if req.Command.Relative == "current" {
@@ -289,15 +290,15 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			return nil
 		}
 
-		if err := p.seek(position); err != nil {
+		if err := p.seek(ctx, position); err != nil {
 			return fmt.Errorf("failed seeking stream: %w", err)
 		}
 
 		return nil
 	case "skip_prev":
-		return p.skipPrev(req.Command.Options.AllowSeeking)
+		return p.skipPrev(ctx, req.Command.Options.AllowSeeking)
 	case "skip_next":
-		return p.skipNext(req.Command.Track)
+		return p.skipNext(ctx, req.Command.Track)
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
 			log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
@@ -312,49 +313,49 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			p.state.player.ContextMetadata[k] = v
 		}
 
-		p.updateState()
+		p.updateState(ctx)
 		return nil
 	case "set_repeating_context":
 		val := req.Command.Value.(bool)
-		p.setOptions(&val, nil, nil)
+		p.setOptions(ctx, &val, nil, nil)
 		return nil
 	case "set_repeating_track":
 		val := req.Command.Value.(bool)
-		p.setOptions(nil, &val, nil)
+		p.setOptions(ctx, nil, &val, nil)
 		return nil
 	case "set_shuffling_context":
 		val := req.Command.Value.(bool)
-		p.setOptions(nil, nil, &val)
+		p.setOptions(ctx, nil, nil, &val)
 		return nil
 	case "set_options":
-		p.setOptions(req.Command.RepeatingContext, req.Command.RepeatingTrack, req.Command.ShufflingContext)
+		p.setOptions(ctx, req.Command.RepeatingContext, req.Command.RepeatingTrack, req.Command.ShufflingContext)
 		return nil
 	case "set_queue":
-		p.setQueue(req.Command.PrevTracks, req.Command.NextTracks)
+		p.setQueue(ctx, req.Command.PrevTracks, req.Command.NextTracks)
 		return nil
 	case "add_to_queue":
-		p.addToQueue(req.Command.Track)
+		p.addToQueue(ctx, req.Command.Track)
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)
 	}
 }
 
-func (p *AppPlayer) handleDealerRequest(req dealer.Request) error {
+func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request) error {
 	switch req.MessageIdent {
 	case "hm://connect-state/v1/player/command":
-		return p.handlePlayerCommand(req.Payload)
+		return p.handlePlayerCommand(ctx, req.Payload)
 	default:
 		log.Warnf("unknown dealer request: %s", req.MessageIdent)
 		return nil
 	}
 }
 
-func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
+func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, error) {
 	switch req.Type {
 	case ApiRequestTypeWebApi:
 		data := req.Data.(ApiRequestDataWebApi)
-		resp, err := p.sess.WebApi(data.Method, data.Path, data.Query, nil, nil)
+		resp, err := p.sess.WebApi(ctx, data.Method, data.Path, data.Query, nil, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to send web api request: %w", err)
 		}
@@ -415,16 +416,16 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 
 		return resp, nil
 	case ApiRequestTypeResume:
-		_ = p.play()
+		_ = p.play(ctx)
 		return nil, nil
 	case ApiRequestTypePause:
-		_ = p.pause()
+		_ = p.pause(ctx)
 		return nil, nil
 	case ApiRequestTypePlayPause:
 		if p.state.player.IsPaused {
-			_ = p.play()
+			_ = p.play(ctx)
 		} else {
-			_ = p.pause()
+			_ = p.pause(ctx)
 		}
 		return nil, nil
 	case ApiRequestTypeSeek:
@@ -437,22 +438,22 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			position = data.Position
 		}
 
-		_ = p.seek(position)
+		_ = p.seek(ctx, position)
 		return nil, nil
 	case ApiRequestTypePrev:
-		_ = p.skipPrev(true)
+		_ = p.skipPrev(ctx, true)
 		return nil, nil
 	case ApiRequestTypeNext:
 		data := req.Data.(ApiRequestDataNext)
 		if data.Uri != nil {
-			_ = p.skipNext(&connectpb.ContextTrack{Uri: *data.Uri})
+			_ = p.skipNext(ctx, &connectpb.ContextTrack{Uri: *data.Uri})
 		} else {
-			_ = p.skipNext(nil)
+			_ = p.skipNext(ctx, nil)
 		}
 		return nil, nil
 	case ApiRequestTypePlay:
 		data := req.Data.(ApiRequestDataPlay)
-		ctx, err := p.sess.Spclient().ContextResolve(data.Uri)
+		spotCtx, err := p.sess.Spclient().ContextResolve(ctx, data.Uri)
 		if err != nil {
 			return nil, fmt.Errorf("failed resolving context: %w", err)
 		}
@@ -484,7 +485,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			}
 		}
 
-		if err := p.loadContext(ctx, skipTo, data.Paused, true); err != nil {
+		if err := p.loadContext(ctx, spotCtx, skipTo, data.Paused, true); err != nil {
 			return nil, fmt.Errorf("failed loading context: %w", err)
 		}
 
@@ -510,21 +511,21 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
 		val := req.Data.(bool)
-		p.setOptions(&val, nil, nil)
+		p.setOptions(ctx, &val, nil, nil)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingTrack:
 		val := req.Data.(bool)
-		p.setOptions(nil, &val, nil)
+		p.setOptions(ctx, nil, &val, nil)
 		return nil, nil
 	case ApiRequestTypeSetShufflingContext:
 		val := req.Data.(bool)
-		p.setOptions(nil, nil, &val)
+		p.setOptions(ctx, nil, nil, &val)
 		return nil, nil
 	case ApiRequestTypeAddToQueue:
-		p.addToQueue(&connectpb.ContextTrack{Uri: req.Data.(string)})
+		p.addToQueue(ctx, &connectpb.ContextTrack{Uri: req.Data.(string)})
 		return nil, nil
 	case ApiRequestTypeToken:
-		accessToken, err := p.sess.Spclient().GetAccessToken(true)
+		accessToken, err := p.sess.Spclient().GetAccessToken(ctx, true)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting access token: %w", err)
 		}
@@ -542,8 +543,8 @@ func (p *AppPlayer) Close() {
 	p.sess.Close()
 }
 
-func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
-	err := p.sess.Dealer().Connect()
+func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
+	err := p.sess.Dealer().Connect(ctx)
 	if err != nil {
 		log.WithError(err).Fatal("failed connecting to dealer")
 	}
@@ -565,11 +566,11 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 				log.WithError(err).Warn("failed handling accesspoint packet")
 			}
 		case msg := <-msgRecv:
-			if err := p.handleDealerMessage(msg); err != nil {
+			if err := p.handleDealerMessage(ctx, msg); err != nil {
 				log.WithError(err).Warn("failed handling dealer message")
 			}
 		case req := <-reqRecv:
-			if err := p.handleDealerRequest(req); err != nil {
+			if err := p.handleDealerRequest(ctx, req); err != nil {
 				log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
@@ -577,10 +578,10 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 				req.Reply(true)
 			}
 		case req := <-apiRecv:
-			data, err := p.handleApiRequest(req)
+			data, err := p.handleApiRequest(ctx, req)
 			req.Reply(data, err)
 		case ev := <-playerRecv:
-			p.handlePlayerEvent(&ev)
+			p.handlePlayerEvent(ctx, &ev)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.
@@ -592,7 +593,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest) {
 			volumeTimer.Reset(time.Second)
 		case <-volumeTimer.C:
 			// We've gone 1 second without update, send the new value now.
-			p.volumeUpdated()
+			p.volumeUpdated(ctx)
 		}
 	}
 }

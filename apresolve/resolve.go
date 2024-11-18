@@ -1,6 +1,7 @@
 package apresolve
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -43,7 +44,7 @@ func NewApResolver() *ApResolver {
 	}
 }
 
-func (r *ApResolver) fetchUrls(types ...endpointType) error {
+func (r *ApResolver) fetchUrls(ctx context.Context, types ...endpointType) error {
 	anyExpired := false
 	r.endpointsLock.RLock()
 	for _, type_ := range types {
@@ -69,13 +70,15 @@ func (r *ApResolver) fetchUrls(types ...endpointType) error {
 	reqUrl := *r.baseUrl
 	reqUrl.RawQuery = query.Encode()
 
-	resp, err := r.client.Do(&http.Request{
+	req := &http.Request{
 		Method: "GET",
 		URL:    &reqUrl,
 		Header: http.Header{
 			"User-Agent": []string{librespot.UserAgent()},
 		},
-	})
+	}
+
+	resp, err := r.client.Do(req.WithContext(ctx))
 	if err != nil {
 		return fmt.Errorf("failed fetching apresolve URL: %w", err)
 	}
@@ -113,12 +116,12 @@ func (r *ApResolver) fetchUrls(types ...endpointType) error {
 	return nil
 }
 
-func (r *ApResolver) FetchAll() error {
-	return r.fetchUrls(endpointTypeAccesspoint, endpointTypeDealer, endpointTypeSpclient)
+func (r *ApResolver) FetchAll(ctx context.Context) error {
+	return r.fetchUrls(ctx, endpointTypeAccesspoint, endpointTypeDealer, endpointTypeSpclient)
 }
 
-func (r *ApResolver) get(type_ endpointType) ([]string, error) {
-	if err := r.fetchUrls(type_); err != nil {
+func (r *ApResolver) get(ctx context.Context, type_ endpointType) ([]string, error) {
+	if err := r.fetchUrls(ctx, type_); err != nil {
 		return nil, err
 	}
 
@@ -133,14 +136,14 @@ func (r *ApResolver) get(type_ endpointType) ([]string, error) {
 	return aps, nil
 }
 
-func (r *ApResolver) getFunc(type_ endpointType) (librespot.GetAddressFunc, error) {
-	addrs, err := r.get(type_)
+func (r *ApResolver) getFunc(ctx context.Context, type_ endpointType) (librespot.GetAddressFunc, error) {
+	addrs, err := r.get(ctx, type_)
 	if err != nil {
 		return nil, err
 	}
 
 	idx := 0
-	return func() string {
+	return func(innerCtx context.Context) string {
 		// if we haven't overflowed the available addresses, return one
 		if idx < len(addrs) {
 			newAddr := addrs[idx]
@@ -149,7 +152,7 @@ func (r *ApResolver) getFunc(type_ endpointType) (librespot.GetAddressFunc, erro
 		}
 
 		// try fetching new addresses
-		newAddrs, err := r.get(type_)
+		newAddrs, err := r.get(innerCtx, type_)
 		if err != nil {
 			// if we cannot fetch new endpoints, eat it and return the first one
 			log.WithError(err).Warnf("failed fetching new endpoint for %s", type_)
@@ -163,14 +166,14 @@ func (r *ApResolver) getFunc(type_ endpointType) (librespot.GetAddressFunc, erro
 	}, nil
 }
 
-func (r *ApResolver) GetAccesspoint() (librespot.GetAddressFunc, error) {
-	return r.getFunc(endpointTypeAccesspoint)
+func (r *ApResolver) GetAccesspoint(ctx context.Context) (librespot.GetAddressFunc, error) {
+	return r.getFunc(ctx, endpointTypeAccesspoint)
 }
 
-func (r *ApResolver) GetSpclient() (librespot.GetAddressFunc, error) {
-	return r.getFunc(endpointTypeSpclient)
+func (r *ApResolver) GetSpclient(ctx context.Context) (librespot.GetAddressFunc, error) {
+	return r.getFunc(ctx, endpointTypeSpclient)
 }
 
-func (r *ApResolver) GetDealer() (librespot.GetAddressFunc, error) {
-	return r.getFunc(endpointTypeDealer)
+func (r *ApResolver) GetDealer(ctx context.Context) (librespot.GetAddressFunc, error) {
+	return r.getFunc(ctx, endpointTypeDealer)
 }

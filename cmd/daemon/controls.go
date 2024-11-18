@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -17,7 +18,9 @@ import (
 )
 
 func (p *AppPlayer) prefetchNext() {
-	next := p.state.tracks.PeekNext()
+	ctx := context.TODO()
+
+	next := p.state.tracks.PeekNext(ctx)
 	if next == nil {
 		return
 	}
@@ -40,7 +43,7 @@ func (p *AppPlayer) prefetchNext() {
 
 	log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
-	p.secondaryStream, err = p.player.NewStream(*nextId, p.app.cfg.Bitrate, 0)
+	p.secondaryStream, err = p.player.NewStream(ctx, *nextId, p.app.cfg.Bitrate, 0)
 	if err != nil {
 		log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
 		return
@@ -71,13 +74,13 @@ func (p *AppPlayer) schedulePrefetchNext() {
 	}
 }
 
-func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
+func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlaying:
 		p.state.player.IsPlaying = true
 		p.state.setPaused(false)
 		p.state.player.IsBuffering = false
-		p.updateState()
+		p.updateState(ctx)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -90,7 +93,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 		p.state.player.IsPlaying = true
 		p.state.setPaused(true)
 		p.state.player.IsBuffering = false
-		p.updateState()
+		p.updateState(ctx)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
@@ -108,7 +111,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			},
 		})
 
-		hasNextTrack, err := p.advanceNext(false, false)
+		hasNextTrack, err := p.advanceNext(context.TODO(), false, false)
 		if err != nil {
 			log.WithError(err).Error("failed advancing to next track")
 		}
@@ -136,23 +139,23 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 
 type skipToFunc func(*connectpb.ContextTrack) bool
 
-func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, paused, drop bool) error {
-	ctxTracks, err := tracks.NewTrackListFromContext(p.sess.Spclient(), ctx)
+func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context, skipTo skipToFunc, paused, drop bool) error {
+	ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.sess.Spclient(), spotCtx)
 	if err != nil {
 		return fmt.Errorf("failed creating track list: %w", err)
 	}
 
 	p.state.setPaused(paused)
 
-	p.state.player.ContextUri = ctx.Uri
-	p.state.player.ContextUrl = ctx.Url
-	p.state.player.Restrictions = ctx.Restrictions
-	p.state.player.ContextRestrictions = ctx.Restrictions
+	p.state.player.ContextUri = spotCtx.Uri
+	p.state.player.ContextUrl = spotCtx.Url
+	p.state.player.Restrictions = spotCtx.Restrictions
+	p.state.player.ContextRestrictions = spotCtx.Restrictions
 
 	if p.state.player.ContextMetadata == nil {
 		p.state.player.ContextMetadata = map[string]string{}
 	}
-	for k, v := range ctx.Metadata {
+	for k, v := range spotCtx.Metadata {
 		p.state.player.ContextMetadata[k] = v
 	}
 
@@ -161,22 +164,22 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 
 	if skipTo == nil {
 		// if shuffle is enabled, we'll start from a random track
-		if err := ctxTracks.ToggleShuffle(p.state.player.Options.ShufflingContext); err != nil {
+		if err := ctxTracks.ToggleShuffle(ctx, p.state.player.Options.ShufflingContext); err != nil {
 			return fmt.Errorf("failed shuffling context")
 		}
 
 		// seek to the first track
-		if err := ctxTracks.TrySeek(func(_ *connectpb.ContextTrack) bool { return true }); err != nil {
+		if err := ctxTracks.TrySeek(ctx, func(_ *connectpb.ContextTrack) bool { return true }); err != nil {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
 	} else {
 		// seek to the given track
-		if err := ctxTracks.TrySeek(skipTo); err != nil {
+		if err := ctxTracks.TrySeek(ctx, skipTo); err != nil {
 			return fmt.Errorf("failed seeking to track: %w", err)
 		}
 
 		// shuffle afterwards
-		if err := ctxTracks.ToggleShuffle(p.state.player.Options.ShufflingContext); err != nil {
+		if err := ctxTracks.ToggleShuffle(ctx, p.state.player.Options.ShufflingContext); err != nil {
 			return fmt.Errorf("failed shuffling context")
 		}
 	}
@@ -184,18 +187,18 @@ func (p *AppPlayer) loadContext(ctx *connectpb.Context, skipTo skipToFunc, pause
 	p.state.tracks = ctxTracks
 	p.state.player.Track = ctxTracks.CurrentTrack()
 	p.state.player.PrevTracks = ctxTracks.PrevTracks()
-	p.state.player.NextTracks = ctxTracks.NextTracks()
+	p.state.player.NextTracks = ctxTracks.NextTracks(ctx)
 	p.state.player.Index = ctxTracks.Index()
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(paused, drop); err != nil {
+	if err := p.loadCurrentTrack(ctx, paused, drop); err != nil {
 		return fmt.Errorf("failed loading current track (load context): %w", err)
 	}
 
 	return nil
 }
 
-func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
+func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) error {
 	p.primaryStream = nil
 
 	spotId, err := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
@@ -214,7 +217,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	p.state.player.IsBuffering = true
 	p.state.player.IsPaused = paused
 	p.state.player.PlaybackSpeed = 0 // not progressing while buffering
-	p.updateState()
+	p.updateState(ctx)
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeWillPlay,
@@ -234,7 +237,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 		prefetched = false
 
 		var err error
-		p.primaryStream, err = p.player.NewStream(*spotId, p.app.cfg.Bitrate, trackPosition)
+		p.primaryStream, err = p.player.NewStream(ctx, *spotId, p.app.cfg.Bitrate, trackPosition)
 		if err != nil {
 			return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
 		}
@@ -254,7 +257,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false
 	p.state.setPaused(paused) // update IsPaused and PlaybackSpeed
-	p.updateState()
+	p.updateState(ctx)
 	p.schedulePrefetchNext()
 
 	p.app.server.Emit(&ApiEvent{
@@ -264,7 +267,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool) error {
 	return nil
 }
 
-func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
+func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
 	var requiresUpdate bool
 	if repeatingContext != nil && *repeatingContext != p.state.player.Options.RepeatingContext {
 		p.state.player.Options.RepeatingContext = *repeatingContext
@@ -293,7 +296,7 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 	}
 
 	if p.state.tracks != nil && shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
-		if err := p.state.tracks.ToggleShuffle(*shufflingContext); err != nil {
+		if err := p.state.tracks.ToggleShuffle(ctx, *shufflingContext); err != nil {
 			log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
 			return
 		}
@@ -301,7 +304,7 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 		p.state.player.Options.ShufflingContext = *shufflingContext
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
 		p.state.player.Index = p.state.tracks.Index()
 
 		p.app.server.Emit(&ApiEvent{
@@ -315,11 +318,11 @@ func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shu
 	}
 
 	if requiresUpdate {
-		p.updateState()
+		p.updateState(ctx)
 	}
 }
 
-func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
+func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrack) {
 	if p.state.tracks == nil {
 		log.Warnf("cannot add to queue without a context")
 		return
@@ -333,12 +336,12 @@ func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
 
 	p.state.tracks.AddToQueue(track)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks()
-	p.updateState()
+	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+	p.updateState(ctx)
 	p.schedulePrefetchNext()
 }
 
-func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
+func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
 	if p.state.tracks == nil {
 		log.Warnf("cannot set queue without a context")
 		return
@@ -346,12 +349,12 @@ func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.C
 
 	p.state.tracks.SetQueue(prev, next)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks()
-	p.updateState()
+	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+	p.updateState(ctx)
 	p.schedulePrefetchNext()
 }
 
-func (p *AppPlayer) play() error {
+func (p *AppPlayer) play(ctx context.Context) error {
 	if p.primaryStream == nil {
 		return fmt.Errorf("no primary stream")
 	}
@@ -373,13 +376,13 @@ func (p *AppPlayer) play() error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.setPaused(false)
-	p.updateState()
+	p.updateState(ctx)
 	p.schedulePrefetchNext()
 
 	return nil
 }
 
-func (p *AppPlayer) pause() error {
+func (p *AppPlayer) pause(ctx context.Context) error {
 	if p.primaryStream == nil {
 		return fmt.Errorf("no primary stream")
 	}
@@ -394,13 +397,13 @@ func (p *AppPlayer) pause() error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.setPaused(true)
-	p.updateState()
+	p.updateState(ctx)
 	p.schedulePrefetchNext()
 
 	return nil
 }
 
-func (p *AppPlayer) seek(position int64) error {
+func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 	if p.primaryStream == nil {
 		return fmt.Errorf("no primary stream")
 	}
@@ -414,7 +417,7 @@ func (p *AppPlayer) seek(position int64) error {
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = position
-	p.updateState()
+	p.updateState(ctx)
 	p.schedulePrefetchNext()
 
 	p.app.server.Emit(&ApiEvent{
@@ -430,9 +433,9 @@ func (p *AppPlayer) seek(position int64) error {
 	return nil
 }
 
-func (p *AppPlayer) skipPrev(allowSeeking bool) error {
+func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 	if allowSeeking && p.player.PositionMs() > 3000 {
-		return p.seek(0)
+		return p.seek(ctx, 0)
 	}
 
 	if p.state.tracks != nil {
@@ -441,7 +444,7 @@ func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
 		p.state.player.Index = p.state.tracks.Index()
 	}
 
@@ -449,17 +452,17 @@ func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 	p.state.player.PositionAsOfTimestamp = 0
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(p.state.player.IsPaused, true); err != nil {
+	if err := p.loadCurrentTrack(ctx, p.state.player.IsPaused, true); err != nil {
 		return fmt.Errorf("failed loading current track (skip prev): %w", err)
 	}
 
 	return nil
 }
 
-func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
+func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack) error {
 	if track != nil {
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
-		if err := p.state.tracks.TrySeek(tracks.ContextTrackComparator(contextSpotType, track)); err != nil {
+		if err := p.state.tracks.TrySeek(ctx, tracks.ContextTrackComparator(contextSpotType, track)); err != nil {
 			return err
 		}
 
@@ -468,15 +471,15 @@ func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
 		p.state.player.Index = p.state.tracks.Index()
 
-		if err := p.loadCurrentTrack(p.state.player.IsPaused, true); err != nil {
+		if err := p.loadCurrentTrack(ctx, p.state.player.IsPaused, true); err != nil {
 			return err
 		}
 		return nil
 	} else {
-		hasNextTrack, err := p.advanceNext(true, true)
+		hasNextTrack, err := p.advanceNext(ctx, true, true)
 		if err != nil {
 			return fmt.Errorf("failed skipping to next track: %w", err)
 		}
@@ -495,7 +498,7 @@ func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
 	}
 }
 
-func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
+func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool, error) {
 	var uri string
 	var hasNextTrack bool
 	if p.state.tracks != nil {
@@ -504,11 +507,11 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 			p.state.player.IsPaused = false
 		} else {
 			// try to get the next track
-			hasNextTrack = p.state.tracks.GoNext()
+			hasNextTrack = p.state.tracks.GoNext(ctx)
 
 			// if we could not get the next track we probably ended the context
 			if !hasNextTrack {
-				hasNextTrack = p.state.tracks.GoStart()
+				hasNextTrack = p.state.tracks.GoStart(ctx)
 
 				// if repeating is disabled move to the first track, but do not start it
 				if !p.state.player.Options.RepeatingContext {
@@ -521,7 +524,7 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks()
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
 		p.state.player.Index = p.state.tracks.Index()
 
 		uri = p.state.player.Track.Uri
@@ -535,12 +538,12 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 
 		// Consider all tracks as recent because we got here by reaching the end of the context
 		var prevTrackUris []string
-		for _, track := range p.state.tracks.AllTracks() {
+		for _, track := range p.state.tracks.AllTracks(ctx) {
 			prevTrackUris = append(prevTrackUris, track.Uri)
 		}
 
 		log.Debugf("resolving autoplay station for %d tracks", len(prevTrackUris))
-		ctx, err := p.sess.Spclient().ContextResolveAutoplay(&playerpb.AutoplayContextRequest{
+		spotCtx, err := p.sess.Spclient().ContextResolveAutoplay(ctx, &playerpb.AutoplayContextRequest{
 			ContextUri:     proto.String(p.state.player.ContextUri),
 			RecentTrackUri: prevTrackUris,
 		})
@@ -549,8 +552,8 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 			return false, nil
 		}
 
-		log.Debugf("resolved autoplay station: %s", ctx.Uri)
-		if err := p.loadContext(ctx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop); err != nil {
+		log.Debugf("resolved autoplay station: %s", spotCtx.Uri)
+		if err := p.loadContext(ctx, spotCtx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop); err != nil {
 			log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
 			return false, nil
 		}
@@ -565,14 +568,14 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool) (bool, error) {
 	}
 
 	// load current track into stream
-	if err := p.loadCurrentTrack(!hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
+	if err := p.loadCurrentTrack(ctx, !hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
 		log.WithError(err).Infof("skipping unplayable media: %s", uri)
 		if forceNext {
 			// we failed in finding another track to play, just stop
 			return false, err
 		}
 
-		return p.advanceNext(true, drop)
+		return p.advanceNext(ctx, true, drop)
 	} else if err != nil {
 		return false, fmt.Errorf("failed loading current track (advance to %s): %w", uri, err)
 	}
@@ -601,8 +604,8 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 // Send notification that the volume changed.
 // The original change can come from anywhere: from Spotify Connect, from the
 // REST API, or from a volume mixer.
-func (p *AppPlayer) volumeUpdated() {
-	if err := p.putConnectState(connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
+func (p *AppPlayer) volumeUpdated(ctx context.Context) {
+	if err := p.putConnectState(ctx, connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
 		log.WithError(err).Error("failed put state after volume change")
 	}
 

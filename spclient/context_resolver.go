@@ -1,6 +1,7 @@
 package spclient
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,29 +47,29 @@ func isTracksComplete(ctx *connectpb.Context) bool {
 	return expectedNumberOfTracks == totalLength
 }
 
-func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (_ *ContextResolver, err error) {
-	typ := librespot.InferSpotifyIdTypeFromContextUri(ctx.Uri)
+func NewContextResolver(ctx context.Context, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
+	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
 
-	if len(ctx.Pages) == 0 || !isTracksComplete(ctx) {
-		newCtx, err := sp.ContextResolve(ctx.Uri)
+	if len(spotCtx.Pages) == 0 || !isTracksComplete(spotCtx) {
+		newSpotCtx, err := sp.ContextResolve(ctx, spotCtx.Uri)
 		if err != nil {
-			return nil, fmt.Errorf("failed resolving context %s: %w", ctx.Uri, err)
-		} else if newCtx.Loading {
-			return nil, fmt.Errorf("context %s is loading", newCtx.Uri)
+			return nil, fmt.Errorf("failed resolving context %s: %w", spotCtx.Uri, err)
+		} else if newSpotCtx.Loading {
+			return nil, fmt.Errorf("context %s is loading", newSpotCtx.Uri)
 		}
 
-		if newCtx.Metadata == nil {
-			newCtx.Metadata = map[string]string{}
+		if newSpotCtx.Metadata == nil {
+			newSpotCtx.Metadata = map[string]string{}
 		}
-		for key, val := range ctx.Metadata {
-			newCtx.Metadata[key] = val
+		for key, val := range spotCtx.Metadata {
+			newSpotCtx.Metadata[key] = val
 		}
 
-		ctx = newCtx
+		spotCtx = newSpotCtx
 	}
 
-	autoplay := strings.HasPrefix(ctx.Uri, "spotify:station:")
-	for _, page := range ctx.Pages {
+	autoplay := strings.HasPrefix(spotCtx.Uri, "spotify:station:")
+	for _, page := range spotCtx.Pages {
 		for _, track := range page.Tracks {
 			if autoplay {
 				track.Metadata["autoplay.is_autoplay"] = "true"
@@ -76,7 +77,7 @@ func NewContextResolver(sp *Spclient, ctx *connectpb.Context) (_ *ContextResolve
 		}
 	}
 
-	return &ContextResolver{sp, typ, ctx}, nil
+	return &ContextResolver{sp, typ, spotCtx}, nil
 }
 
 func (r *ContextResolver) Type() librespot.SpotifyIdType {
@@ -95,13 +96,13 @@ func (r *ContextResolver) Restrictions() *connectpb.Restrictions {
 	return r.ctx.Restrictions
 }
 
-func (r *ContextResolver) loadPage(url string) (*connectpb.ContextPage, error) {
+func (r *ContextResolver) loadPage(ctx context.Context, url string) (*connectpb.ContextPage, error) {
 	if !strings.HasPrefix(url, "hm://") {
 		return nil, fmt.Errorf("invalid page url: %s", url)
 	}
 
 	url = url[5:]
-	resp, err := r.sp.Request("GET", url, nil, nil, nil)
+	resp, err := r.sp.Request(ctx, "GET", url, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting page at %s: %w", url, err)
 	}
@@ -128,7 +129,7 @@ func (r *ContextResolver) loadPage(url string) (*connectpb.ContextPage, error) {
 	return &contextPage, nil
 }
 
-func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
+func (r *ContextResolver) Page(ctx context.Context, idx int) ([]*connectpb.ContextTrack, error) {
 	for idx >= len(r.ctx.Pages) {
 		lastPage := r.ctx.Pages[len(r.ctx.Pages)-1]
 		if len(lastPage.NextPageUrl) == 0 {
@@ -136,7 +137,7 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
 			return nil, io.EOF
 		}
 
-		newPage, err := r.loadPage(lastPage.NextPageUrl)
+		newPage, err := r.loadPage(ctx, lastPage.NextPageUrl)
 		if err != nil {
 			return nil, fmt.Errorf("failed fetching next page: %w", err)
 		}
@@ -150,7 +151,7 @@ func (r *ContextResolver) Page(idx int) ([]*connectpb.ContextTrack, error) {
 			return nil, fmt.Errorf("invalid empty page without url")
 		}
 
-		newPage, err := r.loadPage(page.PageUrl)
+		newPage, err := r.loadPage(ctx, page.PageUrl)
 		if err != nil {
 			return nil, fmt.Errorf("failed fetching page: %w", err)
 		}

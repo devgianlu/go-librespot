@@ -61,7 +61,7 @@ func NewAccesspoint(addr librespot.GetAddressFunc, deviceId string) *Accesspoint
 	return &Accesspoint{addr: addr, deviceId: deviceId, recvChans: make(map[PacketType][]chan Packet)}
 }
 
-func (ap *Accesspoint) init() (err error) {
+func (ap *Accesspoint) init(ctx context.Context) (err error) {
 	// read 16 nonce bytes
 	ap.nonce = make([]byte, 16)
 	if _, err = rand.Read(ap.nonce); err != nil {
@@ -77,9 +77,9 @@ func (ap *Accesspoint) init() (err error) {
 	attempts := 0
 	for {
 		attempts++
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		addr := ap.addr()
-		conn, err := proxy.Dial(ctx, "tcp", addr)
+		ctx_, cancel := context.WithTimeout(ctx, time.Second*30)
+		addr := ap.addr(ctx_)
+		conn, err := proxy.Dial(ctx_, "tcp", addr)
 		cancel()
 		if err == nil {
 			// we assign to ap.conn after because if Dial fails we'll have a nil ap.conn which we don't want
@@ -96,23 +96,23 @@ func (ap *Accesspoint) init() (err error) {
 	}
 }
 
-func (ap *Accesspoint) ConnectSpotifyToken(username, token string) error {
-	return ap.Connect(&pb.LoginCredentials{
+func (ap *Accesspoint) ConnectSpotifyToken(ctx context.Context, username, token string) error {
+	return ap.Connect(ctx, &pb.LoginCredentials{
 		Typ:      pb.AuthenticationType_AUTHENTICATION_SPOTIFY_TOKEN.Enum(),
 		Username: proto.String(username),
 		AuthData: []byte(token),
 	})
 }
 
-func (ap *Accesspoint) ConnectStored(username string, data []byte) error {
-	return ap.Connect(&pb.LoginCredentials{
+func (ap *Accesspoint) ConnectStored(ctx context.Context, username string, data []byte) error {
+	return ap.Connect(ctx, &pb.LoginCredentials{
 		Typ:      pb.AuthenticationType_AUTHENTICATION_STORED_SPOTIFY_CREDENTIALS.Enum(),
 		Username: proto.String(username),
 		AuthData: data,
 	})
 }
 
-func (ap *Accesspoint) ConnectBlob(username string, encryptedBlob64 []byte) error {
+func (ap *Accesspoint) ConnectBlob(ctx context.Context, username string, encryptedBlob64 []byte) error {
 	encryptedBlob := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBlob64)))
 	if written, err := base64.StdEncoding.Decode(encryptedBlob, encryptedBlob64); err != nil {
 		return fmt.Errorf("failed decodeing encrypted blob: %w", err)
@@ -164,25 +164,25 @@ func (ap *Accesspoint) ConnectBlob(username string, encryptedBlob64 []byte) erro
 	authData := make([]byte, authDataLen)
 	_, _ = blob.Read(authData)
 
-	return ap.Connect(&pb.LoginCredentials{
+	return ap.Connect(ctx, &pb.LoginCredentials{
 		Typ:      pb.AuthenticationType(authTyp).Enum(),
 		Username: proto.String(username),
 		AuthData: authData,
 	})
 }
 
-func (ap *Accesspoint) Connect(creds *pb.LoginCredentials) error {
+func (ap *Accesspoint) Connect(ctx context.Context, creds *pb.LoginCredentials) error {
 	ap.connMu.Lock()
 	defer ap.connMu.Unlock()
 
-	return ap.connect(creds)
+	return ap.connect(ctx, creds)
 }
 
-func (ap *Accesspoint) connect(creds *pb.LoginCredentials) error {
+func (ap *Accesspoint) connect(ctx context.Context, creds *pb.LoginCredentials) error {
 	ap.recvLoopStop = make(chan struct{}, 1)
 	ap.pongAckTickerStop = make(chan struct{}, 1)
 
-	if err := ap.init(); err != nil {
+	if err := ap.init(ctx); err != nil {
 		return err
 	}
 
@@ -360,7 +360,7 @@ func (ap *Accesspoint) reconnect() (err error) {
 		return backoff.Permanent(fmt.Errorf("cannot reconnect without APWelcome"))
 	}
 
-	if err = ap.connect(&pb.LoginCredentials{
+	if err = ap.connect(context.TODO(), &pb.LoginCredentials{
 		Typ:      ap.welcome.ReusableAuthCredentialsType,
 		Username: ap.welcome.CanonicalUsername,
 		AuthData: ap.welcome.ReusableAuthCredentials,

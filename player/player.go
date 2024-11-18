@@ -1,6 +1,7 @@
 package player
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -336,13 +337,13 @@ func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
 
 const DisableCheckMediaRestricted = true
 
-func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
+func (p *Player) NewStream(ctx context.Context, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := log.WithField("uri", spotId.Uri())
 
 	var media *librespot.Media
 	var file *metadata.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
-		trackMeta, err := p.sp.MetadataForTrack(spotId)
+		trackMeta, err := p.sp.MetadataForTrack(ctx, spotId)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting track metadata: %w", err)
 		}
@@ -369,7 +370,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 			return nil, librespot.ErrNoSupportedFormats
 		}
 	} else if spotId.Type() == librespot.SpotifyIdTypeEpisode {
-		episodeMeta, err := p.sp.MetadataForEpisode(spotId)
+		episodeMeta, err := p.sp.MetadataForEpisode(ctx, spotId)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting episode metadata: %w", err)
 		}
@@ -394,7 +395,7 @@ func (p *Player) NewStream(spotId librespot.SpotifyId, bitrate int, mediaPositio
 		return nil, fmt.Errorf("failed retrieving audio key: %w", err)
 	}
 
-	storageResolve, err := p.sp.ResolveStorageInteractive(file.FileId, false)
+	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed resolving track storage: %w", err)
 	}

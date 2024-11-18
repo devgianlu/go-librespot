@@ -33,7 +33,7 @@ type Session struct {
 	audioKey *audio.KeyProvider
 }
 
-func NewSessionFromOptions(opts *Options) (*Session, error) {
+func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error) {
 	// validate device type
 	if opts.DeviceType == devicespb.DeviceType_UNKNOWN {
 		return nil, fmt.Errorf("missing device type")
@@ -73,7 +73,7 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	s.login5 = login5.NewLogin5(s.deviceId, s.clientToken)
 
 	// connect to the accesspoint
-	apAddr, err := s.resolver.GetAccesspoint()
+	apAddr, err := s.resolver.GetAccesspoint(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting accesspoint from resolver: %w", err)
 	}
@@ -85,7 +85,7 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	// authenticate with the accesspoint using the proper credentials
 	switch creds := opts.Credentials.(type) {
 	case StoredCredentials:
-		if err := s.ap.ConnectStored(creds.Username, creds.Data); err != nil {
+		if err := s.ap.ConnectStored(ctx, creds.Username, creds.Data); err != nil {
 			return nil, fmt.Errorf("failed authenticating accesspoint with stored credentials: %w", err)
 		}
 	case InteractiveCredentials:
@@ -144,15 +144,15 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 			return nil, fmt.Errorf("failed exchanging oauth2 code: %w", err)
 		}
 
-		if err := s.ap.ConnectSpotifyToken(token.Extra("username").(string), token.AccessToken); err != nil {
+		if err := s.ap.ConnectSpotifyToken(ctx, token.Extra("username").(string), token.AccessToken); err != nil {
 			return nil, fmt.Errorf("failed authenticating accesspoint interactively: %w", err)
 		}
 	case SpotifyTokenCredentials:
-		if err := s.ap.ConnectSpotifyToken(creds.Username, creds.Token); err != nil {
+		if err := s.ap.ConnectSpotifyToken(ctx, creds.Username, creds.Token); err != nil {
 			return nil, fmt.Errorf("failed authenticating accesspoint with username and spotify token: %w", err)
 		}
 	case BlobCredentials:
-		if err := s.ap.ConnectBlob(creds.Username, creds.Blob); err != nil {
+		if err := s.ap.ConnectBlob(ctx, creds.Username, creds.Blob); err != nil {
 			return nil, fmt.Errorf("failed authenticating accesspoint with blob: %w", err)
 		}
 	default:
@@ -160,7 +160,7 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	}
 
 	// authenticate with login5
-	if err := s.login5.Login(&credentialspb.StoredCredential{
+	if err := s.login5.Login(ctx, &credentialspb.StoredCredential{
 		Username: s.ap.Username(),
 		Data:     s.ap.StoredCredentials(),
 	}); err != nil {
@@ -168,14 +168,14 @@ func NewSessionFromOptions(opts *Options) (*Session, error) {
 	}
 
 	// initialize spclient
-	if spAddr, err := s.resolver.GetSpclient(); err != nil {
+	if spAddr, err := s.resolver.GetSpclient(ctx); err != nil {
 		return nil, fmt.Errorf("failed getting spclient from resolver: %w", err)
-	} else if s.sp, err = spclient.NewSpclient(spAddr, s.login5.AccessToken(), s.deviceId, s.clientToken); err != nil {
+	} else if s.sp, err = spclient.NewSpclient(ctx, spAddr, s.login5.AccessToken(), s.deviceId, s.clientToken); err != nil {
 		return nil, fmt.Errorf("failed initializing spclient: %w", err)
 	}
 
 	// initialize dealer
-	dealerAddr, err := s.resolver.GetDealer()
+	dealerAddr, err := s.resolver.GetDealer(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting dealer from resolver: %w", err)
 	}
