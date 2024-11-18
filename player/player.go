@@ -390,7 +390,7 @@ func (p *Player) NewStream(ctx context.Context, spotId librespot.SpotifyId, bitr
 
 	log.Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
 
-	audioKey, err := p.audioKey.Request(spotId.Id(), file.FileId)
+	audioKey, err := p.audioKey.Request(ctx, spotId.Id(), file.FileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed retrieving audio key: %w", err)
 	}

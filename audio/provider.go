@@ -2,6 +2,7 @@ package audio
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -102,17 +103,17 @@ func (p *KeyProvider) recvLoop() {
 	}
 }
 
-func (p *KeyProvider) Request(gid []byte, fileId []byte) ([]byte, error) {
+func (p *KeyProvider) Request(ctx context.Context, gid []byte, fileId []byte) ([]byte, error) {
 	p.startReceiving()
 
 	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse, 1)}
 	p.reqChan <- req
 
-	timeout := time.NewTimer(15 * time.Second)
-	defer timeout.Stop()
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 
 	select {
-	case <-timeout.C:
+	case <-ctx.Done():
 		return nil, fmt.Errorf("request timed out")
 	case resp := <-req.resp:
 		if resp.err != nil {
