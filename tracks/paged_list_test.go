@@ -1,6 +1,7 @@
 package tracks
 
 import (
+	"context"
 	"io"
 	"testing"
 
@@ -12,7 +13,7 @@ type dummyPageResolver struct {
 	page func(pageIdx int) ([]int, error)
 }
 
-func (d *dummyPageResolver) Page(idx int) ([]int, error) {
+func (d *dummyPageResolver) Page(ctx context.Context, idx int) ([]int, error) {
 	return d.page(idx)
 }
 
@@ -33,7 +34,7 @@ func TestPagedListSimpleIteration(t *testing.T) {
 	iter := list.iterStart()
 
 	for i := 0; i < 10; i++ {
-		if !iter.next() {
+		if !iter.next(context.Background()) {
 			t.Fatalf("iterator next returned false before end")
 		}
 
@@ -49,7 +50,7 @@ func TestPagedListSimpleIteration(t *testing.T) {
 		}
 	}
 
-	if iter.next() {
+	if iter.next(context.Background()) {
 		t.Fatalf("iterator next returned true after end")
 	} else if iter.error() != nil {
 		t.Fatalf("iterator error is not nil after end")
@@ -90,7 +91,7 @@ func TestPagedListMoving(t *testing.T) {
 	iter := list.iterStart()
 
 	for i := 0; i < 13; i++ {
-		if !iter.next() {
+		if !iter.next(context.Background()) {
 			t.Fatalf("iterator next returned false before end")
 		}
 	}
@@ -107,7 +108,7 @@ func TestPagedListMoving(t *testing.T) {
 		t.Fatalf("item.item = %d, wanted %d", item.item, 12*100)
 	}
 
-	if list.moveStart() != nil {
+	if list.moveStart(context.Background()) != nil {
 		t.Fatalf("moveStart returned an error")
 	}
 
@@ -138,7 +139,7 @@ func TestPagedListShuffle(t *testing.T) {
 	// load all items
 	iter := list.iterStart()
 	for i := 0; i < 50; i++ {
-		if !iter.next() {
+		if !iter.next(context.Background()) {
 			t.Fatalf("iterator next returned false before end")
 		}
 
@@ -160,7 +161,7 @@ func TestPagedListShuffle(t *testing.T) {
 	// move to some position
 	iter = list.iterStart()
 	for i := 0; i < 36; i++ {
-		if !iter.next() {
+		if !iter.next(context.Background()) {
 			t.Fatalf("iterator next returned false before end")
 		}
 	}
@@ -183,7 +184,7 @@ func TestPagedListShuffle(t *testing.T) {
 	// check order is back to the original
 	iter = list.iterStart()
 	for i := 0; i < 50; i++ {
-		if !iter.next() {
+		if !iter.next(context.Background()) {
 			t.Fatalf("iterator next returned false before end")
 		}
 
