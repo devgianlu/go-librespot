@@ -100,17 +100,21 @@ func SpotifyIdFromGid(typ SpotifyIdType, id []byte) SpotifyId {
 	return SpotifyId{typ, id}
 }
 
+func SpotifyIdFromBase62(typ SpotifyIdType, id string) (*SpotifyId, error) {
+	var i big.Int
+	_, ok := i.SetString(id, 62)
+	if !ok {
+		return nil, fmt.Errorf("failed decoding base62: %s", id)
+	}
+
+	return &SpotifyId{typ, i.FillBytes(make([]byte, 16))}, nil
+}
+
 func SpotifyIdFromUri(uri string) (_ *SpotifyId, err error) {
 	matches := UriRegexp.FindStringSubmatch(uri)
 	if len(matches) == 0 {
 		return nil, fmt.Errorf("invalid uri: %s", uri)
 	}
 
-	var i big.Int
-	_, ok := i.SetString(matches[2], 62)
-	if !ok {
-		return nil, fmt.Errorf("failed decoding base62 track uri: %s", uri)
-	}
-
-	return &SpotifyId{SpotifyIdType(matches[1]), i.FillBytes(make([]byte, 16))}, nil
+	return SpotifyIdFromBase62(SpotifyIdType(matches[1]), matches[2])
 }
