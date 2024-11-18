@@ -1,11 +1,13 @@
 package ap
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/devgianlu/shannon"
 )
@@ -33,7 +35,7 @@ func newShannonConn(conn net.Conn, sendKey []byte, recvKey []byte) *shannonConn 
 	}
 }
 
-func (c *shannonConn) sendPacket(pktType PacketType, payload []byte) error {
+func (c *shannonConn) sendPacket(ctx context.Context, pktType PacketType, payload []byte) error {
 	if len(payload) > 65535 {
 		return fmt.Errorf("payload too big: %d", len(payload))
 	}
@@ -58,6 +60,11 @@ func (c *shannonConn) sendPacket(pktType PacketType, payload []byte) error {
 	mac := make([]byte, 4)
 	c.sendCipher.Finish(mac)
 
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = c.conn.SetDeadline(deadline)
+		defer func() { _ = c.conn.SetDeadline(time.Time{}) }()
+	}
+
 	// write it all out
 	if _, err := c.conn.Write(packet); err != nil {
 		return fmt.Errorf("failed writing packet: %w", err)
@@ -68,9 +75,14 @@ func (c *shannonConn) sendPacket(pktType PacketType, payload []byte) error {
 	return nil
 }
 
-func (c *shannonConn) receivePacket() (PacketType, []byte, error) {
+func (c *shannonConn) receivePacket(ctx context.Context) (PacketType, []byte, error) {
 	c.recvLock.Lock()
 	defer c.recvLock.Unlock()
+
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = c.conn.SetDeadline(deadline)
+		defer func() { _ = c.conn.SetDeadline(time.Time{}) }()
+	}
 
 	// set nonce on cipher and increment
 	c.recvCipher.NonceU32(c.recvNonce)

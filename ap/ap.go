@@ -186,6 +186,11 @@ func (ap *Accesspoint) connect(ctx context.Context, creds *pb.LoginCredentials) 
 		return err
 	}
 
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = ap.conn.SetDeadline(deadline)
+		defer func() { _ = ap.conn.SetDeadline(time.Time{}) }()
+	}
+
 	// perform key exchange with diffiehellman
 	exchangeData, err := ap.performKeyExchange()
 	if err != nil {
@@ -198,7 +203,7 @@ func (ap *Accesspoint) connect(ctx context.Context, creds *pb.LoginCredentials) 
 	}
 
 	// do authentication with credentials
-	if err := ap.authenticate(creds); err != nil {
+	if err := ap.authenticate(ctx, creds); err != nil {
 		return fmt.Errorf("failed authenticating: %w", err)
 	}
 
@@ -220,10 +225,10 @@ func (ap *Accesspoint) Close() {
 	_ = ap.conn.Close()
 }
 
-func (ap *Accesspoint) Send(pktType PacketType, payload []byte) error {
+func (ap *Accesspoint) Send(ctx context.Context, pktType PacketType, payload []byte) error {
 	ap.connMu.RLock()
 	defer ap.connMu.RUnlock()
-	return ap.encConn.sendPacket(pktType, payload)
+	return ap.encConn.sendPacket(ctx, pktType, payload)
 }
 
 func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
@@ -261,7 +266,7 @@ loop:
 			break loop
 		default:
 			// no need to hold the connMu since reconnection happens in this routine
-			pkt, payload, err := ap.encConn.receivePacket()
+			pkt, payload, err := ap.encConn.receivePacket(context.TODO())
 			if err != nil {
 				log.WithError(err).Errorf("failed receiving packet")
 				break loop
@@ -270,7 +275,7 @@ loop:
 			switch pkt {
 			case PacketTypePing:
 				log.Tracef("received accesspoint ping")
-				if err := ap.encConn.sendPacket(PacketTypePong, payload); err != nil {
+				if err := ap.encConn.sendPacket(context.TODO(), PacketTypePong, payload); err != nil {
 					log.WithError(err).Errorf("failed sending Pong packet")
 					break loop
 				}
@@ -467,7 +472,7 @@ func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 	return fmt.Errorf("failed login: %s", resp.LoginFailed.ErrorCode.String())
 }
 
-func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
+func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCredentials) error {
 	if ap.encConn == nil {
 		panic("accesspoint not connected")
 	}
@@ -488,12 +493,12 @@ func (ap *Accesspoint) authenticate(credentials *pb.LoginCredentials) error {
 	}
 
 	// send Login packet
-	if err := ap.encConn.sendPacket(PacketTypeLogin, payload); err != nil {
+	if err := ap.encConn.sendPacket(ctx, PacketTypeLogin, payload); err != nil {
 		return fmt.Errorf("failed sending Login packet: %w", err)
 	}
 
 	// receive APWelcome or AuthFailure
-	recvPkt, recvPayload, err := ap.encConn.receivePacket()
+	recvPkt, recvPayload, err := ap.encConn.receivePacket(ctx)
 	if err != nil {
 		return fmt.Errorf("failed recevining Login response packet: %w", err)
 	}

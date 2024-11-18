@@ -3,9 +3,8 @@ package ap
 import (
 	"encoding/binary"
 	"fmt"
-	"io"
-
 	"google.golang.org/protobuf/proto"
+	"io"
 )
 
 func writeMessage(w io.Writer, withHello bool, m proto.Message) error {
