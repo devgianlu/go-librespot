@@ -589,7 +589,7 @@ func (p *AppPlayer) apiVolume() uint32 {
 	return uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
 }
 
-// Set the player volume to the new volume.
+// Set the player volume to the new volume, also notifies about the change.
 func (p *AppPlayer) updateVolume(newVal uint32) {
 	if newVal > player.MaxStateVolume {
 		newVal = player.MaxStateVolume
@@ -599,6 +599,8 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 
 	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
 	p.player.SetVolume(newVal)
+
+	p.volumeUpdate <- float32(newVal) / player.MaxStateVolume
 }
 
 // Send notification that the volume changed.
