@@ -58,7 +58,6 @@ jobs:
         run: |
           mkdir -p /tmp/out
           docker run --rm \
-            --env COMMIT=${{ github.sha }} \
             --env VERSION=${{ startsWith(github.ref_name, 'v') && github.ref_name || '' }} \
             -v $PWD:/src \
             go-librespot-build-${{ matrix.target }}
