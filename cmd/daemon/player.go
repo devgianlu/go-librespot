@@ -145,6 +145,14 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 
 	switch req.Command.Endpoint {
 	case "transfer":
+		if len(req.Command.Data) == 0 {
+			p.app.server.Emit(&ApiEvent{
+				Type: ApiEventTypeActive,
+			})
+
+			return nil
+		}
+
 		var transferState connectpb.TransferState
 		if err := proto.Unmarshal(req.Command.Data, &transferState); err != nil {
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
