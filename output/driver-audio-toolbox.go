@@ -1,4 +1,4 @@
-//go:build !android && !js && !windows && !nintendosdk && !linux && darwin
+//go:build darwin
 
 package output
 
@@ -18,8 +18,6 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"io"
-	"sync"
 	"unsafe"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -27,80 +25,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type ringBuffer struct {
-	data   []float32
-	size   int
-	head   int
-	tail   int
-	mu     sync.Mutex
-	cond   *sync.Cond
-	closed bool
-}
-
-func newRingBuffer(size int) *ringBuffer {
-	rb := &ringBuffer{
-		data: make([]float32, size),
-		size: size,
-	}
-	rb.cond = sync.NewCond(&rb.mu)
-	return rb
-}
-
-func (rb *ringBuffer) write(samples []float32) error {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-
-	if rb.closed {
-		return errors.New("ring buffer closed")
-	}
-
-	for _, sample := range samples {
-		next := (rb.tail + 1) % rb.size
-		if next == rb.head {
-			rb.cond.Wait()
-		}
-		rb.data[rb.tail] = sample
-		rb.tail = next
-	}
-
-	rb.cond.Signal()
-	return nil
-}
-
-func (rb *ringBuffer) read(samples []float32) int {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-
-	if rb.closed && rb.head == rb.tail {
-		return 0
-	}
-
-	read := 0
-	for read < len(samples) && rb.head != rb.tail {
-		samples[read] = rb.data[rb.head]
-		rb.head = (rb.head + 1) % rb.size
-		read++
-	}
-
-	rb.cond.Signal()
-	return read
-}
-
-func (rb *ringBuffer) close() {
-	rb.mu.Lock()
-	defer rb.mu.Unlock()
-
-	rb.closed = true
-	rb.cond.Broadcast()
-}
-
 type toolboxOutput struct {
 	channels   int
 	sampleRate int
 	reader     librespot.Float32Reader
 	audioQueue C.AudioQueueRef
 	bufferSize int
-	ringBuffer *ringBuffer
 	context    *C.AudioContext
 	paused     bool
 	volume     float32
@@ -114,13 +44,12 @@ func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels 
 		sampleRate: sampleRate,
 		reader:     reader,
 		bufferSize: 2048,
-		ringBuffer: newRingBuffer(8192),
 		volume:     initialVolume,
 		err:        make(chan error, 1),
 		stopChan:   make(chan struct{}),
 	}
 
-	// We need the C.AudioContext to give the callback safe access to the output object
+	// We need the C.AudioContext to give the callback safe access to the output context
 	log.Tracef("Allocating audio context")
 	ctx := (*C.AudioContext)(C.malloc(C.size_t(unsafe.Sizeof(C.AudioContext{}))))
 	if ctx == nil {
@@ -178,14 +107,6 @@ func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels 
 		return nil, out.toolboxError("startAudioQueue", err)
 	}
 
-	// Start subroutine which buffers audio samples to the ring buffer to play
-	go func() {
-		log.Tracef("start readLoop")
-		out.err <- out.readLoop()
-		log.Tracef("end readLoop")
-		_ = out.Close()
-	}()
-
 	log.Info("Started audio-toolbox output")
 	return out, nil
 }
@@ -198,39 +119,13 @@ func (out *toolboxOutput) toolboxError(name string, err C.int) error {
 	return errors.New(fmt.Sprintf("%s: %d", name, err))
 }
 
-// Loop to fill the ring buffer with audio samples
-func (out *toolboxOutput) readLoop() error {
-	buffer := make([]float32, out.bufferSize)
-	for {
-		select {
-		case <-out.stopChan:
-			return nil
-		default:
-			n, err := out.reader.Read(buffer)
-			if err == io.EOF {
-				out.ringBuffer.close()
-				return io.EOF
-			} else if err != nil {
-				out.err <- fmt.Errorf("error reading samples: %v", err)
-				return err
-			}
-			if err := out.ringBuffer.write(buffer[:n]); err != nil {
-				out.err <- err
-				return err
-			}
-		}
-	}
-}
-
-// Writes samples from the ring buffer into the output buffer
-func (out *toolboxOutput) fillBuffer(buffer C.AudioQueueBufferRef) {
+// Gets samples from the reader and writes them to the output buffer
+func (out *toolboxOutput) bufferSamples(buffer C.AudioQueueBufferRef) {
 	data := make([]float32, out.bufferSize)
-	n := out.ringBuffer.read(data)
-	if n == 0 {
-		// Underflow, fill with silence
-		for i := 0; i < out.bufferSize; i++ {
-			data[i] = 0
-		}
+	n, err := out.reader.Read(data)
+	if err != nil {
+		out.err <- fmt.Errorf("error reading samples: %v", err)
+		return
 	}
 
 	C.memcpy(unsafe.Pointer(buffer.mAudioData), unsafe.Pointer(&data[0]), C.size_t(n*4))
@@ -246,7 +141,7 @@ func (out *toolboxOutput) fillBuffer(buffer C.AudioQueueBufferRef) {
 func audioCallback(inUserData unsafe.Pointer, inAQ C.AudioQueueRef, inBuffer C.AudioQueueBufferRef) {
 	ctx := (*C.AudioContext)(inUserData)
 	out := (*toolboxOutput)(ctx.output)
-	out.fillBuffer(inBuffer)
+	out.bufferSamples(inBuffer)
 }
 
 func (out *toolboxOutput) Pause() error {
@@ -349,7 +244,6 @@ func (out *toolboxOutput) Close() error {
 	}
 
 	close(out.stopChan)
-	out.ringBuffer.close()
 
 	return nil
 }
