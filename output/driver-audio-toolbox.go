@@ -2,280 +2,292 @@
 
 package output
 
+// #cgo LDFLAGS: -framework AudioToolbox -framework CoreAudio
+// #include <AudioToolbox/AudioToolbox.h>
+// #include <CoreAudio/CoreAudio.h>
+// extern void audioCallback(void * inUserData, AudioQueueRef inAQ,	AudioQueueBufferRef inBuffer);
 //
-//#cgo LDFLAGS: -framework AudioToolbox -v -framework CoreAudio
+// typedef struct {
+//     void *output;
+// } AudioContext;
 //
-//#include <CoreAudio/CoreAudio.h>
-//#include <AudioToolbox/AudioToolbox.h>
-//
-//extern void audioCallback(void * inUserData, AudioQueueRef inAQ,	AudioQueueBufferRef inBuffer);
-//
+// static void freeAudioContext(AudioContext *ctx) {
+//     free(ctx);
+// }
 import "C"
 import (
 	"errors"
 	"fmt"
+	"io"
+	"sync"
+	"unsafe"
+
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
-	"io"
-	"runtime"
-	"sync"
-	"unsafe"
 )
 
-type arr[T any] struct {
-	ptr   *T
-	ln    uint
-	vlPtr *float32
+type ringBuffer struct {
+	data   []float32
+	size   int
+	head   int
+	tail   int
+	mu     sync.Mutex
+	cond   *sync.Cond
+	closed bool
 }
-type output struct {
+
+func newRingBuffer(size int) *ringBuffer {
+	rb := &ringBuffer{
+		data: make([]float32, size),
+		size: size,
+	}
+	rb.cond = sync.NewCond(&rb.mu)
+	return rb
+}
+
+func (rb *ringBuffer) write(samples []float32) error {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if rb.closed {
+		return errors.New("ring buffer closed")
+	}
+
+	for _, sample := range samples {
+		next := (rb.tail + 1) % rb.size
+		if next == rb.head {
+			rb.cond.Wait()
+		}
+		rb.data[rb.tail] = sample
+		rb.tail = next
+	}
+
+	rb.cond.Signal()
+	return nil
+}
+
+func (rb *ringBuffer) read(samples []float32) int {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if rb.closed && rb.head == rb.tail {
+		return 0
+	}
+
+	read := 0
+	for read < len(samples) && rb.head != rb.tail {
+		samples[read] = rb.data[rb.head]
+		rb.head = (rb.head + 1) % rb.size
+		read++
+	}
+
+	rb.cond.Signal()
+	return read
+}
+
+func (rb *ringBuffer) close() {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	rb.closed = true
+	rb.cond.Broadcast()
+}
+
+type toolboxOutput struct {
 	channels   int
 	sampleRate int
-	device     string
 	reader     librespot.Float32Reader
-
-	cond *sync.Cond
-
-	canPause   bool
-	periodSize int
-	bufferSize int
-	samples    *RingBuffer[arr[float32]]
-
-	pin runtime.Pinner
-
-	externalVolume bool
-
-	volume    float32
-	volumePtr *float32
-	paused    bool
-	closed    bool
-	released  bool
-
-	buffers    []C.AudioQueueBufferRef
-	numBuffers int
-
 	audioQueue C.AudioQueueRef
-
-	externalVolumeUpdate *RingBuffer[float32]
-	err                  chan error
+	bufferSize int
+	ringBuffer *ringBuffer
+	context    *C.AudioContext
+	paused     bool
+	volume     float32
+	err        chan error
+	stopChan   chan struct{}
 }
 
-func newOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, externalVolumeUpdate *RingBuffer[float32]) (*output, error) {
-	out := &output{
-		reader:               reader,
-		channels:             channels,
-		sampleRate:           sampleRate,
-		device:               device,
-		volume:               initialVolume,
-		err:                  make(chan error, 2),
-		cond:                 sync.NewCond(&sync.Mutex{}),
-		externalVolume:       externalVolume,
-		externalVolumeUpdate: externalVolumeUpdate,
+func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels int, initialVolume float32) (*toolboxOutput, error) {
+	out := &toolboxOutput{
+		channels:   channels,
+		sampleRate: sampleRate,
+		reader:     reader,
+		bufferSize: 2048,
+		ringBuffer: newRingBuffer(8192),
+		volume:     initialVolume,
+		err:        make(chan error, 1),
+		stopChan:   make(chan struct{}),
 	}
 
-	if err := out.setupPcm(); err != nil {
-		return nil, err
+	// We need the C.AudioContext to give the callback safe access to the output object
+	log.Tracef("Allocating audio context")
+	ctx := (*C.AudioContext)(C.malloc(C.size_t(unsafe.Sizeof(C.AudioContext{}))))
+	if ctx == nil {
+		return nil, errors.New("failed to allocate AudioContext")
+	}
+	ctx.output = unsafe.Pointer(out)
+
+	// Create a new Audio Toolbox output
+	log.Tracef("Configuring output")
+	description := C.AudioStreamBasicDescription{
+		mSampleRate:       C.double(out.sampleRate),
+		mFormatID:         C.kAudioFormatLinearPCM,
+		mFormatFlags:      C.kAudioFormatFlagIsFloat | C.kAudioFormatFlagIsPacked,
+		mBytesPerPacket:   C.UInt32(4 * out.channels),
+		mFramesPerPacket:  1,
+		mBytesPerFrame:    C.UInt32(4 * out.channels),
+		mChannelsPerFrame: C.UInt32(out.channels),
+		mBitsPerChannel:   32,
+	}
+	err := C.AudioQueueNewOutput(
+		&description,
+		(C.AudioQueueOutputCallback)(C.audioCallback),
+		unsafe.Pointer(ctx),
+		0,
+		0,
+		0,
+		&out.audioQueue,
+	)
+	if err != 0 {
+		C.freeAudioContext(out.context)
+		return nil, out.toolboxError("setupAudioQueue", err)
 	}
 
+	// Allocate Audio Toolbox buffers
+	log.Tracef("Allocating audio buffer")
+	for i := 0; i < 3; i++ {
+		var buffer C.AudioQueueBufferRef
+		status := C.AudioQueueAllocateBuffer(out.audioQueue, C.UInt32(out.bufferSize*4), &buffer)
+		if status != C.noErr {
+			return nil, out.toolboxError("allocateAudioQueue", err)
+		}
+
+		// Init buffer with silence
+		C.memset(unsafe.Pointer(buffer.mAudioData), 0, C.size_t(out.bufferSize*4))
+		buffer.mAudioDataByteSize = C.UInt32(out.bufferSize * 4)
+		status = C.AudioQueueEnqueueBuffer(out.audioQueue, buffer, 0, nil)
+		if status != C.noErr {
+			return nil, out.toolboxError("enqueueAudioQueue", err)
+		}
+	}
+
+	// Start the Audio Toolbox output
+	log.Tracef("Starting audio queue")
+	if err := C.AudioQueueStart(out.audioQueue, nil); err != 0 {
+		return nil, out.toolboxError("startAudioQueue", err)
+	}
+
+	// Start subroutine which buffers audio samples to the ring buffer to play
 	go func() {
+		log.Tracef("start readLoop")
 		out.err <- out.readLoop()
+		log.Tracef("end readLoop")
 		_ = out.Close()
 	}()
 
+	log.Info("Started audio-toolbox output")
 	return out, nil
 }
 
-func (out *output) alsaError(name string, err C.int) error {
+// Error handler - returns new error obj
+func (out *toolboxOutput) toolboxError(name string, err C.int) error {
 	if errors.Is(unix.Errno(-err), unix.EPIPE) {
 		_ = out.Close()
 	}
 	return errors.New(fmt.Sprintf("%s: %d", name, err))
 }
 
-func (out *output) setupPcm() error {
-	description := C.AudioStreamBasicDescription{
-		mSampleRate:       (C.double)(out.sampleRate),
-		mFormatID:         C.kAudioFormatLinearPCM,
-		mFormatFlags:      C.kAudioFormatFlagIsFloat,
-		mBytesPerPacket:   8,
-		mFramesPerPacket:  1,
-		mBytesPerFrame:    8,
-		mChannelsPerFrame: 2,
-		mBitsPerChannel:   32,
-		mReserved:         0,
-	}
-
-	log.Tracef("start setupPcm")
-
-	out.numBuffers = 16
-	out.volumePtr = &out.volume
-
-	var in = calloc(C.ulong(out.numBuffers), C.ulong(unsafe.Sizeof(arr[float32]{})), "setupPcm")
-	// hideous hack, if it is possible somehow differently, please change this
-	var f = NewRingBuffer[arr[float32]](uint64(out.numBuffers))
-
-	// replace the inner, with c-memory
-	f.inner = unsafe.Slice((*arr[float32])(in), out.numBuffers)
-	out.samples = f
-
-	out.pin.Pin(f.notFull)
-	out.pin.Pin(f.notEmpty)
-	out.pin.Pin(out.volumePtr)
-
-	var cb C.AudioQueueOutputCallback = (C.AudioQueueOutputCallback)(C.audioCallback)
-
-	err := C.AudioQueueNewOutput(&description, cb, (unsafe.Pointer)(out.samples), 0, 0, 0, &out.audioQueue)
-	if err != 0 {
-		return out.alsaError("setupAudioQueue", err)
-	}
-
-	// todo: somehow get a more clever period size on the hardware here
-	out.periodSize = 4096
-	var bufferSize = out.periodSize * out.channels * 4
-	out.bufferSize = bufferSize
-
-	out.buffers = make([]C.AudioQueueBufferRef, 4)
-
-	for i := 0; i < len(out.buffers); i++ {
-		var allocResult = C.AudioQueueAllocateBuffer(out.audioQueue, C.uint(bufferSize), (*C.AudioQueueBufferRef)(&out.buffers[i]))
-
-		log.Tracef("alloc result %d: %d", i, int(allocResult))
-
-		var buf = out.buffers[i]
-
-		buf.mAudioDataByteSize = buf.mAudioDataBytesCapacity
-
-		var enqResult = C.AudioQueueEnqueueBuffer(out.audioQueue, out.buffers[i], 0, nil)
-		log.Tracef("enqueue buffer %d", int(enqResult))
-	}
-
-	var queueStart = C.AudioQueueStart(out.audioQueue, nil)
-
-	log.Tracef("pcm setup! %d", int(queueStart))
-	out.closed = false
-	return nil
-}
-
-func (out *output) logParams(params any) error {
-	return nil
-}
-
-func (out *output) readLoop() error {
+// Loop to fill the ring buffer with audio samples
+func (out *toolboxOutput) readLoop() error {
+	buffer := make([]float32, out.bufferSize)
 	for {
-		if out.closed {
-			return io.EOF
-		}
-
-		var fts = calloc(C.ulong(out.channels*out.periodSize), C.ulong(unsafe.Sizeof(C.float(0))), "readLoop")
-		floats := unsafe.Slice((*float32)(fts), out.channels*out.periodSize)
-
-		n, err := out.reader.Read(floats)
-		if n > 0 {
-			floats = floats[:n]
-			var ar = arr[float32]{
-				ptr:   (*float32)(fts),
-				ln:    uint(n),
-				vlPtr: out.volumePtr,
-			}
-
-			if err := out.samples.PutWait(ar); errors.Is(err, ErrBufferClosed) {
-				return nil
+		select {
+		case <-out.stopChan:
+			return nil
+		default:
+			n, err := out.reader.Read(buffer)
+			if err == io.EOF {
+				out.ringBuffer.close()
+				return io.EOF
 			} else if err != nil {
-				_ = out.samples.Close()
+				out.err <- fmt.Errorf("error reading samples: %v", err)
+				return err
+			}
+			if err := out.ringBuffer.write(buffer[:n]); err != nil {
+				out.err <- err
 				return err
 			}
 		}
+	}
+}
 
-		if errors.Is(err, io.EOF) {
-			_ = out.samples.Close()
-			return nil
-		} else if err != nil {
-			_ = out.samples.Close()
-			return err
+// Writes samples from the ring buffer into the output buffer
+func (out *toolboxOutput) fillBuffer(buffer C.AudioQueueBufferRef) {
+	data := make([]float32, out.bufferSize)
+	n := out.ringBuffer.read(data)
+	if n == 0 {
+		// Underflow, fill with silence
+		for i := 0; i < out.bufferSize; i++ {
+			data[i] = 0
 		}
+	}
+
+	C.memcpy(unsafe.Pointer(buffer.mAudioData), unsafe.Pointer(&data[0]), C.size_t(n*4))
+	buffer.mAudioDataByteSize = C.UInt32(n * 4)
+
+	status := C.AudioQueueEnqueueBuffer(out.audioQueue, buffer, 0, nil)
+	if status != C.noErr {
+		log.Errorf("error queuing samples for output: %v", status)
 	}
 }
 
 //export audioCallback
-func audioCallback(inUserData unsafe.Pointer, inAq C.AudioQueueRef, inBuffer C.AudioQueueBufferRef) {
-	var out = (*RingBuffer[arr[float32]])(inUserData)
-
-	samples, err := out.GetWait()
-	if err != nil {
-		log.Tracef("callback err")
-		return
-	}
-
-	if uint(inBuffer.mAudioDataBytesCapacity/4) < samples.ln {
-		log.Warnf("buffer overrun")
-	}
-
-	samplesToPush := min(samples.ln, uint(inBuffer.mAudioDataBytesCapacity/4))
-	inBuffer.mAudioDataByteSize = C.uint(samplesToPush * 4)
-
-	var mem = inBuffer.mAudioData
-	C.memcpy(mem, (unsafe.Pointer)(samples.ptr), C.ulong(samplesToPush*uint(unsafe.Sizeof((C.float)(0)))))
-
-	ptr := unsafe.Slice((*float32)(mem), samplesToPush)
-	for i := 0; i < int(samplesToPush); i++ {
-		ptr[i] *= *samples.vlPtr
-	}
-
-	if C.AudioQueueEnqueueBuffer(inAq, inBuffer, 0, nil) != C.OSStatus(0) {
-		log.Tracef("error enqueue")
-	}
-
-	free(unsafe.Pointer(samples.ptr), "audioCallback")
-	samples.ptr = nil
+func audioCallback(inUserData unsafe.Pointer, inAQ C.AudioQueueRef, inBuffer C.AudioQueueBufferRef) {
+	ctx := (*C.AudioContext)(inUserData)
+	out := (*toolboxOutput)(ctx.output)
+	out.fillBuffer(inBuffer)
 }
 
-func (out *output) Pause() error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	if out.closed || out.paused {
+func (out *toolboxOutput) Pause() error {
+	if out.paused {
 		return nil
 	}
 
-	C.AudioQueuePause(out.audioQueue)
+	err := C.AudioQueuePause(out.audioQueue)
+	if err != 0 {
+		return out.toolboxError("pauseAudioQueue", err)
+	}
 
 	out.paused = true
-
 	return nil
 }
 
-func (out *output) Resume() error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	if out.closed || !out.paused {
+func (out *toolboxOutput) Resume() error {
+	if !out.paused {
 		return nil
 	}
 
-	C.AudioQueueStart(out.audioQueue, nil)
+	err := C.AudioQueueStart(out.audioQueue, nil)
+	if err != 0 {
+		return out.toolboxError("resumeAudioQueue", err)
+	}
 
 	out.paused = false
-	out.cond.Signal()
-
 	return nil
 }
 
-func (out *output) Drop() error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	if out.closed || out.released {
-		return nil
+func (out *toolboxOutput) Drop() error {
+	// Flush the audio queue to remove all pending buffers
+	err := C.AudioQueueFlush(out.audioQueue)
+	if err != 0 {
+		return out.toolboxError("flushAudioQueue", err)
 	}
 
-	out.samples.Clear()
-	C.AudioQueueFlush(out.audioQueue)
-	out.pin.Unpin()
-
 	return nil
 }
 
-func (out *output) DelayMs() (int64, error) {
+func (out *toolboxOutput) DelayMs() (int64, error) {
 	// first get default audio output
 	outputDeviceID := C.uint(C.kAudioObjectUnknown)
 	size := C.uint(unsafe.Sizeof(outputDeviceID))
@@ -286,9 +298,9 @@ func (out *output) DelayMs() (int64, error) {
 		C.kAudioObjectPropertyElementMaster,
 	}
 
-	status := C.AudioObjectGetPropertyData(C.kAudioObjectSystemObject, &propertyAddress, 0, nil, &size, unsafe.Pointer(&outputDeviceID))
-	if status != 0 {
-		return 0, out.alsaError("delay_ms, get_default_output", status)
+	err := C.AudioObjectGetPropertyData(C.kAudioObjectSystemObject, &propertyAddress, 0, nil, &size, unsafe.Pointer(&outputDeviceID))
+	if err != 0 {
+		return 0, out.toolboxError("getDefaultOutput", err)
 	}
 
 	// after that, query the latency
@@ -300,73 +312,44 @@ func (out *output) DelayMs() (int64, error) {
 
 	var latency uint32 = 0
 	size = C.uint(unsafe.Sizeof(latency))
-	status = C.AudioObjectGetPropertyData(outputDeviceID, &propertyAddress, 0, nil, &size, unsafe.Pointer(&latency))
+	err = C.AudioObjectGetPropertyData(outputDeviceID, &propertyAddress, 0, nil, &size, unsafe.Pointer(&latency))
 
-	if status != 0 {
-		return 0, out.alsaError("delay_ms, latency", status)
+	if err != 0 {
+		return 0, out.toolboxError("getLatency", err)
 	}
 
 	return int64(latency*1000) / int64(out.sampleRate), nil
 }
 
-func (out *output) SetVolume(vol float32) {
+func (out *toolboxOutput) SetVolume(vol float32) {
 	if vol < 0 || vol > 1 {
 		panic(fmt.Sprintf("invalid volume value: %0.2f", vol))
 	}
-
+	C.AudioQueueSetParameter(out.audioQueue, C.kAudioQueueParam_Volume, C.Float32(vol))
 	out.volume = vol
 }
 
-func (out *output) Error() <-chan error {
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
+func (out *toolboxOutput) Error() <-chan error {
 	return out.err
 }
 
-func free(p unsafe.Pointer, context string) {
-	// log.Tracef("(%s) freeing %x", context, p)
-	C.free(p)
-}
+func (out *toolboxOutput) Close() error {
 
-func calloc(n C.ulong, sz C.ulong, context string) unsafe.Pointer {
-	ptr := C.calloc(n, sz)
+	// Stop the audio queue
+	C.AudioQueueStop(out.audioQueue, C.Boolean(1))
 
-	// log.Tracef("(%s) calloc at %x", context, unsafe.Pointer(ptr))
-	if ptr == nil {
-		panic("calloc failed!")
+	// Dispose of the audio queue
+	if out.audioQueue != nil {
+		C.AudioQueueDispose(out.audioQueue, C.Boolean(1))
 	}
 
-	return unsafe.Pointer(ptr)
-}
-
-func (out *output) Close() error {
-	log.Tracef("close")
-	out.cond.L.Lock()
-	defer out.cond.L.Unlock()
-
-	if out.closed || out.released {
-		out.closed = true
-		return nil
+	if out.context != nil {
+		C.freeAudioContext(out.context)
+		out.context = nil
 	}
 
-	C.AudioQueueFlush(out.audioQueue)
-	C.AudioQueueDispose(out.audioQueue, 0)
-
-	for range out.samples.count {
-		s, ok, err := out.samples.Get()
-		if err != nil || !ok || s.ptr == nil {
-			break
-		}
-
-		free((unsafe.Pointer)(s.ptr), "singleSampleClose")
-		s.ptr = nil
-	}
-
-	free((unsafe.Pointer)(unsafe.SliceData(out.samples.inner)), "sampleContainerClose")
-
-	out.closed = true
-	out.cond.Signal()
+	close(out.stopChan)
+	out.ringBuffer.close()
 
 	return nil
 }
