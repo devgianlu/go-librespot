@@ -53,6 +53,7 @@ func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels 
 	log.Tracef("Allocating audio context")
 	ctx := (*C.AudioContext)(C.malloc(C.size_t(unsafe.Sizeof(C.AudioContext{}))))
 	if ctx == nil {
+		out.err <- errors.New("failed to allocate AudioContext")
 		return nil, errors.New("failed to allocate AudioContext")
 	}
 	ctx.output = unsafe.Pointer(out)
@@ -116,7 +117,8 @@ func (out *toolboxOutput) toolboxError(name string, err C.int) error {
 	if errors.Is(unix.Errno(-err), unix.EPIPE) {
 		_ = out.Close()
 	}
-	return errors.New(fmt.Sprintf("%s: %d", name, err))
+	out.err <- fmt.Errorf("%s: %d", name, err)
+	return fmt.Errorf("%s: %d", name, err)
 }
 
 // Gets samples from the reader and writes them to the output buffer
