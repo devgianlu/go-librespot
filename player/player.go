@@ -65,7 +65,15 @@ type playerCmdDataSet struct {
 	drop    bool
 }
 
-func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisationEnabled bool, normalisationPregain float32, countryCode *string, backend, device, mixer string, control string, volumeSteps uint32, externalVolume bool, volumeUpdate chan float32) (*Player, error) {
+// FIXME: we should probably use a struct here
+func NewPlayer(
+	sp *spclient.Spclient, audioKey *audio.KeyProvider,
+	normalisationEnabled bool, normalisationPregain float32,
+	countryCode *string,
+	backend, device, mixer, control string,
+	bufferTime, periodCount int,
+	externalVolume bool, volumeUpdate chan float32,
+) (*Player, error) {
 	p := &Player{
 		sp:                   sp,
 		audioKey:             audioKey,
@@ -74,16 +82,18 @@ func NewPlayer(sp *spclient.Spclient, audioKey *audio.KeyProvider, normalisation
 		countryCode:          countryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Backend:        backend,
-				Reader:         reader,
-				SampleRate:     SampleRate,
-				ChannelCount:   Channels,
-				Device:         device,
-				Mixer:          mixer,
-				Control:        control,
-				InitialVolume:  volume,
-				ExternalVolume: externalVolume,
-				VolumeUpdate:   volumeUpdate,
+				Backend:         backend,
+				Reader:          reader,
+				SampleRate:      SampleRate,
+				ChannelCount:    Channels,
+				Device:          device,
+				Mixer:           mixer,
+				Control:         control,
+				InitialVolume:   volume,
+				BufferTimeMicro: bufferTime,
+				PeriodCount:     periodCount,
+				ExternalVolume:  externalVolume,
+				VolumeUpdate:    volumeUpdate,
 			})
 		},
 

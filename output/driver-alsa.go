@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	BufferTimeMicro = 500_000
-	NumPeriods      = 4 // number of periods requested
+	defaultBufferTimeMicro = 500_000
+	defaultNumPeriods      = 4
 )
 
 type alsaOutput struct {
@@ -32,9 +32,11 @@ type alsaOutput struct {
 
 	lock sync.Mutex
 
-	pcmHandle  *C.snd_pcm_t // nil when pcmHandle is closed
-	periodSize int
-	bufferSize int
+	pcmHandle   *C.snd_pcm_t // nil when pcmHandle is closed
+	bufferTime  int
+	periodCount int
+	periodSize  int
+	bufferSize  int
 
 	externalVolume bool
 
@@ -66,6 +68,18 @@ func newAlsaOutput(opts *NewOutputOptions) (*alsaOutput, error) {
 		err:            make(chan error, 2),
 		externalVolume: opts.ExternalVolume,
 		volumeUpdate:   opts.VolumeUpdate,
+	}
+
+	if opts.BufferTimeMicro == 0 {
+		out.bufferTime = defaultBufferTimeMicro
+	} else {
+		out.bufferTime = opts.BufferTimeMicro
+	}
+
+	if opts.PeriodCount == 0 {
+		out.periodCount = defaultNumPeriods
+	} else {
+		out.periodCount = opts.PeriodCount
 	}
 
 	if err := out.setupMixer(); err != nil {
@@ -120,7 +134,7 @@ func (out *alsaOutput) setupPcm() error {
 		return out.alsaError("snd_pcm_hw_params_set_rate_near", err)
 	}
 
-	bufferTime := C.uint(BufferTimeMicro)
+	bufferTime := C.uint(out.bufferTime)
 	if err := C.snd_pcm_hw_params_set_buffer_time_near(out.pcmHandle, hwparams, &bufferTime, nil); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_buffer_time_near", err)
 	}
@@ -132,7 +146,7 @@ func (out *alsaOutput) setupPcm() error {
 	if err := C.snd_pcm_hw_params_get_buffer_size(hwparams, &bufferSize); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_get_buffer_size", err)
 	}
-	var periodSize C.snd_pcm_uframes_t = C.snd_pcm_uframes_t(bufferSize) / NumPeriods
+	var periodSize C.snd_pcm_uframes_t = C.snd_pcm_uframes_t(bufferSize) / C.snd_pcm_uframes_t(out.periodCount)
 	if err := C.snd_pcm_hw_params_set_period_size_near(out.pcmHandle, hwparams, &periodSize, nil); err < 0 {
 		return out.alsaError("snd_pcm_hw_params_set_period_size_near", err)
 	}

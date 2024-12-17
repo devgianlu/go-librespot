@@ -84,6 +84,16 @@
           "description": "Which control should be used, leave empty for default. Only useful in combination with 'mixer_device'",
           "default": "Master"
         },
+        "audio_buffer_time": {
+          "type": "integer",
+          "description": "The audio buffer time in microseconds. Available for ALSA backend only, leave empty for default",
+          "default": 0
+        },
+        "audio_period_count": {
+          "type": "integer",
+          "description": "The number of audio periods to request. Available for ALSA backend only, leave empty for default",
+          "default": 0
+        },
         "server": {
           "type": "object",
           "properties": {

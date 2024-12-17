@@ -67,6 +67,16 @@ type NewOutputOptions struct {
 	// This only works in combination with Mixer
 	Control string
 
+	// BufferTimeMicro is the buffer time in microseconds.
+	//
+	// This is only supported on the alsa backend.
+	BufferTimeMicro int
+
+	// PeriodCount is the number of periods to request.
+	//
+	// This is only supported on the alsa backend.
+	PeriodCount int
+
 	// InitialVolume specifies the initial output volume.
 	//
 	// This is only supported on the alsa backend. The PulseAudio backend uses

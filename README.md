@@ -137,6 +137,8 @@ device_type: computer # Spotify device type (icon)
 audio_device: default # ALSA audio device to use for playback
 mixer_device: '' # ALSA mixer device for volume synchronization 
 mixer_control_name: Master # ALSA mixer control name for volume synchronization
+audio_buffer_time: 500000 # Audio buffer time in microseconds, ALSA only
+audio_period_count: 4 # Number of periods to request, ALSA only
 bitrate: 160 # Playback bitrate (96, 160, 320)
 volume_steps: 100 # Volume steps count
 initial_volume: 100 # Initial volume in steps (not applied to the mixer device)

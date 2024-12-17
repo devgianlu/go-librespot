@@ -133,8 +133,10 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	if appPlayer.player, err = player.NewPlayer(
 		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
 		!app.cfg.NormalisationDisabled, app.cfg.NormalisationPregain,
-		appPlayer.countryCode, app.cfg.AudioBackend, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
-		app.cfg.VolumeSteps, app.cfg.ExternalVolume, appPlayer.volumeUpdate,
+		appPlayer.countryCode,
+		app.cfg.AudioBackend, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
+		app.cfg.AudioBufferTime, app.cfg.AudioPeriodCount,
+		app.cfg.ExternalVolume, appPlayer.volumeUpdate,
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
@@ -348,6 +350,8 @@ type Config struct {
 	AudioDevice           string    `koanf:"audio_device"`
 	MixerDevice           string    `koanf:"mixer_device"`
 	MixerControlName      string    `koanf:"mixer_control_name"`
+	AudioBufferTime       int       `koanf:"audio_buffer_time"`
+	AudioPeriodCount      int       `koanf:"audio_period_count"`
 	Bitrate               int       `koanf:"bitrate"`
 	VolumeSteps           uint32    `koanf:"volume_steps"`
 	InitialVolume         uint32    `koanf:"initial_volume"`
