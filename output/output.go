@@ -89,13 +89,13 @@ type NewOutputOptions struct {
 func NewOutput(options *NewOutputOptions) (Output, error) {
 	switch options.Backend {
 	case "alsa":
-		out, err := newAlsaOutput(options.Reader, options.SampleRate, options.ChannelCount, options.Device, options.Mixer, options.Control, options.InitialVolume, options.ExternalVolume, options.VolumeUpdate)
+		out, err := newAlsaOutput(options)
 		if err != nil {
 			return nil, err
 		}
 		return out, nil
 	case "pulseaudio":
-		out, err := newPulseAudioOutput(options.Reader, options.SampleRate, options.ChannelCount, options.VolumeUpdate)
+		out, err := newPulseAudioOutput(options)
 		if err != nil {
 			return nil, err
 		}

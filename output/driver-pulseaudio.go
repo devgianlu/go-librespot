@@ -22,7 +22,7 @@ type pulseAudioOutput struct {
 	err                  chan error
 }
 
-func newPulseAudioOutput(reader librespot.Float32Reader, sampleRate int, channels int, externalVolumeUpdate chan float32) (*pulseAudioOutput, error) {
+func newPulseAudioOutput(opts *NewOutputOptions) (*pulseAudioOutput, error) {
 	// Initialize the PulseAudio client.
 	// The device name is shown by PulseAudio volume controls (usually built
 	// into a desktop environment), so we might want to use device_name here.
@@ -32,21 +32,21 @@ func newPulseAudioOutput(reader librespot.Float32Reader, sampleRate int, channel
 		return nil, err
 	}
 	out := &pulseAudioOutput{
-		sampleRate:           sampleRate,
-		reader:               reader,
+		sampleRate:           opts.SampleRate,
+		reader:               opts.Reader,
 		client:               client,
-		externalVolumeUpdate: externalVolumeUpdate,
+		externalVolumeUpdate: opts.VolumeUpdate,
 		err:                  make(chan error, 2),
 	}
 
 	// Create a new playback.
 	var channelOpt pulse.PlaybackOption
-	if channels == 1 {
+	if opts.ChannelCount == 1 {
 		channelOpt = pulse.PlaybackMono
-	} else if channels == 2 {
+	} else if opts.ChannelCount == 2 {
 		channelOpt = pulse.PlaybackStereo
 	} else {
-		return nil, fmt.Errorf("cannot play %d channels, pulse only supports mono and stereo", channels)
+		return nil, fmt.Errorf("cannot play %d channels, pulse only supports mono and stereo", opts.ChannelCount)
 	}
 	volumeUpdates := make(chan proto.ChannelVolumes, 1)
 	out.stream, err = out.client.NewPlayback(pulse.Float32Reader(out.float32Reader), pulse.PlaybackSampleRate(out.sampleRate), channelOpt, pulse.PlaybackVolumeChanges(volumeUpdates))
@@ -60,7 +60,7 @@ func newPulseAudioOutput(reader librespot.Float32Reader, sampleRate int, channel
 	// PulseAudio provided volume.
 	cvol, _ := out.stream.Volume()
 	out.volume = cvol.Avg()
-	sendVolumeUpdate(externalVolumeUpdate, float32(out.volume.Norm()))
+	sendVolumeUpdate(opts.VolumeUpdate, float32(out.volume.Norm()))
 
 	// Listen for volume changes (through the volume mixer application, usually
 	// built into the desktop environment), and send them back to Spotify.
@@ -70,7 +70,7 @@ func newPulseAudioOutput(reader librespot.Float32Reader, sampleRate int, channel
 
 			out.volumeLock.Lock()
 			if volume != out.volume {
-				sendVolumeUpdate(externalVolumeUpdate, float32(volume.Norm()))
+				sendVolumeUpdate(opts.VolumeUpdate, float32(volume.Norm()))
 				out.volume = volume
 			}
 			out.volumeLock.Unlock()

@@ -54,18 +54,18 @@ type alsaOutput struct {
 	err          chan error
 }
 
-func newAlsaOutput(reader librespot.Float32Reader, sampleRate int, channels int, device string, mixer string, control string, initialVolume float32, externalVolume bool, volumeUpdate chan float32) (*alsaOutput, error) {
+func newAlsaOutput(opts *NewOutputOptions) (*alsaOutput, error) {
 	out := &alsaOutput{
-		reader:         reader,
-		channels:       channels,
-		sampleRate:     sampleRate,
-		device:         device,
-		mixer:          mixer,
-		control:        control,
-		volume:         initialVolume,
+		reader:         opts.Reader,
+		channels:       opts.ChannelCount,
+		sampleRate:     opts.SampleRate,
+		device:         opts.Device,
+		mixer:          opts.Mixer,
+		control:        opts.Control,
+		volume:         opts.InitialVolume,
 		err:            make(chan error, 2),
-		externalVolume: externalVolume,
-		volumeUpdate:   volumeUpdate,
+		externalVolume: opts.ExternalVolume,
+		volumeUpdate:   opts.VolumeUpdate,
 	}
 
 	if err := out.setupMixer(); err != nil {
