@@ -62,6 +62,7 @@ An example configuration (not required) looks like this:
 
 ```yaml
 zeroconf_enabled: false # Whether to keep the device discoverable at all times, even if authenticated via other means
+zeroconf_port: 0 # The port to use for Zeroconf, 0 for random
 credentials:
   type: zeroconf
   zeroconf:

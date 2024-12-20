@@ -134,6 +134,11 @@
           "description": "Whether Zeroconf discovery should always be enabled (even when logging in with credentials)",
           "default": false
         },
+        "zeroconf_port": {
+          "type": "integer",
+          "description": "The port to use for the Zeroconf service (empty for random)",
+          "default": 0
+        },
         "credentials": {
           "type": "object",
           "properties": {

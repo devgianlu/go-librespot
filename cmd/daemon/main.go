@@ -214,7 +214,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.cfg.DeviceName, app.deviceId, app.deviceType)
+	z, err := zeroconf.NewZeroconf(app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
@@ -359,6 +359,7 @@ type Config struct {
 	NormalisationPregain  float32   `koanf:"normalisation_pregain"`
 	ExternalVolume        bool      `koanf:"external_volume"`
 	ZeroconfEnabled       bool      `koanf:"zeroconf_enabled"`
+	ZeroconfPort          int       `koanf:"zeroconf_port"`
 	DisableAutoplay       bool      `koanf:"disable_autoplay"`
 	Server                struct {
 		Enabled     bool   `koanf:"enabled"`

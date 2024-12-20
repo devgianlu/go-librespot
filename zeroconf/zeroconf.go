@@ -45,7 +45,7 @@ type NewUserRequest struct {
 	result chan bool
 }
 
-func NewZeroconf(deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
+func NewZeroconf(port int, deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
 	z := &Zeroconf{deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
 	z.reqsChan = make(chan NewUserRequest)
 
@@ -54,7 +54,7 @@ func NewZeroconf(deviceName, deviceId string, deviceType devicespb.DeviceType) (
 		return nil, fmt.Errorf("failed initializing diffiehellman: %w", err)
 	}
 
-	z.listener, err = net.Listen("tcp", "0.0.0.0:0")
+	z.listener, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
 	if err != nil {
 		return nil, fmt.Errorf("failed starting zeroconf listener: %w", err)
 	}
