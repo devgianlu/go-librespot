@@ -370,13 +370,13 @@ type Config struct {
 		KeyFile     string `koanf:"key_file"`
 	} `koanf:"server"`
 	Credentials struct {
-		Type        string `yaml:"type"`
+		Type        string `koanf:"type"`
 		Interactive struct {
-			CallbackPort int `yaml:"callback_port"`
+			CallbackPort int `koanf:"callback_port"`
 		} `koanf:"interactive"`
 		SpotifyToken struct {
-			Username    string `yaml:"username"`
-			AccessToken string `yaml:"access_token"`
+			Username    string `koanf:"username"`
+			AccessToken string `koanf:"access_token"`
 		} `koanf:"spotify_token"`
 		Zeroconf struct {
 			PersistCredentials bool `koanf:"persist_credentials"`
