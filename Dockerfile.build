@@ -1,6 +1,5 @@
 FROM --platform=linux/amd64 docker.io/golang:1.22.2-bullseye
 
-ENV COMMIT=dev
 ENV VERSION=0.0.0
 
 # Preparations
@@ -56,5 +55,5 @@ ENV CGO_ENABLED=1 PKG_CONFIG_PATH=/tmp/deps/${TARGET}/lib/pkgconfig/ CC=${CC} \
     GOCACHE=/src/.gocache/go-build GOMODCACHE=/src/.gocache/mod
 CMD go build \
     -buildvcs=false \
-    -ldflags="-X github.com/devgianlu/go-librespot.commit=${COMMIT} -X github.com/devgianlu/go-librespot.version=${VERSION}" \
+    -ldflags="-X github.com/devgianlu/go-librespot.version=${VERSION}" \
     -o ./go-librespot${GOOUTSUFFIX} -a ./cmd/daemon
