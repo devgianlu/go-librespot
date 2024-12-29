@@ -65,35 +65,76 @@ type playerCmdDataSet struct {
 	drop    bool
 }
 
-// FIXME: we should probably use a struct here
-func NewPlayer(
-	sp *spclient.Spclient, audioKey *audio.KeyProvider,
-	normalisationEnabled bool, normalisationPregain float32,
-	countryCode *string,
-	backend, device, mixer, control string,
-	bufferTime, periodCount int,
-	externalVolume bool, volumeUpdate chan float32,
-) (*Player, error) {
+type Options struct {
+	Spclient *spclient.Spclient
+	AudioKey *audio.KeyProvider
+
+	// NormalisationEnabled specifies if the volume should be normalised according
+	// to Spotify parameters. Only track normalization is supported.
+	NormalisationEnabled bool
+	// NormalisationPregain specifies the pre-gain to apply when normalising the volume
+	// in dB. Use negative values to avoid clipping.
+	NormalisationPregain float32
+
+	// CountryCode specifies the country code to use for media restrictions.
+	CountryCode *string
+
+	// AudioBackend specifies the audio backend to use (alsa, pulseaudio, etc).
+	AudioBackend string
+	// AudioDevice specifies the audio device name.
+	//
+	// This feature is support only for the alsa backend.
+	AudioDevice string
+	// MixerDevice specifies the audio mixer name.
+	//
+	// This feature is support only for the alsa backend.
+	MixerDevice string
+	// MixerControlName specifies the mixer control name.
+	//
+	// This only works in combination with Mixer.
+	MixerControlName string
+
+	// AudioBufferTime is the buffer time in microseconds.
+	//
+	// This is only supported on the alsa backend.
+	AudioBufferTime int
+	// AudioPeriodCount is the number of periods to request.
+	//
+	// This is only supported on the alsa backend.
+	AudioPeriodCount int
+
+	// ExternalVolume specifies, if the volume is controlled outside the app.
+	//
+	// This is only supported on the alsa backend. The PulseAudio backend always
+	// uses external volume.
+	ExternalVolume bool
+
+	// VolumeUpdate is a channel on which volume updates will be sent back to
+	// Spotify. This must be a buffered channel.
+	VolumeUpdate chan float32
+}
+
+func NewPlayer(opts *Options) (*Player, error) {
 	p := &Player{
-		sp:                   sp,
-		audioKey:             audioKey,
-		normalisationEnabled: normalisationEnabled,
-		normalisationPregain: normalisationPregain,
-		countryCode:          countryCode,
+		sp:                   opts.Spclient,
+		audioKey:             opts.AudioKey,
+		normalisationEnabled: opts.NormalisationEnabled,
+		normalisationPregain: opts.NormalisationPregain,
+		countryCode:          opts.CountryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Backend:         backend,
+				Backend:         opts.AudioBackend,
 				Reader:          reader,
 				SampleRate:      SampleRate,
 				ChannelCount:    Channels,
-				Device:          device,
-				Mixer:           mixer,
-				Control:         control,
+				Device:          opts.AudioDevice,
+				Mixer:           opts.MixerDevice,
+				Control:         opts.MixerControlName,
 				InitialVolume:   volume,
-				BufferTimeMicro: bufferTime,
-				PeriodCount:     periodCount,
-				ExternalVolume:  externalVolume,
-				VolumeUpdate:    volumeUpdate,
+				BufferTimeMicro: opts.AudioBufferTime,
+				PeriodCount:     opts.AudioPeriodCount,
+				ExternalVolume:  opts.ExternalVolume,
+				VolumeUpdate:    opts.VolumeUpdate,
 			})
 		},
 

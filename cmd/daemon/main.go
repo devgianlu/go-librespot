@@ -130,13 +130,26 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 	appPlayer.initState()
 
-	if appPlayer.player, err = player.NewPlayer(
-		appPlayer.sess.Spclient(), appPlayer.sess.AudioKey(),
-		!app.cfg.NormalisationDisabled, app.cfg.NormalisationPregain,
-		appPlayer.countryCode,
-		app.cfg.AudioBackend, app.cfg.AudioDevice, app.cfg.MixerDevice, app.cfg.MixerControlName,
-		app.cfg.AudioBufferTime, app.cfg.AudioPeriodCount,
-		app.cfg.ExternalVolume, appPlayer.volumeUpdate,
+	if appPlayer.player, err = player.NewPlayer(&player.Options{
+		Spclient: appPlayer.sess.Spclient(),
+		AudioKey: appPlayer.sess.AudioKey(),
+
+		NormalisationEnabled: !app.cfg.NormalisationDisabled,
+		NormalisationPregain: app.cfg.NormalisationPregain,
+
+		CountryCode: appPlayer.countryCode,
+
+		AudioBackend:     app.cfg.AudioBackend,
+		AudioDevice:      app.cfg.AudioDevice,
+		MixerDevice:      app.cfg.MixerDevice,
+		MixerControlName: app.cfg.MixerControlName,
+
+		AudioBufferTime:  app.cfg.AudioBufferTime,
+		AudioPeriodCount: app.cfg.AudioPeriodCount,
+
+		ExternalVolume: app.cfg.ExternalVolume,
+		VolumeUpdate:   appPlayer.volumeUpdate,
+	},
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
 	}
