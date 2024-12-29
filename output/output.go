@@ -83,10 +83,10 @@ type NewOutputOptions struct {
 	// the PulseAudio default volume.
 	InitialVolume float32
 
-	// ExternalVolume specifies, if the volume is controlled outside of the app.
+	// ExternalVolume specifies, if the volume is controlled outside the app.
 	//
-	// This is only supported on the alsa backend. The PulseAudio backend always
-	// uses external volume.
+	// This is only supported on the alsa and pipe backends.
+	// The PulseAudio backend always uses external volume.
 	ExternalVolume bool
 
 	// VolumeUpdate is a channel on which volume updates will be sent back to
@@ -94,6 +94,11 @@ type NewOutputOptions struct {
 	// Spotify.
 	// This must be a buffered channel.
 	VolumeUpdate chan float32
+
+	// OutputPipe is the path to the output pipe.
+	//
+	// This is only supported on the pipe backend.
+	OutputPipe string
 }
 
 func NewOutput(options *NewOutputOptions) (Output, error) {
@@ -106,6 +111,12 @@ func NewOutput(options *NewOutputOptions) (Output, error) {
 		return out, nil
 	case "pulseaudio":
 		out, err := newPulseAudioOutput(options)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	case "pipe":
+		out, err := newPipeOutput(options)
 		if err != nil {
 			return nil, err
 		}

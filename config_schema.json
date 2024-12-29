@@ -65,7 +65,8 @@
           "description": "Which audio backend (API) should be used for playback, leave empty for default",
           "enum": [
             "alsa",
-            "pulseaudio"
+            "pulseaudio",
+            "pipe"
           ],
           "default": "alsa"
         },
@@ -93,6 +94,11 @@
           "type": "integer",
           "description": "The number of audio periods to request. Available for ALSA backend only, leave empty for default",
           "default": 0
+        },
+        "audio_output_pipe": {
+          "type": "string",
+          "description": "The path to an existing FIFO for the pipe audio backend",
+          "default": ""
         },
         "server": {
           "type": "object",

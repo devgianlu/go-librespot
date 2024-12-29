@@ -105,13 +105,18 @@ type Options struct {
 
 	// ExternalVolume specifies, if the volume is controlled outside the app.
 	//
-	// This is only supported on the alsa backend. The PulseAudio backend always
-	// uses external volume.
+	// This is only supported on the alsa and pipe backends.
+	// The PulseAudio backend always uses external volume.
 	ExternalVolume bool
 
 	// VolumeUpdate is a channel on which volume updates will be sent back to
 	// Spotify. This must be a buffered channel.
 	VolumeUpdate chan float32
+
+	// AudioOutputPipe is the path to the output pipe.
+	//
+	// This is only supported on the pipe backend.
+	AudioOutputPipe string
 }
 
 func NewPlayer(opts *Options) (*Player, error) {
@@ -135,6 +140,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 				PeriodCount:     opts.AudioPeriodCount,
 				ExternalVolume:  opts.ExternalVolume,
 				VolumeUpdate:    opts.VolumeUpdate,
+				OutputPipe:      opts.AudioOutputPipe,
 			})
 		},
 

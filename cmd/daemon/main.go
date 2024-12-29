@@ -149,6 +149,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 		ExternalVolume: app.cfg.ExternalVolume,
 		VolumeUpdate:   appPlayer.volumeUpdate,
+
+		AudioOutputPipe: app.cfg.AudioOutputPipe,
 	},
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
@@ -365,6 +367,7 @@ type Config struct {
 	MixerControlName      string    `koanf:"mixer_control_name"`
 	AudioBufferTime       int       `koanf:"audio_buffer_time"`
 	AudioPeriodCount      int       `koanf:"audio_period_count"`
+	AudioOutputPipe       string    `koanf:"audio_output_pipe"`
 	Bitrate               int       `koanf:"bitrate"`
 	VolumeSteps           uint32    `koanf:"volume_steps"`
 	InitialVolume         uint32    `koanf:"initial_volume"`
