@@ -99,6 +99,12 @@ type NewOutputOptions struct {
 	//
 	// This is only supported on the pipe backend.
 	OutputPipe string
+
+	// OutputPipeFormat is the format of the output pipe.
+	// Available formats are: "s16le", "s32le", "f32le". Default is "s16le".
+	//
+	// This is only supported on the pipe backend.
+	OutputPipeFormat string
 }
 
 func NewOutput(options *NewOutputOptions) (Output, error) {

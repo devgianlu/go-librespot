@@ -142,6 +142,7 @@ mixer_control_name: Master # ALSA mixer control name for volume synchronization
 audio_buffer_time: 500000 # Audio buffer time in microseconds, ALSA only
 audio_period_count: 4 # Number of periods to request, ALSA only
 audio_output_pipe: '' # Path to a named pipe for audio output
+audio_output_pipe_format: s16le # Audio output pipe format (s16le, s32le, f32le)
 bitrate: 160 # Playback bitrate (96, 160, 320)
 volume_steps: 100 # Volume steps count
 initial_volume: 100 # Initial volume in steps (not applied to the mixer device)

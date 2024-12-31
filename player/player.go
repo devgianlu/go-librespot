@@ -117,6 +117,12 @@ type Options struct {
 	//
 	// This is only supported on the pipe backend.
 	AudioOutputPipe string
+
+	// AudioOutputPipeFormat is the format of the output pipe.
+	// Available formats are: "s16le", "s32le", "f32le". Default is "s16le".
+	//
+	// This is only supported on the pipe backend.
+	AudioOutputPipeFormat string
 }
 
 func NewPlayer(opts *Options) (*Player, error) {
@@ -128,19 +134,20 @@ func NewPlayer(opts *Options) (*Player, error) {
 		countryCode:          opts.CountryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Backend:         opts.AudioBackend,
-				Reader:          reader,
-				SampleRate:      SampleRate,
-				ChannelCount:    Channels,
-				Device:          opts.AudioDevice,
-				Mixer:           opts.MixerDevice,
-				Control:         opts.MixerControlName,
-				InitialVolume:   volume,
-				BufferTimeMicro: opts.AudioBufferTime,
-				PeriodCount:     opts.AudioPeriodCount,
-				ExternalVolume:  opts.ExternalVolume,
-				VolumeUpdate:    opts.VolumeUpdate,
-				OutputPipe:      opts.AudioOutputPipe,
+				Backend:          opts.AudioBackend,
+				Reader:           reader,
+				SampleRate:       SampleRate,
+				ChannelCount:     Channels,
+				Device:           opts.AudioDevice,
+				Mixer:            opts.MixerDevice,
+				Control:          opts.MixerControlName,
+				InitialVolume:    volume,
+				BufferTimeMicro:  opts.AudioBufferTime,
+				PeriodCount:      opts.AudioPeriodCount,
+				ExternalVolume:   opts.ExternalVolume,
+				VolumeUpdate:     opts.VolumeUpdate,
+				OutputPipe:       opts.AudioOutputPipe,
+				OutputPipeFormat: opts.AudioOutputPipeFormat,
 			})
 		},
 

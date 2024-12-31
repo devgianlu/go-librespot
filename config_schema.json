@@ -100,6 +100,16 @@
           "description": "The path to an existing FIFO for the pipe audio backend",
           "default": ""
         },
+        "audio_output_pipe_format": {
+          "type": "string",
+          "description": "The format of the audio data written to the pipe",
+          "enum": [
+            "s16le",
+            "s32le",
+            "f32le"
+          ],
+          "default": "s16le"
+        },
         "server": {
           "type": "object",
           "properties": {

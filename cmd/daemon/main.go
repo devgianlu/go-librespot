@@ -150,7 +150,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		ExternalVolume: app.cfg.ExternalVolume,
 		VolumeUpdate:   appPlayer.volumeUpdate,
 
-		AudioOutputPipe: app.cfg.AudioOutputPipe,
+		AudioOutputPipe:       app.cfg.AudioOutputPipe,
+		AudioOutputPipeFormat: app.cfg.AudioOutputPipeFormat,
 	},
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
@@ -368,6 +369,7 @@ type Config struct {
 	AudioBufferTime       int       `koanf:"audio_buffer_time"`
 	AudioPeriodCount      int       `koanf:"audio_period_count"`
 	AudioOutputPipe       string    `koanf:"audio_output_pipe"`
+	AudioOutputPipeFormat string    `koanf:"audio_output_pipe_format"`
 	Bitrate               int       `koanf:"bitrate"`
 	VolumeSteps           uint32    `koanf:"volume_steps"`
 	InitialVolume         uint32    `koanf:"initial_volume"`
@@ -438,16 +440,21 @@ func loadConfig(cfg *Config) error {
 
 	// load default configuration
 	_ = k.Load(confmap.Provider(map[string]interface{}{
-		"log_level":          log.InfoLevel,
-		"device_type":        "computer",
-		"audio_backend":      "alsa",
-		"audio_device":       "default",
-		"mixer_control_name": "Master",
-		"bitrate":            160,
-		"volume_steps":       100,
-		"initial_volume":     100,
-		"credentials.type":   "zeroconf",
-		"server.address":     "localhost",
+		"log_level": log.InfoLevel,
+
+		"device_type": "computer",
+		"bitrate":     160,
+
+		"audio_backend":            "alsa",
+		"audio_device":             "default",
+		"audio_output_pipe_format": "s16le",
+		"mixer_control_name":       "Master",
+
+		"volume_steps":   100,
+		"initial_volume": 100,
+
+		"credentials.type": "zeroconf",
+		"server.address":   "localhost",
 	}, "."), nil)
 
 	// load file configuration (if available)
