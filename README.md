@@ -22,7 +22,7 @@ as [GitHub Actions artifacts](https://github.com/devgianlu/go-librespot/blob/249
 ### Using Docker
 
 A lightweight Docker image for go-librespot is available
-on the [GitHub Container Registry](https://github.com/devgianlu/go-fileshare/pkgs/container/go-fileshare).
+on the [GitHub Container Registry](https://github.com/devgianlu/go-librespot/pkgs/container/go-librespot).
 
 An example Docker Compose configuration for PulseAudio is available [here](/docker-compose.pulse.yml).
 
