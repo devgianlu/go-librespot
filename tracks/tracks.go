@@ -13,6 +13,8 @@ import (
 )
 
 type List struct {
+	log *log.Entry
+
 	ctx *spclient.ContextResolver
 
 	shuffled    bool
@@ -25,17 +27,17 @@ type List struct {
 	queue        []*connectpb.ContextTrack
 }
 
-func NewTrackListFromContext(ctx context.Context, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
+func NewTrackListFromContext(ctx context.Context, log_ *log.Entry, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
 	tl := &List{}
-	tl.ctx, err = spclient.NewContextResolver(ctx, sp, spotCtx)
+	tl.ctx, err = spclient.NewContextResolver(ctx, log_, sp, spotCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing context resolver: %w", err)
 	}
 
-	log := log.WithField("uri", tl.ctx.Uri())
-	log.Debugf("resolved context of %s", tl.ctx.Type())
+	tl.log = log_.WithField("uri", tl.ctx.Uri())
+	tl.log.Debugf("resolved context of %s", tl.ctx.Type())
 
-	tl.tracks = newPagedList[*connectpb.ContextTrack](log, tl.ctx)
+	tl.tracks = newPagedList[*connectpb.ContextTrack](tl.log, tl.ctx)
 	return tl, nil
 }
 
@@ -45,7 +47,7 @@ func (tl *List) Metadata() map[string]string {
 
 func (tl *List) TrySeek(ctx context.Context, f func(track *connectpb.ContextTrack) bool) error {
 	if err := tl.Seek(ctx, f); err != nil {
-		log.WithError(err).Warnf("failed seeking to track in context %s", tl.ctx.Uri())
+		tl.log.WithError(err).Warnf("failed seeking to track in context %s", tl.ctx.Uri())
 
 		err = tl.tracks.moveStart(ctx)
 		if err != nil {
@@ -83,7 +85,7 @@ func (tl *List) AllTracks(ctx context.Context) []*connectpb.ProvidedTrack {
 	}
 
 	if err := iter.error(); err != nil {
-		log.WithError(err).Error("failed fetching all tracks")
+		tl.log.WithError(err).Error("failed fetching all tracks")
 	}
 
 	return tracks
@@ -101,7 +103,7 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	}
 
 	if err := iter.error(); err != nil {
-		log.WithError(err).Error("failed fetching prev tracks")
+		tl.log.WithError(err).Error("failed fetching prev tracks")
 	}
 
 	// Tracks were added in reverse order. Fix this by reversing them again.
@@ -131,7 +133,7 @@ func (tl *List) NextTracks(ctx context.Context) []*connectpb.ProvidedTrack {
 	}
 
 	if err := iter.error(); err != nil {
-		log.WithError(err).Error("failed fetching next tracks")
+		tl.log.WithError(err).Error("failed fetching next tracks")
 	}
 
 	return tracks
@@ -162,7 +164,7 @@ func (tl *List) CurrentTrack() *connectpb.ProvidedTrack {
 
 func (tl *List) GoStart(ctx context.Context) bool {
 	if err := tl.tracks.moveStart(ctx); err != nil {
-		log.WithError(err).Error("failed going to start")
+		tl.log.WithError(err).Error("failed going to start")
 		return false
 	}
 
@@ -203,7 +205,7 @@ func (tl *List) GoNext(ctx context.Context) bool {
 	}
 
 	if err := iter.error(); err != nil {
-		log.WithError(err).Error("failed going to next track")
+		tl.log.WithError(err).Error("failed going to next track")
 	}
 
 	return false
@@ -221,7 +223,7 @@ func (tl *List) GoPrev() bool {
 	}
 
 	if err := iter.error(); err != nil {
-		log.WithError(err).Error("failed going to previous track")
+		tl.log.WithError(err).Error("failed going to previous track")
 	}
 
 	return false
@@ -269,7 +271,7 @@ func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 			// TODO: check that we do not seek forever
 		}
 		if err := iter.error(); err != nil {
-			log.WithError(err).Error("failed fetching all tracks")
+			tl.log.WithError(err).Error("failed fetching all tracks")
 		}
 
 		// generate new seed and use it to shuffle
@@ -288,7 +290,7 @@ func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 		tl.shuffleLen = tl.tracks.len()
 
 		tl.shuffled = true
-		log.Debugf("shuffled context with seed %d (len: %d, keep: %d)", tl.shuffleSeed, tl.shuffleLen, tl.shuffleKeep)
+		tl.log.Debugf("shuffled context with seed %d (len: %d, keep: %d)", tl.shuffleSeed, tl.shuffleLen, tl.shuffleKeep)
 		return nil
 	} else {
 		if tl.shuffleSeed != 0 && tl.tracks.len() == tl.shuffleLen {
@@ -301,7 +303,7 @@ func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 			tl.tracks.unshuffle(rand.New(rand.NewSource(tl.shuffleSeed)))
 
 			tl.shuffled = false
-			log.Debugf("unshuffled context with seed %d (len: %d, keep: %d)", tl.shuffleSeed, tl.shuffleLen, tl.shuffleKeep)
+			tl.log.Debugf("unshuffled context with seed %d (len: %d, keep: %d)", tl.shuffleSeed, tl.shuffleLen, tl.shuffleKeep)
 			return nil
 		} else {
 			// remember current track
@@ -314,7 +316,7 @@ func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 			}
 
 			tl.shuffled = false
-			log.Debugf("unshuffled context by fetching pages (len: %d)", tl.tracks.len())
+			tl.log.Debugf("unshuffled context by fetching pages (len: %d)", tl.tracks.len())
 			return nil
 		}
 	}

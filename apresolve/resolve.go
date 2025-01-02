@@ -21,6 +21,8 @@ type apResolveResponse struct {
 }
 
 type ApResolver struct {
+	log *log.Entry
+
 	baseUrl *url.URL
 
 	endpoints     map[endpointType][]string
@@ -30,13 +32,14 @@ type ApResolver struct {
 	client *http.Client
 }
 
-func NewApResolver(client *http.Client) *ApResolver {
+func NewApResolver(log *log.Entry, client *http.Client) *ApResolver {
 	baseUrl, err := url.Parse("https://apresolve.spotify.com/")
 	if err != nil {
 		panic("invalid apresolve base URL")
 	}
 
 	return &ApResolver{
+		log:          log,
 		baseUrl:      baseUrl,
 		client:       client,
 		endpoints:    map[endpointType][]string{},
@@ -100,17 +103,17 @@ func (r *ApResolver) fetchUrls(ctx context.Context, types ...endpointType) error
 	if slices.Contains(types, endpointTypeAccesspoint) {
 		r.endpoints[endpointTypeAccesspoint] = respJson.Accesspoint
 		r.endpointsExp[endpointTypeAccesspoint] = time.Now().Add(1 * time.Hour)
-		log.Debugf("fetched new accesspoints: %v", respJson.Accesspoint)
+		r.log.Debugf("fetched new accesspoints: %v", respJson.Accesspoint)
 	}
 	if slices.Contains(types, endpointTypeDealer) {
 		r.endpoints[endpointTypeDealer] = respJson.Dealer
 		r.endpointsExp[endpointTypeDealer] = time.Now().Add(1 * time.Hour)
-		log.Debugf("fetched new dealers: %v", respJson.Dealer)
+		r.log.Debugf("fetched new dealers: %v", respJson.Dealer)
 	}
 	if slices.Contains(types, endpointTypeSpclient) {
 		r.endpoints[endpointTypeSpclient] = respJson.Spclient
 		r.endpointsExp[endpointTypeSpclient] = time.Now().Add(1 * time.Hour)
-		log.Debugf("fetched new spclients: %v", respJson.Spclient)
+		r.log.Debugf("fetched new spclients: %v", respJson.Spclient)
 	}
 
 	return nil
@@ -155,7 +158,7 @@ func (r *ApResolver) getFunc(ctx context.Context, type_ endpointType) (librespot
 		newAddrs, err := r.get(innerCtx, type_)
 		if err != nil {
 			// if we cannot fetch new endpoints, eat it and return the first one
-			log.WithError(err).Warnf("failed fetching new endpoint for %s", type_)
+			r.log.WithError(err).Warnf("failed fetching new endpoint for %s", type_)
 			return addrs[0]
 		}
 

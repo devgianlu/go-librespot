@@ -21,6 +21,8 @@ const (
 )
 
 type Dealer struct {
+	log *log.Entry
+
 	client *http.Client
 
 	addr        librespot.GetAddressFunc
@@ -46,7 +48,7 @@ type Dealer struct {
 	requestReceiversLock sync.RWMutex
 }
 
-func NewDealer(client *http.Client, dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
+func NewDealer(log *log.Entry, client *http.Client, dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
 	return &Dealer{
 		client: &http.Client{
 			Transport:     client.Transport,
@@ -54,6 +56,7 @@ func NewDealer(client *http.Client, dealerAddr librespot.GetAddressFunc, accessT
 			Jar:           client.Jar,
 			Timeout:       timeout,
 		},
+		log:              log,
 		addr:             dealerAddr,
 		accessToken:      accessToken,
 		requestReceivers: map[string]requestReceiver{},
@@ -65,7 +68,7 @@ func (d *Dealer) Connect(ctx context.Context) error {
 	defer d.connMu.Unlock()
 
 	if d.conn != nil && !d.stop {
-		log.Debugf("dealer connection already opened")
+		d.log.Debugf("dealer connection already opened")
 		return nil
 	}
 
@@ -97,7 +100,7 @@ func (d *Dealer) connect(ctx context.Context) error {
 	// remove the read limit
 	d.conn.SetReadLimit(math.MaxUint32)
 
-	log.Debugf("dealer connection opened")
+	d.log.Debugf("dealer connection opened")
 
 	return nil
 }
@@ -119,7 +122,7 @@ func (d *Dealer) Close() {
 
 func (d *Dealer) startReceiving() {
 	d.recvLoopOnce.Do(func() {
-		log.Tracef("starting dealer recv loop")
+		d.log.Tracef("starting dealer recv loop")
 		go d.recvLoop()
 
 		// set last pong in the future
@@ -141,7 +144,7 @@ loop:
 			timePassed := time.Since(d.lastPong)
 			d.lastPongLock.Unlock()
 			if timePassed > pingInterval+timeout {
-				log.Errorf("did not receive last pong from dealer, %.0fs passed", timePassed.Seconds())
+				d.log.Errorf("did not receive last pong from dealer, %.0fs passed", timePassed.Seconds())
 
 				// closing the connection should make the read on the "recvLoop" fail,
 				// continue hoping for a new connection
@@ -154,7 +157,7 @@ loop:
 			err := d.conn.Write(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			d.connMu.RUnlock()
 			cancel()
-			log.Tracef("sent dealer ping")
+			d.log.Tracef("sent dealer ping")
 
 			if err != nil {
 				if d.stop {
@@ -162,7 +165,7 @@ loop:
 					break loop
 				}
 
-				log.WithError(err).Warnf("failed sending dealer ping")
+				d.log.WithError(err).Warnf("failed sending dealer ping")
 
 				// closing the connection should make the read on the "recvLoop" fail,
 				// continue hoping for a new connection
@@ -187,19 +190,19 @@ loop:
 
 			// don't log closed error if we're stopping
 			if d.stop && websocket.CloseStatus(err) == websocket.StatusGoingAway {
-				log.Debugf("dealer connection closed")
+				d.log.Debugf("dealer connection closed")
 				break loop
 			} else if err != nil {
-				log.WithError(err).Errorf("failed receiving dealer message")
+				d.log.WithError(err).Errorf("failed receiving dealer message")
 				break loop
 			} else if msgType != websocket.MessageText {
-				log.WithError(err).Warnf("unsupported message type: %v, len: %d", msgType, len(messageBytes))
+				d.log.WithError(err).Warnf("unsupported message type: %v, len: %d", msgType, len(messageBytes))
 				continue
 			}
 
 			var message RawMessage
 			if err := json.Unmarshal(messageBytes, &message); err != nil {
-				log.WithError(err).Error("failed unmarshalling dealer message")
+				d.log.WithError(err).Error("failed unmarshalling dealer message")
 				break loop
 			}
 
@@ -217,10 +220,10 @@ loop:
 				d.lastPongLock.Lock()
 				d.lastPong = time.Now()
 				d.lastPongLock.Unlock()
-				log.Tracef("received dealer pong")
+				d.log.Tracef("received dealer pong")
 				break
 			default:
-				log.Warnf("unknown dealer message type: %s", message.Type)
+				d.log.Warnf("unknown dealer message type: %s", message.Type)
 				break
 			}
 		}
@@ -233,7 +236,7 @@ loop:
 	if !d.stop {
 		d.connMu.Lock()
 		if err := backoff.Retry(d.reconnect, backoff.NewExponentialBackOff()); err != nil {
-			log.WithError(err).Errorf("failed reconnecting dealer, bye bye")
+			d.log.WithError(err).Errorf("failed reconnecting dealer, bye bye")
 			log.Exit(1)
 		}
 		d.connMu.Unlock()
@@ -254,7 +257,7 @@ loop:
 	}
 	d.messageReceiversLock.RUnlock()
 
-	log.Debugf("dealer recv loop stopped")
+	d.log.Debugf("dealer recv loop stopped")
 }
 
 func (d *Dealer) sendReply(key string, success bool) error {
@@ -289,6 +292,6 @@ func (d *Dealer) reconnect() error {
 	// restart the recv loop
 	go d.recvLoop()
 
-	log.Debugf("re-established dealer connection")
+	d.log.Debugf("re-established dealer connection")
 	return nil
 }

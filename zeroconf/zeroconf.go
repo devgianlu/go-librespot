@@ -21,6 +21,8 @@ import (
 )
 
 type Zeroconf struct {
+	log *log.Entry
+
 	deviceName string
 	deviceId   string
 	deviceType devicespb.DeviceType
@@ -45,8 +47,8 @@ type NewUserRequest struct {
 	result chan bool
 }
 
-func NewZeroconf(port int, deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
-	z := &Zeroconf{deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
+func NewZeroconf(log *log.Entry, port int, deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
+	z := &Zeroconf{log: log, deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
 	z.reqsChan = make(chan NewUserRequest)
 
 	z.dh, err = dh.NewDiffieHellman()
@@ -154,7 +156,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 	mac = hmac.New(sha1.New, checksumKey)
 	mac.Write(encrypted)
 	if !bytes.Equal(mac.Sum(nil), checksum) {
-		log.Warnf("zeroconf received request with bad checksum")
+		z.log.Warnf("zeroconf received request with bad checksum")
 		writer.WriteHeader(http.StatusBadRequest)
 		return nil
 	}
@@ -184,7 +186,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 	if z.authenticatingUser != "" {
 		z.userLock.Unlock()
 
-		log.Debug("zeroconf is authenticating another user")
+		z.log.Debug("zeroconf is authenticating another user")
 		writer.WriteHeader(http.StatusForbidden)
 		return nil
 	}
@@ -209,7 +211,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 		z.authenticatingUser = ""
 		z.userLock.Unlock()
 
-		log.Infof("refused zeroconf user %s from %s", username, deviceName)
+		z.log.Infof("refused zeroconf user %s from %s", username, deviceName)
 		writer.WriteHeader(http.StatusForbidden)
 		return nil
 	}
@@ -219,7 +221,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 	z.currentUser = username
 	z.userLock.Unlock()
 
-	log.Infof("accepted zeroconf user %s from %s", username, deviceName)
+	z.log.Infof("accepted zeroconf user %s from %s", username, deviceName)
 
 	writer.WriteHeader(http.StatusOK)
 	return json.NewEncoder(writer).Encode(AddUserResponse{
@@ -237,7 +239,7 @@ func (z *Zeroconf) Serve(handler HandleNewRequestFunc) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		if err := request.ParseForm(); err != nil {
-			log.WithError(err).Warn("failed handling invalid request form")
+			z.log.WithError(err).Warn("failed handling invalid request form")
 			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -248,16 +250,16 @@ func (z *Zeroconf) Serve(handler HandleNewRequestFunc) error {
 		switch action {
 		case "getInfo":
 			if err := z.handleGetInfo(writer, request); err != nil {
-				log.WithError(err).Warn("failed handling zeroconf get info request")
+				z.log.WithError(err).Warn("failed handling zeroconf get info request")
 				writer.WriteHeader(http.StatusInternalServerError)
 			}
 		case "addUser":
 			if err := z.handleAddUser(writer, request); err != nil {
-				log.WithError(err).Warn("failed handling zeroconf add user request")
+				z.log.WithError(err).Warn("failed handling zeroconf add user request")
 				writer.WriteHeader(http.StatusInternalServerError)
 			}
 		default:
-			log.Warnf("unknown zeroconf action: %s", action)
+			z.log.Warnf("unknown zeroconf action: %s", action)
 			writer.WriteHeader(http.StatusBadRequest)
 		}
 	})

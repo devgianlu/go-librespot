@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
-	log "github.com/sirupsen/logrus"
 )
 
 type messageReceiver struct {
@@ -123,7 +122,7 @@ func handleTransferEncoding(headers map[string]string, data []byte) ([]byte, err
 
 func (d *Dealer) handleMessage(rawMsg *RawMessage) {
 	//goland:noinspection GoImportUsedAsName
-	log := log.WithField("uri", rawMsg.Uri)
+	log := d.log.WithField("uri", rawMsg.Uri)
 
 	if len(rawMsg.Payloads) > 1 {
 		panic("unsupported number of payloads")
@@ -203,7 +202,7 @@ func (d *Dealer) ReceiveMessage(uriPrefixes ...string) <-chan Message {
 
 func (d *Dealer) handleRequest(rawMsg *RawMessage) {
 	//goland:noinspection GoImportUsedAsName
-	log := log.WithField("uri", rawMsg.MessageIdent)
+	log := d.log.WithField("uri", rawMsg.MessageIdent)
 
 	d.requestReceiversLock.RLock()
 	recv, ok := d.requestReceivers[rawMsg.MessageIdent]

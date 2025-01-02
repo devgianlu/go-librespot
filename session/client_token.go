@@ -10,7 +10,6 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	pbdata "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/data/v0"
 	pbhttp "github.com/devgianlu/go-librespot/proto/spotify/clienttoken/http/v0"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -70,9 +69,7 @@ func retrieveClientToken(deviceId string) (string, error) {
 
 	switch protoResp.ResponseType {
 	case pbhttp.ClientTokenResponseType_RESPONSE_GRANTED_TOKEN_RESPONSE:
-		token := protoResp.GetGrantedToken().Token
-		log.Debugf("obtained new client token: %s", token)
-		return token, nil
+		return protoResp.GetGrantedToken().Token, nil
 	case pbhttp.ClientTokenResponseType_RESPONSE_CHALLENGES_RESPONSE:
 		return "", fmt.Errorf("clienttoken challenge not supported")
 	default:

@@ -36,6 +36,7 @@ import (
 var errAlreadyRunning = errors.New("go-librespot is already running")
 
 type App struct {
+	log *log.Entry
 	cfg *Config
 
 	client *http.Client
@@ -64,6 +65,7 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
+	app.log = log.NewEntry(log.StandardLogger())
 	app.client = &http.Client{}
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
@@ -75,7 +77,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 		return nil, err
 	}
 
-	app.resolver = apresolve.NewApResolver(app.client)
+	app.resolver = apresolve.NewApResolver(app.log, app.client)
 
 	if cfg.DeviceId != "" {
 		// Use configured device ID.
@@ -118,6 +120,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.prefetchTimer = time.AfterFunc(time.Duration(math.MaxInt64), appPlayer.prefetchNext)
 
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
+		Log:         app.log,
 		DeviceType:  app.deviceType,
 		DeviceId:    app.deviceId,
 		ClientToken: app.clientToken,
@@ -230,7 +233,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType)
+	z, err := zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}

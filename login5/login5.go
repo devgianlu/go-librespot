@@ -18,6 +18,7 @@ import (
 )
 
 type Login5 struct {
+	log     *log.Entry
 	baseUrl *url.URL
 	client  *http.Client
 
@@ -29,13 +30,14 @@ type Login5 struct {
 	loginOkLock sync.RWMutex
 }
 
-func NewLogin5(client *http.Client, deviceId, clientToken string) *Login5 {
+func NewLogin5(log *log.Entry, client *http.Client, deviceId, clientToken string) *Login5 {
 	baseUrl, err := url.Parse("https://login5.spotify.com/")
 	if err != nil {
 		panic("invalid login5 base URL")
 	}
 
 	return &Login5{
+		log:         log,
 		baseUrl:     baseUrl,
 		client:      client,
 		deviceId:    deviceId,
@@ -141,7 +143,7 @@ func (c *Login5) Login(ctx context.Context, credentials proto.Message) error {
 	if ok := resp.GetOk(); ok != nil {
 		c.loginOk = ok
 		c.loginOkExp = time.Now().Add(time.Duration(c.loginOk.AccessTokenExpiresIn) * time.Second)
-		log.Infof("authenticated Login5 as %s", c.loginOk.Username)
+		c.log.Infof("authenticated Login5 as %s", c.loginOk.Username)
 		return nil
 	} else {
 		return fmt.Errorf("failed authenticating with login5: %v", resp.GetError())
@@ -186,7 +188,7 @@ func (c *Login5) AccessToken() librespot.GetLogin5TokenFunc {
 		username, storedCred := c.loginOk.Username, c.loginOk.StoredCredential
 		c.loginOkLock.RUnlock()
 
-		log.Debug("renewing login5 access token")
+		c.log.Debug("renewing login5 access token")
 		if err := c.Login(ctx, &credentialspb.StoredCredential{
 			Username: username,
 			Data:     storedCred,

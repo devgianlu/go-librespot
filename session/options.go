@@ -3,10 +3,14 @@ package session
 import (
 	"github.com/devgianlu/go-librespot/apresolve"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
+	log "github.com/sirupsen/logrus"
 	"net/http"
 )
 
 type Options struct {
+	// Log is the base logger entry to use.
+	Log *log.Entry
+
 	// DeviceType is the Spotify showed device type, required.
 	DeviceType devicespb.DeviceType
 	// DeviceId is the Spotify device ID, required.

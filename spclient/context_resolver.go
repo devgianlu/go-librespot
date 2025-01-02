@@ -15,6 +15,8 @@ import (
 )
 
 type ContextResolver struct {
+	log *log.Entry
+
 	sp *Spclient
 
 	typ librespot.SpotifyIdType
@@ -47,7 +49,7 @@ func isTracksComplete(ctx *connectpb.Context) bool {
 	return expectedNumberOfTracks == totalLength
 }
 
-func NewContextResolver(ctx context.Context, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
+func NewContextResolver(ctx context.Context, log *log.Entry, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
 
 	if len(spotCtx.Pages) == 0 || !isTracksComplete(spotCtx) {
@@ -77,7 +79,7 @@ func NewContextResolver(ctx context.Context, sp *Spclient, spotCtx *connectpb.Co
 		}
 	}
 
-	return &ContextResolver{sp, typ, spotCtx}, nil
+	return &ContextResolver{log, sp, typ, spotCtx}, nil
 }
 
 func (r *ContextResolver) Type() librespot.SpotifyIdType {
@@ -123,7 +125,7 @@ func (r *ContextResolver) loadPage(ctx context.Context, url string) (*connectpb.
 		return nil, fmt.Errorf("failed json unmarshalling ContextPage: %w", err)
 	}
 
-	log.WithField("uri", r.Uri()).
+	r.log.WithField("uri", r.Uri()).
 		Tracef("fetched new page from %s (has next: %t)", contextPage.PageUrl, len(contextPage.NextPageUrl) > 0)
 
 	return &contextPage, nil
@@ -161,7 +163,7 @@ func (r *ContextResolver) Page(ctx context.Context, idx int) ([]*connectpb.Conte
 	}
 
 	if len(page.Tracks) == 0 {
-		log.Warnf("returning empty context page (%s) for %s", page.PageUrl, r.ctx.Uri)
+		r.log.Warnf("returning empty context page (%s) for %s", page.PageUrl, r.ctx.Uri)
 	}
 
 	return page.Tracks, nil

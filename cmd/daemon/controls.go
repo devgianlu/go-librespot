@@ -140,7 +140,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 type skipToFunc func(*connectpb.ContextTrack) bool
 
 func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context, skipTo skipToFunc, paused, drop bool) error {
-	ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.sess.Spclient(), spotCtx)
+	ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
 	if err != nil {
 		return fmt.Errorf("failed creating track list: %w", err)
 	}

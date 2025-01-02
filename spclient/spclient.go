@@ -24,6 +24,8 @@ import (
 )
 
 type Spclient struct {
+	log *log.Entry
+
 	client *http.Client
 
 	baseUrl     *url.URL
@@ -33,13 +35,14 @@ type Spclient struct {
 	accessToken librespot.GetLogin5TokenFunc
 }
 
-func NewSpclient(ctx context.Context, client *http.Client, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
+func NewSpclient(ctx context.Context, log *log.Entry, client *http.Client, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
 	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid spclient base url: %w", err)
 	}
 
 	return &Spclient{
+		log:         log,
 		client:      client,
 		baseUrl:     baseUrl,
 		clientToken: clientToken,
@@ -139,7 +142,7 @@ func (c *Spclient) PutConnectStateInactive(ctx context.Context, spotConnId strin
 	if resp.StatusCode != 204 {
 		return fmt.Errorf("put state inactive request failed with status %d", resp.StatusCode)
 	} else {
-		log.Debug("put connect state inactive")
+		c.log.Debug("put connect state inactive")
 		return nil
 	}
 }
@@ -169,13 +172,13 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 		if resp.StatusCode != 200 {
 			var putError putStateError
 			if err := json.NewDecoder(resp.Body).Decode(&putError); err != nil {
-				log.Debugf("failed reading error response %s", err)
+				c.log.Debugf("failed reading error response %s", err)
 				return nil, fmt.Errorf("failed reading error response: %w", err)
 			}
-			log.Debugf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
+			c.log.Debugf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
 			return nil, fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
 		} else {
-			log.Debugf("put connect state because %s", reqProto.PutStateReason)
+			c.log.Debugf("put connect state because %s", reqProto.PutStateReason)
 			return resp, nil
 		}
 	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2))
@@ -201,7 +204,7 @@ func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte,
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == 503 {
-		log.Debugf("storage resolve returned service unavailable, retrying...")
+		c.log.Debugf("storage resolve returned service unavailable, retrying...")
 		_ = resp.Body.Close()
 
 		resp, err = c.Request(ctx, "GET", path, nil, nil, nil)

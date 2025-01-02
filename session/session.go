@@ -15,7 +15,6 @@ import (
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
 	"github.com/devgianlu/go-librespot/spclient"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	spotifyoauth2 "golang.org/x/oauth2/spotify"
 )
@@ -66,6 +65,8 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 		if err != nil {
 			return nil, fmt.Errorf("failed obtaining client token: %w", err)
 		}
+
+		opts.Log.Debugf("obtained new client token: %s", s.clientToken)
 	} else {
 		s.clientToken = opts.ClientToken
 	}
@@ -74,18 +75,18 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	if opts.Resolver != nil {
 		s.resolver = opts.Resolver
 	} else {
-		s.resolver = apresolve.NewApResolver(s.client)
+		s.resolver = apresolve.NewApResolver(opts.Log, s.client)
 	}
 
 	// create new login5.Login5
-	s.login5 = login5.NewLogin5(s.client, s.deviceId, s.clientToken)
+	s.login5 = login5.NewLogin5(opts.Log, s.client, s.deviceId, s.clientToken)
 
 	// connect to the accesspoint
 	apAddr, err := s.resolver.GetAccesspoint(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting accesspoint from resolver: %w", err)
 	}
-	s.ap = ap.NewAccesspoint(apAddr, s.deviceId)
+	s.ap = ap.NewAccesspoint(opts.Log, apAddr, s.deviceId)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing accesspoint: %w", err)
 	}
@@ -142,7 +143,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 
 		verifier := oauth2.GenerateVerifier()
 		url := oauthConf.AuthCodeURL("", oauth2.S256ChallengeOption(verifier))
-		log.Infof("to complete authentication visit the following link: %s", url)
+		opts.Log.Infof("to complete authentication visit the following link: %s", url)
 
 		code := <-codeCh
 		serverCancel()
@@ -178,7 +179,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	// initialize spclient
 	if spAddr, err := s.resolver.GetSpclient(ctx); err != nil {
 		return nil, fmt.Errorf("failed getting spclient from resolver: %w", err)
-	} else if s.sp, err = spclient.NewSpclient(ctx, s.client, spAddr, s.login5.AccessToken(), s.deviceId, s.clientToken); err != nil {
+	} else if s.sp, err = spclient.NewSpclient(ctx, opts.Log, s.client, spAddr, s.login5.AccessToken(), s.deviceId, s.clientToken); err != nil {
 		return nil, fmt.Errorf("failed initializing spclient: %w", err)
 	}
 
@@ -187,10 +188,10 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting dealer from resolver: %w", err)
 	}
-	s.dealer = dealer.NewDealer(s.client, dealerAddr, s.login5.AccessToken())
+	s.dealer = dealer.NewDealer(opts.Log, s.client, dealerAddr, s.login5.AccessToken())
 
 	// init audio key provider
-	s.audioKey = audio.NewAudioKeyProvider(log.NewEntry(log.StandardLogger()), s.ap)
+	s.audioKey = audio.NewAudioKeyProvider(opts.Log, s.ap)
 
 	return &s, nil
 }

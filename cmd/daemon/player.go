@@ -159,7 +159,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		}
 		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
 
-		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.sess.Spclient(), transferState.CurrentSession.Context)
+		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
 			return fmt.Errorf("failed creating track list: %w", err)
 		}

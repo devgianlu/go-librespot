@@ -31,6 +31,8 @@ import (
 const pongAckInterval = 120 * time.Second
 
 type Accesspoint struct {
+	log *log.Entry
+
 	addr librespot.GetAddressFunc
 
 	nonce    []byte
@@ -57,8 +59,8 @@ type Accesspoint struct {
 	welcome *pb.APWelcome
 }
 
-func NewAccesspoint(addr librespot.GetAddressFunc, deviceId string) *Accesspoint {
-	return &Accesspoint{addr: addr, deviceId: deviceId, recvChans: make(map[PacketType][]chan Packet)}
+func NewAccesspoint(log *log.Entry, addr librespot.GetAddressFunc, deviceId string) *Accesspoint {
+	return &Accesspoint{log: log, addr: addr, deviceId: deviceId, recvChans: make(map[PacketType][]chan Packet)}
 }
 
 func (ap *Accesspoint) init(ctx context.Context) (err error) {
@@ -85,14 +87,14 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 			// we assign to ap.conn after because if Dial fails we'll have a nil ap.conn which we don't want
 			ap.conn = conn
 			// Successfully connected.
-			log.Debugf("connected to %s", addr)
+			ap.log.Debugf("connected to %s", addr)
 			return nil
 		} else if attempts >= 6 {
 			// Only try a few times before giving up.
 			return fmt.Errorf("failed to connect to AP %v: %w", addr, err)
 		}
 		// Try again with a different AP.
-		log.WithError(err).Warnf("failed to connect to AP %v, retrying with a different AP", addr)
+		ap.log.WithError(err).Warnf("failed to connect to AP %v, retrying with a different AP", addr)
 	}
 }
 
@@ -249,7 +251,7 @@ func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
 
 func (ap *Accesspoint) startReceiving() {
 	ap.recvLoopOnce.Do(func() {
-		log.Tracef("starting accesspoint recv loop")
+		ap.log.Tracef("starting accesspoint recv loop")
 		go ap.recvLoop()
 
 		// set last ping in the future
@@ -268,19 +270,22 @@ loop:
 			// no need to hold the connMu since reconnection happens in this routine
 			pkt, payload, err := ap.encConn.receivePacket(context.TODO())
 			if err != nil {
-				log.WithError(err).Errorf("failed receiving packet")
+				if !ap.stop {
+					ap.log.WithError(err).Errorf("failed receiving packet")
+				}
+
 				break loop
 			}
 
 			switch pkt {
 			case PacketTypePing:
-				log.Tracef("received accesspoint ping")
+				ap.log.Tracef("received accesspoint ping")
 				if err := ap.encConn.sendPacket(context.TODO(), PacketTypePong, payload); err != nil {
-					log.WithError(err).Errorf("failed sending Pong packet")
+					ap.log.WithError(err).Errorf("failed sending Pong packet")
 					break loop
 				}
 			case PacketTypePongAck:
-				log.Tracef("received accesspoint pong ack")
+				ap.log.Tracef("received accesspoint pong ack")
 				ap.lastPongAckLock.Lock()
 				ap.lastPongAck = time.Now()
 				ap.lastPongAckLock.Unlock()
@@ -297,7 +302,7 @@ loop:
 				}
 
 				if !handled {
-					log.Debugf("skipping packet %v, len: %d", pkt, len(payload))
+					ap.log.Debugf("skipping packet %v, len: %d", pkt, len(payload))
 				}
 			}
 		}
@@ -310,7 +315,7 @@ loop:
 	if !ap.stop {
 		ap.connMu.Lock()
 		if err := backoff.Retry(ap.reconnect, backoff.NewExponentialBackOff()); err != nil {
-			log.WithError(err).Errorf("failed reconnecting accesspoint, bye bye")
+			ap.log.WithError(err).Errorf("failed reconnecting accesspoint, bye bye")
 			log.Exit(1)
 		}
 		ap.connMu.Unlock()
@@ -347,7 +352,7 @@ loop:
 			timePassed := time.Since(ap.lastPongAck)
 			ap.lastPongAckLock.Unlock()
 			if timePassed > pongAckInterval {
-				log.Errorf("did not receive last pong ack from accesspoint, %.0fs passed", timePassed.Seconds())
+				ap.log.Errorf("did not receive last pong ack from accesspoint, %.0fs passed", timePassed.Seconds())
 
 				// closing the connection should make the read on the "recvLoop" fail,
 				// continue hoping for a new connection
@@ -376,7 +381,7 @@ func (ap *Accesspoint) reconnect() (err error) {
 	// if we are here the "recvLoop" has already died, restart it
 	go ap.recvLoop()
 
-	log.Debugf("re-established accesspoint connection")
+	ap.log.Debugf("re-established accesspoint connection")
 	return nil
 }
 
@@ -426,7 +431,7 @@ func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
 	// exchange keys and compute shared secret
 	ap.dh.Exchange(apResponse.Challenge.LoginCryptoChallenge.DiffieHellman.Gs)
 
-	log.Debugf("completed keyexchange")
+	ap.log.Debugf("completed keyexchange")
 	return cc.Dump(), nil
 }
 
@@ -463,7 +468,7 @@ func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 	var resp pb.APResponseMessage
 	if err := readMessage(ap.conn, &resp); errors.Is(err, os.ErrDeadlineExceeded) {
 		ap.encConn = newShannonConn(ap.conn, macData[20:52], macData[52:84])
-		log.Debug("completed challenge")
+		ap.log.Debug("completed challenge")
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("failed reading APLoginFailed message: %w", err)
@@ -510,7 +515,7 @@ func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCr
 		}
 
 		ap.welcome = &welcome
-		log.Infof("authenticated AP as %s", *welcome.CanonicalUsername)
+		ap.log.Infof("authenticated AP as %s", *welcome.CanonicalUsername)
 
 		return nil
 	} else if recvPkt == PacketTypeAuthFailure {
