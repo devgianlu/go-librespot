@@ -14,8 +14,17 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type KeyProviderError struct {
+	Code uint16
+}
+
+func (e KeyProviderError) Error() string {
+	return fmt.Sprintf("failed retrieving aes key with code %d", e.Code)
+}
+
 type KeyProvider struct {
-	ap *ap.Accesspoint
+	ap  *ap.Accesspoint
+	log *log.Entry
 
 	recvLoopOnce sync.Once
 
@@ -34,8 +43,8 @@ type keyResponse struct {
 	err error
 }
 
-func NewAudioKeyProvider(ap *ap.Accesspoint) *KeyProvider {
-	p := &KeyProvider{ap: ap}
+func NewAudioKeyProvider(log *log.Entry, ap *ap.Accesspoint) *KeyProvider {
+	p := &KeyProvider{log: log, ap: ap}
 	p.reqChan = make(chan keyRequest)
 	p.stopChan = make(chan struct{}, 1)
 	return p
@@ -62,7 +71,7 @@ func (p *KeyProvider) recvLoop() {
 
 			req, ok := reqs[respSeq]
 			if !ok {
-				log.Warnf("received aes key with invalid sequence: %d", respSeq)
+				p.log.Warnf("received aes key with invalid sequence: %d", respSeq)
 				continue
 			}
 
@@ -76,7 +85,7 @@ func (p *KeyProvider) recvLoop() {
 			case ap.PacketTypeAesKeyError:
 				var errCode uint16
 				_ = binary.Read(resp, binary.BigEndian, &errCode)
-				req.resp <- keyResponse{err: fmt.Errorf("failed retrieving aes key with code %x", errCode)}
+				req.resp <- keyResponse{err: &KeyProviderError{errCode}}
 			default:
 				panic("unexpected packet type")
 			}
@@ -98,7 +107,7 @@ func (p *KeyProvider) recvLoop() {
 					hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid), err)}
 			}
 
-			log.Debugf("requested aes key for file %s, gid: %s", hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid))
+			p.log.Debugf("requested aes key for file %s, gid: %s", hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid))
 		}
 	}
 }
@@ -114,7 +123,7 @@ func (p *KeyProvider) Request(ctx context.Context, gid []byte, fileId []byte) ([
 
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("request timed out")
+		return nil, context.DeadlineExceeded
 	case resp := <-req.resp:
 		if resp.err != nil {
 			return nil, resp.err

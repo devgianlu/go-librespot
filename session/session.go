@@ -190,7 +190,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	s.dealer = dealer.NewDealer(s.client, dealerAddr, s.login5.AccessToken())
 
 	// init audio key provider
-	s.audioKey = audio.NewAudioKeyProvider(s.ap)
+	s.audioKey = audio.NewAudioKeyProvider(log.NewEntry(log.StandardLogger()), s.ap)
 
 	return &s, nil
 }
