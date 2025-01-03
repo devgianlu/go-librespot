@@ -9,11 +9,9 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -29,6 +27,14 @@ import (
 )
 
 const pongAckInterval = 120 * time.Second
+
+type AccesspointLoginError struct {
+	Message *pb.APLoginFailed
+}
+
+func (e *AccesspointLoginError) Error() string {
+	return fmt.Sprintf("accesspoint login failed: %s %v", e.Message.ErrorCode.String(), e.Message.ErrorDescription)
+}
 
 type Accesspoint struct {
 	log *log.Entry
@@ -461,20 +467,10 @@ func (ap *Accesspoint) solveChallenge(exchangeData []byte) error {
 		return fmt.Errorf("failed writing ClientResponsePlaintext message: %w", err)
 	}
 
-	// set read timeout for detecting APLoginFailed message
-	_ = ap.conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-	defer func() { _ = ap.conn.SetReadDeadline(time.Time{}) }()
-
-	var resp pb.APResponseMessage
-	if err := readMessage(ap.conn, &resp); errors.Is(err, os.ErrDeadlineExceeded) {
-		ap.encConn = newShannonConn(ap.conn, macData[20:52], macData[52:84])
-		ap.log.Debug("completed challenge")
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("failed reading APLoginFailed message: %w", err)
-	}
-
-	return fmt.Errorf("failed login: %s", resp.LoginFailed.ErrorCode.String())
+	// we are not sure if the challenge is actually completed, we check it in authenticate
+	ap.encConn = newShannonConn(ap.conn, macData[20:52], macData[52:84])
+	ap.log.Debug("completed challenge")
+	return nil
 }
 
 func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCredentials) error {
@@ -502,6 +498,14 @@ func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCr
 		return fmt.Errorf("failed sending Login packet: %w", err)
 	}
 
+	// check if we received an APResponseMessage from the challenge
+	var challengeResp pb.APResponseMessage
+	if peekBytes, err := ap.encConn.peekUnencrypted(9); err != nil {
+		return fmt.Errorf("failed peeking unencrypted bytes: %w", err)
+	} else if err = readMessage(bytes.NewReader(peekBytes), &challengeResp); err == nil {
+		return &AccesspointLoginError{Message: challengeResp.LoginFailed}
+	}
+
 	// receive APWelcome or AuthFailure
 	recvPkt, recvPayload, err := ap.encConn.receivePacket(ctx)
 	if err != nil {
@@ -524,7 +528,7 @@ func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCr
 			return fmt.Errorf("failed unmarshalling APLoginFailed message: %w", err)
 		}
 
-		return fmt.Errorf("failed login: %s", loginFailed.ErrorCode.String())
+		return &AccesspointLoginError{Message: &loginFailed}
 	} else {
 		return fmt.Errorf("unexpected command after Login packet: %x", recvPkt)
 	}

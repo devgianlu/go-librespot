@@ -1,6 +1,7 @@
 package ap
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -23,6 +24,8 @@ type shannonConn struct {
 
 	recvCipher *shannon.Shannon
 	recvNonce  uint32
+
+	unreadBytes []byte
 }
 
 func newShannonConn(conn net.Conn, sendKey []byte, recvKey []byte) *shannonConn {
@@ -75,9 +78,37 @@ func (c *shannonConn) sendPacket(ctx context.Context, pktType PacketType, payloa
 	return nil
 }
 
+func (c *shannonConn) peekUnencrypted(count int) ([]byte, error) {
+	c.recvLock.Lock()
+	defer c.recvLock.Unlock()
+
+	if len(c.unreadBytes) > 0 {
+		panic("not supported")
+	}
+
+	buf := make([]byte, count)
+	if _, err := io.ReadFull(c.conn, buf); err != nil {
+		return nil, fmt.Errorf("failed peeking uncrypted: %w", err)
+	}
+
+	c.unreadBytes = buf
+	return buf, nil
+}
+
 func (c *shannonConn) receivePacket(ctx context.Context) (PacketType, []byte, error) {
 	c.recvLock.Lock()
 	defer c.recvLock.Unlock()
+
+	var unreadReader *bytes.Reader
+	var reader io.Reader
+	if len(c.unreadBytes) > 0 {
+		unreadReader = bytes.NewReader(c.unreadBytes)
+		reader = io.MultiReader(unreadReader, c.conn)
+
+		defer func() { c.unreadBytes, _ = io.ReadAll(unreadReader) }()
+	} else {
+		reader = c.conn
+	}
 
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = c.conn.SetDeadline(deadline)
@@ -90,7 +121,7 @@ func (c *shannonConn) receivePacket(ctx context.Context) (PacketType, []byte, er
 
 	// read 8 bytes of packet header
 	packetHeader := make([]byte, 3)
-	if _, err := io.ReadFull(c.conn, packetHeader); err != nil {
+	if _, err := io.ReadFull(reader, packetHeader); err != nil {
 		return 0, nil, fmt.Errorf("failed reading packet header: %w", err)
 	}
 
@@ -100,7 +131,7 @@ func (c *shannonConn) receivePacket(ctx context.Context) (PacketType, []byte, er
 	// read rest of the payload
 	payloadLen := binary.BigEndian.Uint16(packetHeader[1:3])
 	payload := make([]byte, payloadLen)
-	if _, err := io.ReadFull(c.conn, payload); err != nil {
+	if _, err := io.ReadFull(reader, payload); err != nil {
 		return 0, nil, fmt.Errorf("failed reading packet payload: %w", err)
 	}
 
@@ -109,7 +140,7 @@ func (c *shannonConn) receivePacket(ctx context.Context) (PacketType, []byte, er
 
 	// read expected mac
 	expectedMac := make([]byte, 4)
-	if _, err := io.ReadFull(c.conn, expectedMac); err != nil {
+	if _, err := io.ReadFull(reader, expectedMac); err != nil {
 		return 0, nil, fmt.Errorf("failed reading packet mac: %w", err)
 	}
 
