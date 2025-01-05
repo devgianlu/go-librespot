@@ -17,6 +17,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+type LoginError struct {
+	Code pb.LoginError
+}
+
+func (e *LoginError) Error() string {
+	return fmt.Sprintf("failed authenticating with login5: %v", e.Code)
+}
+
 type Login5 struct {
 	log     *log.Entry
 	baseUrl *url.URL
@@ -146,7 +154,7 @@ func (c *Login5) Login(ctx context.Context, credentials proto.Message) error {
 		c.log.Infof("authenticated Login5 as %s", c.loginOk.Username)
 		return nil
 	} else {
-		return fmt.Errorf("failed authenticating with login5: %v", resp.GetError())
+		return &LoginError{Code: resp.GetError()}
 	}
 }
 
