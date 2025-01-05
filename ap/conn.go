@@ -37,11 +37,16 @@ func writeMessage(w io.Writer, withHello bool, m proto.Message) error {
 	return nil
 }
 
-func readMessage(r io.Reader, m proto.Message) error {
+func readMessage(r io.Reader, maxLength int, m proto.Message) error {
 	// read length
 	var length uint32
 	if err := binary.Read(r, binary.BigEndian, &length); err != nil {
 		return fmt.Errorf("failed reading message length: %w", err)
+	}
+
+	// check length to avoid a mega allocation
+	if maxLength > 0 && length > uint32(maxLength) {
+		return fmt.Errorf("message too long: %d", length)
 	}
 
 	// read message

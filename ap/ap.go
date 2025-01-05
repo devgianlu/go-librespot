@@ -425,7 +425,7 @@ func (ap *Accesspoint) performKeyExchange() ([]byte, error) {
 
 	// receive APResponseMessage message
 	var apResponse pb.APResponseMessage
-	if err := readMessage(cc, &apResponse); err != nil {
+	if err := readMessage(cc, -1, &apResponse); err != nil {
 		return nil, fmt.Errorf("failed reading APResponseMessage message: %w", err)
 	}
 
@@ -502,7 +502,7 @@ func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCr
 	var challengeResp pb.APResponseMessage
 	if peekBytes, err := ap.encConn.peekUnencrypted(9); err != nil {
 		return fmt.Errorf("failed peeking unencrypted bytes: %w", err)
-	} else if err = readMessage(bytes.NewReader(peekBytes), &challengeResp); err == nil {
+	} else if err = readMessage(bytes.NewReader(peekBytes), 9, &challengeResp); err == nil {
 		return &AccesspointLoginError{Message: challengeResp.LoginFailed}
 	}
 
