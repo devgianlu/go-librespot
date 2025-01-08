@@ -11,7 +11,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"nhooyr.io/websocket"
 )
 
@@ -236,8 +235,11 @@ loop:
 	if !d.stop {
 		d.connMu.Lock()
 		if err := backoff.Retry(d.reconnect, backoff.NewExponentialBackOff()); err != nil {
-			d.log.WithError(err).Errorf("failed reconnecting dealer, bye bye")
-			log.Exit(1)
+			d.log.WithError(err).Errorf("failed reconnecting dealer")
+			d.connMu.Unlock()
+
+			// something went very wrong, give up
+			d.Close()
 		}
 		d.connMu.Unlock()
 

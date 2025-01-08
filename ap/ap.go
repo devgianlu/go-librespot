@@ -19,7 +19,6 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dh"
 	pb "github.com/devgianlu/go-librespot/proto/spotify"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/exp/slices"
 	"golang.org/x/net/proxy"
@@ -321,8 +320,11 @@ loop:
 	if !ap.stop {
 		ap.connMu.Lock()
 		if err := backoff.Retry(ap.reconnect, backoff.NewExponentialBackOff()); err != nil {
-			ap.log.WithError(err).Errorf("failed reconnecting accesspoint, bye bye")
-			log.Exit(1)
+			ap.log.WithError(err).Errorf("failed reconnecting accesspoint")
+			ap.connMu.Unlock()
+
+			// something went very wrong, give up
+			ap.Close()
 		}
 		ap.connMu.Unlock()
 
