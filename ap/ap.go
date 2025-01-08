@@ -37,7 +37,7 @@ func (e *AccesspointLoginError) Error() string {
 }
 
 type Accesspoint struct {
-	log *log.Entry
+	log librespot.Logger
 
 	addr librespot.GetAddressFunc
 
@@ -65,7 +65,7 @@ type Accesspoint struct {
 	welcome *pb.APWelcome
 }
 
-func NewAccesspoint(log *log.Entry, addr librespot.GetAddressFunc, deviceId string) *Accesspoint {
+func NewAccesspoint(log librespot.Logger, addr librespot.GetAddressFunc, deviceId string) *Accesspoint {
 	return &Accesspoint{log: log, addr: addr, deviceId: deviceId, recvChans: make(map[PacketType][]chan Packet)}
 }
 

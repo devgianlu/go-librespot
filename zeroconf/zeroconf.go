@@ -17,11 +17,10 @@ import (
 	"github.com/devgianlu/go-librespot/dh"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/grandcat/zeroconf"
-	log "github.com/sirupsen/logrus"
 )
 
 type Zeroconf struct {
-	log *log.Entry
+	log librespot.Logger
 
 	deviceName string
 	deviceId   string
@@ -47,7 +46,7 @@ type NewUserRequest struct {
 	result chan bool
 }
 
-func NewZeroconf(log *log.Entry, port int, deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
+func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, deviceType devicespb.DeviceType) (_ *Zeroconf, err error) {
 	z := &Zeroconf{log: log, deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
 	z.reqsChan = make(chan NewUserRequest)
 

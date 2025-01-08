@@ -10,7 +10,6 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
 
@@ -21,7 +20,7 @@ type apResolveResponse struct {
 }
 
 type ApResolver struct {
-	log *log.Entry
+	log librespot.Logger
 
 	baseUrl *url.URL
 
@@ -32,7 +31,7 @@ type ApResolver struct {
 	client *http.Client
 }
 
-func NewApResolver(log *log.Entry, client *http.Client) *ApResolver {
+func NewApResolver(log librespot.Logger, client *http.Client) *ApResolver {
 	baseUrl, err := url.Parse("https://apresolve.spotify.com/")
 	if err != nil {
 		panic("invalid apresolve base URL")

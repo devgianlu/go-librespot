@@ -9,7 +9,6 @@ import (
 	"math"
 
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"github.com/xlab/vorbis-go/vorbis"
 )
 
@@ -35,6 +34,8 @@ var seekTableLookup = []uint16{
 }
 
 type MetadataPage struct {
+	log librespot.Logger
+
 	seekSamples  uint32
 	seekSize     uint32
 	offset       int32
@@ -48,7 +49,7 @@ type MetadataPage struct {
 	hasReplayGain bool
 }
 
-func ExtractMetadataPage(r io.ReaderAt, limit int64) (librespot.SizedReadAtSeeker, *MetadataPage, error) {
+func ExtractMetadataPage(log librespot.Logger, r io.ReaderAt, limit int64) (librespot.SizedReadAtSeeker, *MetadataPage, error) {
 	var syncState vorbis.OggSyncState
 	vorbis.OggSyncInit(&syncState)
 
@@ -99,6 +100,7 @@ func ExtractMetadataPage(r io.ReaderAt, limit int64) (librespot.SizedReadAtSeeke
 	}
 
 	var metadata MetadataPage
+	metadata.log = log
 
 	for {
 		var segmentLen uint16
@@ -185,7 +187,7 @@ func ExtractMetadataPage(r io.ReaderAt, limit int64) (librespot.SizedReadAtSeeke
 func (m MetadataPage) GetTrackFactor(normalisationPregain float32) float32 {
 	normalisationFactor := float32(math.Pow(10, float64((m.trackGainDb+normalisationPregain)/20)))
 	if normalisationFactor*m.trackPeak > 1 {
-		log.Warn("reducing track normalisation factor to prevent clipping, please add negative pregain to avoid")
+		m.log.Warn("reducing track normalisation factor to prevent clipping, please add negative pregain to avoid")
 		normalisationFactor = 1 / m.trackPeak
 	}
 
@@ -195,7 +197,7 @@ func (m MetadataPage) GetTrackFactor(normalisationPregain float32) float32 {
 func (m MetadataPage) GetAlbumFactor(normalisationPregain float32) float32 {
 	normalisationFactor := float32(math.Pow(10, float64((m.albumGainDb+normalisationPregain)/20)))
 	if normalisationFactor*m.albumPeak > 1 {
-		log.Warn("reducing album normalisation factor to prevent clipping, please add negative pregain to avoid")
+		m.log.Warn("reducing album normalisation factor to prevent clipping, please add negative pregain to avoid")
 		normalisationFactor = 1 / m.albumPeak
 	}
 

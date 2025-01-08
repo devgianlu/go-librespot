@@ -2,10 +2,10 @@ package tracks
 
 import (
 	"context"
+	librespot "github.com/devgianlu/go-librespot"
 	"io"
 	"testing"
 
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
 )
 
@@ -17,10 +17,49 @@ func (d *dummyPageResolver) Page(ctx context.Context, idx int) ([]int, error) {
 	return d.page(idx)
 }
 
-var dummyLog = log.NewEntry(log.StandardLogger())
+type dummyLogger struct {
+}
+
+func (d dummyLogger) Tracef(string, ...interface{}) {
+}
+
+func (d dummyLogger) Debugf(string, ...interface{}) {
+}
+
+func (d dummyLogger) Infof(string, ...interface{}) {
+}
+
+func (d dummyLogger) Warnf(string, ...interface{}) {
+}
+
+func (d dummyLogger) Errorf(string, ...interface{}) {
+}
+
+func (d dummyLogger) Trace(...interface{}) {
+}
+
+func (d dummyLogger) Debug(...interface{}) {
+}
+
+func (d dummyLogger) Info(...interface{}) {
+}
+
+func (d dummyLogger) Warn(...interface{}) {
+}
+
+func (d dummyLogger) Error(...interface{}) {
+}
+
+func (d dummyLogger) WithField(string, interface{}) librespot.Logger {
+	return d
+}
+
+func (d dummyLogger) WithError(error) librespot.Logger {
+	return d
+}
 
 func TestPagedListSimpleIteration(t *testing.T) {
-	list := newPagedList[int](dummyLog, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
+	list := newPagedList[int](&dummyLogger{}, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
 		if pageIdx >= 2 {
 			return nil, io.EOF
 		}
@@ -81,7 +120,7 @@ func TestPagedListSimpleIteration(t *testing.T) {
 }
 
 func TestPagedListMoving(t *testing.T) {
-	list := newPagedList[int](dummyLog, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
+	list := newPagedList[int](&dummyLogger{}, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
 		l := make([]int, 5)
 		for i := 0; i < len(l); i++ {
 			l[i] = (i + pageIdx*5) * 100
@@ -124,7 +163,7 @@ func TestPagedListMoving(t *testing.T) {
 }
 
 func TestPagedListShuffle(t *testing.T) {
-	list := newPagedList[int](dummyLog, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
+	list := newPagedList[int](&dummyLogger{}, &dummyPageResolver{page: func(pageIdx int) ([]int, error) {
 		if pageIdx >= 10 {
 			return nil, io.EOF
 		}

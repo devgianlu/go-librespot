@@ -3,13 +3,12 @@ package session
 import (
 	"context"
 	"fmt"
+	librespot "github.com/devgianlu/go-librespot"
 	"net"
 	"net/http"
-
-	log "github.com/sirupsen/logrus"
 )
 
-func NewOAuth2Server(ctx context.Context, callbackPort int) (int, chan string, error) {
+func NewOAuth2Server(ctx context.Context, log librespot.Logger, callbackPort int) (int, chan string, error) {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", callbackPort))
 	if err != nil {
 		return 0, nil, fmt.Errorf("failed to listen: %w", err)

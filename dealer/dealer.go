@@ -21,7 +21,7 @@ const (
 )
 
 type Dealer struct {
-	log *log.Entry
+	log librespot.Logger
 
 	client *http.Client
 
@@ -48,7 +48,7 @@ type Dealer struct {
 	requestReceiversLock sync.RWMutex
 }
 
-func NewDealer(log *log.Entry, client *http.Client, dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
+func NewDealer(log librespot.Logger, client *http.Client, dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
 	return &Dealer{
 		client: &http.Client{
 			Transport:     client.Transport,

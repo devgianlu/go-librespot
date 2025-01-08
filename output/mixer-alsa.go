@@ -11,8 +11,6 @@ import "C"
 import (
 	"fmt"
 	"unsafe"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func (out *alsaOutput) setupMixer() error {
@@ -85,7 +83,7 @@ func (out *alsaOutput) waitForMixerEvents() {
 			res = C.snd_mixer_handle_events(out.mixerHandle)
 			if res <= 0 {
 				errStrPtr := C.snd_strerror(res)
-				log.Warnf("error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+				out.log.Warnf("error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
 
 				// no need to free the errStrPtr, because it doesn't point into heap
 				continue
@@ -100,14 +98,14 @@ func (out *alsaOutput) waitForMixerEvents() {
 				continue
 			}
 			if priv == out.volume {
-				log.Debugf("skipping alsa mixer event, volume already updated: %.2f\n", priv)
+				out.log.Debugf("skipping alsa mixer event, volume already updated: %.2f\n", priv)
 				continue
 			}
 
 			sendVolumeUpdate(out.volumeUpdate, priv)
 		} else {
 			errStrPtr := C.snd_strerror(res)
-			log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+			out.log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
 		}
 	}
 }

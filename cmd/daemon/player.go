@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -72,7 +71,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
-		log.Debugf("received connection id: %s", p.spotConnId)
+		p.app.log.Debugf("received connection id: %s", p.spotConnId)
 
 		// put the initial state
 		if err := p.putConnectState(ctx, connectpb.PutStateReason_NEW_DEVICE); err != nil {
@@ -94,7 +93,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		p.updateVolume(uint32(setVolCmd.Volume))
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/logout") {
 		// this should happen only with zeroconf enabled
-		log.Debugf("requested logout out from %s", p.sess.Username())
+		p.app.log.Debugf("requested logout out from %s", p.sess.Username())
 		p.logout <- p
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
 		var clusterUpdate connectpb.ClusterUpdate
@@ -113,7 +112,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		if device := clusterUpdate.Cluster.Device[clusterUpdate.Cluster.ActiveDeviceId]; device != nil {
 			name = device.Name
 		}
-		log.Infof("playback was transferred to %s", name)
+		p.app.log.Infof("playback was transferred to %s", name)
 
 		p.player.Stop()
 		p.primaryStream = nil
@@ -141,7 +140,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestPayload) error {
 	p.state.lastCommand = &req
 
-	log.Debugf("handling %s player command from %s", req.Command.Endpoint, req.SentByDeviceId)
+	p.app.log.Debugf("handling %s player command from %s", req.Command.Endpoint, req.SentByDeviceId)
 
 	switch req.Command.Endpoint {
 	case "transfer":
@@ -290,11 +289,11 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			if pos, ok := req.Command.Value.(float64); ok {
 				position = int64(pos)
 			} else {
-				log.Warnf("unsupported seek_to position type: %T", req.Command.Value)
+				p.app.log.Warnf("unsupported seek_to position type: %T", req.Command.Value)
 				return nil
 			}
 		} else {
-			log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
+			p.app.log.Warnf("unsupported seek_to relative position: %s", req.Command.Relative)
 			return nil
 		}
 
@@ -309,7 +308,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		return p.skipNext(ctx, req.Command.Track)
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
-			log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
+			p.app.log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
 			return nil
 		}
 
@@ -354,7 +353,7 @@ func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request)
 	case "hm://connect-state/v1/player/command":
 		return p.handlePlayerCommand(ctx, req.Payload)
 	default:
-		log.Warnf("unknown dealer request: %s", req.MessageIdent)
+		p.app.log.Warnf("unknown dealer request: %s", req.MessageIdent)
 		return nil
 	}
 }
@@ -478,7 +477,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		if len(data.SkipToUri) > 0 {
 			skipToId, err := librespot.SpotifyIdFromUri(data.SkipToUri)
 			if err != nil {
-				log.WithError(err).Warnf("trying to skip to invalid uri: %s", data.SkipToUri)
+				p.app.log.WithError(err).Warnf("trying to skip to invalid uri: %s", data.SkipToUri)
 				skipToId = nil
 			}
 
@@ -554,7 +553,9 @@ func (p *AppPlayer) Close() {
 func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 	err := p.sess.Dealer().Connect(ctx)
 	if err != nil {
-		log.WithError(err).Fatal("failed connecting to dealer")
+		p.app.log.WithError(err).Error("failed connecting to dealer")
+		p.Close()
+		return
 	}
 
 	apRecv := p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
@@ -571,18 +572,18 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 			return
 		case pkt := <-apRecv:
 			if err := p.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
-				log.WithError(err).Warn("failed handling accesspoint packet")
+				p.app.log.WithError(err).Warn("failed handling accesspoint packet")
 			}
 		case msg := <-msgRecv:
 			if err := p.handleDealerMessage(ctx, msg); err != nil {
-				log.WithError(err).Warn("failed handling dealer message")
+				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
 		case req := <-reqRecv:
 			if err := p.handleDealerRequest(ctx, req); err != nil {
-				log.WithError(err).Warn("failed handling dealer request")
+				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
-				log.Debugf("sending successful reply for dealer request")
+				p.app.log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
 		case req := <-apiRecv:

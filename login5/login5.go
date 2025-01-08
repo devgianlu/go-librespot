@@ -13,7 +13,6 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	pb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3"
 	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -26,7 +25,7 @@ func (e *LoginError) Error() string {
 }
 
 type Login5 struct {
-	log     *log.Entry
+	log     librespot.Logger
 	baseUrl *url.URL
 	client  *http.Client
 
@@ -38,7 +37,7 @@ type Login5 struct {
 	loginOkLock sync.RWMutex
 }
 
-func NewLogin5(log *log.Entry, client *http.Client, deviceId, clientToken string) *Login5 {
+func NewLogin5(log librespot.Logger, client *http.Client, deviceId, clientToken string) *Login5 {
 	baseUrl, err := url.Parse("https://login5.spotify.com/")
 	if err != nil {
 		panic("invalid login5 base URL")

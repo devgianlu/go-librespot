@@ -16,7 +16,6 @@ import (
 	"github.com/rs/cors"
 
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -24,6 +23,8 @@ import (
 const timeout = 10 * time.Second
 
 type ApiServer struct {
+	log librespot.Logger
+
 	allowOrigin string
 	certFile    string
 	keyFile     string
@@ -269,8 +270,8 @@ type ApiEventDataShuffleContext struct {
 	Value bool `json:"value"`
 }
 
-func NewApiServer(address string, port int, allowOrigin string, certFile string, keyFile string) (_ *ApiServer, err error) {
-	s := &ApiServer{allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
+func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string) (_ *ApiServer, err error) {
+	s := &ApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
 	s.requests = make(chan ApiRequest)
 
 	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
@@ -316,7 +317,7 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		default:
-			log.WithError(resp.err).Errorf("failed handling request %s", req.Type)
+			s.log.WithError(resp.err).Errorf("failed handling request %s", req.Type)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -548,7 +549,7 @@ func (s *ApiServer) serve() {
 
 		c, err := websocket.Accept(w, r, opts)
 		if err != nil {
-			log.WithError(err).Error("failed accepting websocket connection")
+			s.log.WithError(err).Error("failed accepting websocket connection")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -558,14 +559,14 @@ func (s *ApiServer) serve() {
 		s.clients = append(s.clients, c)
 		s.clientsLock.Unlock()
 
-		log.Debugf("new websocket client")
+		s.log.Debugf("new websocket client")
 
 		for {
 			_, _, err := c.Read(context.Background())
 			if s.close {
 				return
 			} else if err != nil {
-				log.WithError(err).Error("websocket connection errored")
+				s.log.WithError(err).Error("websocket connection errored")
 
 				// remove the client from the list
 				s.clientsLock.Lock()
@@ -597,7 +598,8 @@ func (s *ApiServer) serve() {
 	if s.close {
 		return
 	} else if err != nil {
-		log.WithError(err).Fatal("failed serving api")
+		s.log.WithError(err).Error("failed serving api")
+		s.Close()
 	}
 }
 
@@ -605,7 +607,7 @@ func (s *ApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
 	defer s.clientsLock.RUnlock()
 
-	log.Tracef("emitting websocket event: %s", ev.Type)
+	s.log.Tracef("emitting websocket event: %s", ev.Type)
 
 	for _, client := range s.clients {
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -613,7 +615,7 @@ func (s *ApiServer) Emit(ev *ApiEvent) {
 		cancel()
 		if err != nil {
 			// purposely do not propagate this to the caller
-			log.WithError(err).Error("failed communicating with websocket client")
+			s.log.WithError(err).Error("failed communicating with websocket client")
 		}
 	}
 }

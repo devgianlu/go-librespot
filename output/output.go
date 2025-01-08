@@ -30,6 +30,8 @@ type Output interface {
 }
 
 type NewOutputOptions struct {
+	Log librespot.Logger
+
 	// Backend is the audio backend to use (also, pulseaudio, etc).
 	Backend string
 

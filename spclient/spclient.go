@@ -19,12 +19,11 @@ import (
 	storagepb "github.com/devgianlu/go-librespot/proto/spotify/download"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
 type Spclient struct {
-	log *log.Entry
+	log librespot.Logger
 
 	client *http.Client
 
@@ -35,7 +34,7 @@ type Spclient struct {
 	accessToken librespot.GetLogin5TokenFunc
 }
 
-func NewSpclient(ctx context.Context, log *log.Entry, client *http.Client, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
+func NewSpclient(ctx context.Context, log librespot.Logger, client *http.Client, addr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc, deviceId, clientToken string) (*Spclient, error) {
 	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid spclient base url: %w", err)

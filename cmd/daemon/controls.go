@@ -13,7 +13,6 @@ import (
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
 	"github.com/devgianlu/go-librespot/tracks"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -29,29 +28,29 @@ func (p *AppPlayer) prefetchNext() {
 		// It should be implemented some day (the ContextTrack has enough
 		// information to infer the track Uri) but it's hard to reproduce this
 		// issue.
-		log.Warn("cannot prefetch next track because the uri field is empty")
+		p.app.log.Warn("cannot prefetch next track because the uri field is empty")
 		return
 	}
 
 	nextId, err := librespot.SpotifyIdFromUri(next.Uri)
 	if err != nil {
-		log.WithError(err).WithField("uri", next.Uri).Warn("failed parsing prefetch uri")
+		p.app.log.WithError(err).WithField("uri", next.Uri).Warn("failed parsing prefetch uri")
 		return
 	} else if p.secondaryStream != nil && p.secondaryStream.Is(*nextId) {
 		return
 	}
 
-	log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
+	p.app.log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
 	p.secondaryStream, err = p.player.NewStream(ctx, p.app.client, *nextId, p.app.cfg.Bitrate, 0)
 	if err != nil {
-		log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
+		p.app.log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
 		return
 	}
 
 	p.player.SetSecondaryStream(p.secondaryStream.Source)
 
-	log.WithField("uri", nextId.Uri()).
+	p.app.log.WithField("uri", nextId.Uri()).
 		Infof("prefetched %s %s (duration: %dms)", nextId.Type(),
 			strconv.QuoteToGraphic(p.secondaryStream.Media.Name()), p.secondaryStream.Media.Duration())
 }
@@ -70,7 +69,7 @@ func (p *AppPlayer) schedulePrefetchNext() {
 		go p.prefetchNext()
 	} else {
 		p.prefetchTimer.Reset(untilTrackEnd)
-		log.Tracef("scheduling prefetch in %.0fs", untilTrackEnd.Seconds())
+		p.app.log.Tracef("scheduling prefetch in %.0fs", untilTrackEnd.Seconds())
 	}
 }
 
@@ -113,7 +112,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 
 		hasNextTrack, err := p.advanceNext(context.TODO(), false, false)
 		if err != nil {
-			log.WithError(err).Error("failed advancing to next track")
+			p.app.log.WithError(err).Error("failed advancing to next track")
 		}
 
 		// if no track to be played, just stop
@@ -209,7 +208,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	}
 
 	trackPosition := p.state.trackPosition()
-	log.WithField("uri", spotId.Uri()).
+	p.app.log.WithField("uri", spotId.Uri()).
 		Debugf("loading %s (paused: %t, position: %dms)", spotId.Type(), paused, trackPosition)
 
 	p.state.updateTimestamp()
@@ -247,7 +246,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
 
-	log.WithField("uri", spotId.Uri()).
+	p.app.log.WithField("uri", spotId.Uri()).
 		Infof("loaded %s %s (paused: %t, position: %dms, duration: %dms, prefetched: %t)", spotId.Type(),
 			strconv.QuoteToGraphic(p.primaryStream.Media.Name()), paused, trackPosition, p.primaryStream.Media.Duration(),
 			prefetched)
@@ -297,7 +296,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 
 	if p.state.tracks != nil && shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
 		if err := p.state.tracks.ToggleShuffle(ctx, *shufflingContext); err != nil {
-			log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
+			p.app.log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
 			return
 		}
 
@@ -324,7 +323,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 
 func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrack) {
 	if p.state.tracks == nil {
-		log.Warnf("cannot add to queue without a context")
+		p.app.log.Warnf("cannot add to queue without a context")
 		return
 	}
 
@@ -343,7 +342,7 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 
 func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
 	if p.state.tracks == nil {
-		log.Warnf("cannot set queue without a context")
+		p.app.log.Warnf("cannot set queue without a context")
 		return
 	}
 
@@ -371,7 +370,7 @@ func (p *AppPlayer) play(ctx context.Context) error {
 	}
 
 	streamPos := p.player.PositionMs()
-	log.Debugf("resume track at %dms", streamPos)
+	p.app.log.Debugf("resume track at %dms", streamPos)
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
@@ -388,7 +387,7 @@ func (p *AppPlayer) pause(ctx context.Context) error {
 	}
 
 	streamPos := p.player.PositionMs()
-	log.Debugf("pause track at %dms", streamPos)
+	p.app.log.Debugf("pause track at %dms", streamPos)
 
 	if err := p.player.Pause(); err != nil {
 		return fmt.Errorf("failed pausing playback: %w", err)
@@ -410,7 +409,7 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 
 	position = max(0, min(position, int64(p.primaryStream.Media.Duration())))
 
-	log.Debugf("seek track to %dms", position)
+	p.app.log.Debugf("seek track to %dms", position)
 	if err := p.player.SeekMs(position); err != nil {
 		return err
 	}
@@ -439,7 +438,7 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 	}
 
 	if p.state.tracks != nil {
-		log.Debug("skip previous track")
+		p.app.log.Debug("skip previous track")
 		p.state.tracks.GoPrev()
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
@@ -542,19 +541,19 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 			prevTrackUris = append(prevTrackUris, track.Uri)
 		}
 
-		log.Debugf("resolving autoplay station for %d tracks", len(prevTrackUris))
+		p.app.log.Debugf("resolving autoplay station for %d tracks", len(prevTrackUris))
 		spotCtx, err := p.sess.Spclient().ContextResolveAutoplay(ctx, &playerpb.AutoplayContextRequest{
 			ContextUri:     proto.String(p.state.player.ContextUri),
 			RecentTrackUri: prevTrackUris,
 		})
 		if err != nil {
-			log.WithError(err).Warnf("failed resolving station for %s", p.state.player.ContextUri)
+			p.app.log.WithError(err).Warnf("failed resolving station for %s", p.state.player.ContextUri)
 			return false, nil
 		}
 
-		log.Debugf("resolved autoplay station: %s", spotCtx.Uri)
+		p.app.log.Debugf("resolved autoplay station: %s", spotCtx.Uri)
 		if err := p.loadContext(ctx, spotCtx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop); err != nil {
-			log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
+			p.app.log.WithError(err).Warnf("failed loading station for %s", p.state.player.ContextUri)
 			return false, nil
 		}
 
@@ -569,7 +568,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 
 	// load current track into stream
 	if err := p.loadCurrentTrack(ctx, !hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
-		log.WithError(err).Infof("skipping unplayable media: %s", uri)
+		p.app.log.WithError(err).Infof("skipping unplayable media: %s", uri)
 		if forceNext {
 			// we failed in finding another track to play, just stop
 			return false, err
@@ -597,7 +596,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 		newVal = 0
 	}
 
-	log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
+	p.app.log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
 	p.player.SetVolume(newVal)
 
 	p.volumeUpdate <- float32(newVal) / player.MaxStateVolume
@@ -608,7 +607,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 // REST API, or from a volume mixer.
 func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 	if err := p.putConnectState(ctx, connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
-		log.WithError(err).Error("failed put state after volume change")
+		p.app.log.WithError(err).Error("failed put state after volume change")
 	}
 
 	p.app.server.Emit(&ApiEvent{

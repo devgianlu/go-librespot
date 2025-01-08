@@ -10,12 +10,11 @@ import (
 
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
 )
 
 type ContextResolver struct {
-	log *log.Entry
+	log librespot.Logger
 
 	sp *Spclient
 
@@ -49,7 +48,7 @@ func isTracksComplete(ctx *connectpb.Context) bool {
 	return expectedNumberOfTracks == totalLength
 }
 
-func NewContextResolver(ctx context.Context, log *log.Entry, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
+func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
 
 	if len(spotCtx.Pages) == 0 || !isTracksComplete(spotCtx) {

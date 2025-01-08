@@ -8,12 +8,11 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/spclient"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
 )
 
 type List struct {
-	log *log.Entry
+	log librespot.Logger
 
 	ctx *spclient.ContextResolver
 
@@ -27,7 +26,7 @@ type List struct {
 	queue        []*connectpb.ContextTrack
 }
 
-func NewTrackListFromContext(ctx context.Context, log_ *log.Entry, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
+func NewTrackListFromContext(ctx context.Context, log_ librespot.Logger, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
 	tl := &List{}
 	tl.ctx, err = spclient.NewContextResolver(ctx, log_, sp, spotCtx)
 	if err != nil {

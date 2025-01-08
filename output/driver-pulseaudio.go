@@ -8,10 +8,11 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/jfreymuth/pulse"
 	"github.com/jfreymuth/pulse/proto"
-	log "github.com/sirupsen/logrus"
 )
 
 type pulseAudioOutput struct {
+	log librespot.Logger
+
 	sampleRate           int
 	reader               librespot.Float32Reader
 	client               *pulse.Client
@@ -32,6 +33,7 @@ func newPulseAudioOutput(opts *NewOutputOptions) (*pulseAudioOutput, error) {
 		return nil, err
 	}
 	out := &pulseAudioOutput{
+		log:                  opts.Log,
 		sampleRate:           opts.SampleRate,
 		reader:               opts.Reader,
 		client:               client,
@@ -171,7 +173,7 @@ func (out *pulseAudioOutput) SetVolume(vol float32) {
 	cvol := proto.ChannelVolumes{volume}
 	err := out.stream.SetVolume(cvol)
 	if err != nil {
-		log.Warnln("failed to set volume:", err)
+		out.log.WithError(err).Warn("failed to set volume")
 	}
 }
 

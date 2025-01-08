@@ -16,7 +16,6 @@ import (
 	"unsafe"
 
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -25,6 +24,8 @@ const (
 )
 
 type alsaOutput struct {
+	log librespot.Logger
+
 	channels   int
 	sampleRate int
 	device     string
@@ -58,6 +59,7 @@ type alsaOutput struct {
 
 func newAlsaOutput(opts *NewOutputOptions) (*alsaOutput, error) {
 	out := &alsaOutput{
+		log:            opts.Log,
 		reader:         opts.Reader,
 		channels:       opts.ChannelCount,
 		sampleRate:     opts.SampleRate,
@@ -88,7 +90,7 @@ func newAlsaOutput(opts *NewOutputOptions) (*alsaOutput, error) {
 		}
 
 		out.mixerEnabled = false
-		log.WithError(err).Warnf("failed setting up output device mixer")
+		out.log.WithError(err).Warnf("failed setting up output device mixer")
 	}
 
 	return out, nil
@@ -233,7 +235,7 @@ func (out *alsaOutput) logParams(params *C.snd_pcm_hw_params_t) error {
 		return out.alsaError("snd_pcm_hw_params_get_periods", err)
 	}
 
-	log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames",
+	out.log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames",
 		rate, periodTime, frames, bufferTime, bufferSize, periods)
 
 	return nil
@@ -409,9 +411,9 @@ func (out *alsaOutput) SetVolume(vol float32) {
 		C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&placeholder))
 
 		mixerVolume := vol*(float32(out.mixerMaxVolume-out.mixerMinVolume)) + float32(out.mixerMinVolume)
-		log.Debugf("updating alsa mixer volume to %.02f\n", mixerVolume)
+		out.log.Debugf("updating alsa mixer volume to %.02f\n", mixerVolume)
 		if err := C.snd_mixer_selem_set_playback_volume_all(out.mixerElemHandle, C.long(mixerVolume)); err != 0 {
-			log.WithError(out.alsaError("snd_mixer_selem_set_playback_volume_all", err)).Warnf("failed setting output device mixer volume")
+			out.log.WithError(out.alsaError("snd_mixer_selem_set_playback_volume_all", err)).Warnf("failed setting output device mixer volume")
 		}
 	}
 }

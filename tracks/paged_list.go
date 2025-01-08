@@ -7,7 +7,6 @@ import (
 	"io"
 
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/rand"
 )
 
@@ -67,14 +66,14 @@ func (i *pagedListInterator[T]) get() pagedListItem[T] {
 }
 
 type pagedList[T any] struct {
-	log *log.Entry
+	log librespot.Logger
 
 	pages librespot.PageResolver[T]
 	list  []pagedListItem[T]
 	pos   int
 }
 
-func newPagedList[T any](log *log.Entry, pages librespot.PageResolver[T]) *pagedList[T] {
+func newPagedList[T any](log librespot.Logger, pages librespot.PageResolver[T]) *pagedList[T] {
 	return &pagedList[T]{log: log, pages: pages, list: nil, pos: -1}
 }
 

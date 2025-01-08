@@ -101,7 +101,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 		ctx := context.Background()
 		serverCtx, serverCancel := context.WithCancel(ctx)
 
-		callbackPort, codeCh, err := NewOAuth2Server(serverCtx, creds.CallbackPort)
+		callbackPort, codeCh, err := NewOAuth2Server(serverCtx, opts.Log, creds.CallbackPort)
 		if err != nil {
 			serverCancel()
 			return nil, fmt.Errorf("failed initializing oauth2 server: %w", err)

@@ -13,7 +13,6 @@ import (
 	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
-	log "github.com/sirupsen/logrus"
 )
 
 const SampleRate = 44100
@@ -22,6 +21,8 @@ const Channels = 2
 const MaxStateVolume = 65535
 
 type Player struct {
+	log librespot.Logger
+
 	normalisationEnabled bool
 	normalisationPregain float32
 	countryCode          *string
@@ -68,6 +69,8 @@ type playerCmdDataSet struct {
 type Options struct {
 	Spclient *spclient.Spclient
 	AudioKey *audio.KeyProvider
+
+	Log librespot.Logger
 
 	// NormalisationEnabled specifies if the volume should be normalised according
 	// to Spotify parameters. Only track normalization is supported.
@@ -127,6 +130,7 @@ type Options struct {
 
 func NewPlayer(opts *Options) (*Player, error) {
 	p := &Player{
+		log:                  opts.Log,
 		sp:                   opts.Spclient,
 		audioKey:             opts.AudioKey,
 		normalisationEnabled: opts.NormalisationEnabled,
@@ -194,7 +198,7 @@ loop:
 					}
 
 					outErr = out.Error()
-					log.Debugf("created new output device")
+					p.log.Debugf("created new output device")
 				}
 
 				// set source
@@ -251,7 +255,7 @@ loop:
 					out = nil
 					outErr = make(<-chan error)
 
-					log.Tracef("closed output device because of stop command")
+					p.log.Tracef("closed output device because of stop command")
 				}
 
 				cmd.resp <- struct{}{}
@@ -273,7 +277,7 @@ loop:
 				if out != nil {
 					delay, err := out.DelayMs()
 					if err != nil {
-						log.WithError(err).Warnf("failed getting output device delay")
+						p.log.WithError(err).Warnf("failed getting output device delay")
 						delay = 0
 					}
 
@@ -293,7 +297,7 @@ loop:
 			}
 		case err := <-outErr:
 			if err != nil {
-				log.WithError(err).Errorf("output device failed")
+				p.log.WithError(err).Errorf("output device failed")
 			}
 
 			// the current output device has exited, clean it up
@@ -301,7 +305,7 @@ loop:
 			out = nil
 			outErr = make(<-chan error)
 
-			log.Tracef("cleared closed output device")
+			p.log.Tracef("cleared closed output device")
 
 			// FIXME: this is called even if not needed, like when autoplay starts
 			p.ev <- Event{Type: EventTypeStopped}
@@ -403,7 +407,7 @@ func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
 const DisableCheckMediaRestricted = true
 
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
-	log := log.WithField("uri", spotId.Uri())
+	log := p.log.WithField("uri", spotId.Uri())
 
 	var media *librespot.Media
 	var file *metadata.AudioFile
@@ -491,7 +495,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
 	}
 
-	audioStream, meta, err := vorbis.ExtractMetadataPage(decryptedStream, rawStream.Size())
+	audioStream, meta, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
 	if err != nil {
 		return nil, fmt.Errorf("failed reading metadata page: %w", err)
 	}

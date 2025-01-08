@@ -36,7 +36,7 @@ import (
 var errAlreadyRunning = errors.New("go-librespot is already running")
 
 type App struct {
-	log *log.Entry
+	log librespot.Logger
 	cfg *Config
 
 	client *http.Client
@@ -65,7 +65,7 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
-	app.log = log.NewEntry(log.StandardLogger())
+	app.log = &LogrusAdapter{log.NewEntry(log.StandardLogger())}
 	app.client = &http.Client{}
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
@@ -136,6 +136,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{
 		Spclient: appPlayer.sess.Spclient(),
 		AudioKey: appPlayer.sess.AudioKey(),
+		Log:      app.log,
 
 		NormalisationEnabled: !app.cfg.NormalisationDisabled,
 		NormalisationPregain: app.cfg.NormalisationPregain,
@@ -592,7 +593,7 @@ func main() {
 
 	// create api server if needed
 	if cfg.Server.Enabled {
-		app.server, err = NewApiServer(cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile)
+		app.server, err = NewApiServer(app.log, cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating api server")
 		}

@@ -11,7 +11,6 @@ import (
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
-	log "github.com/sirupsen/logrus"
 )
 
 type KeyProviderError struct {
@@ -24,7 +23,7 @@ func (e KeyProviderError) Error() string {
 
 type KeyProvider struct {
 	ap  *ap.Accesspoint
-	log *log.Entry
+	log librespot.Logger
 
 	recvLoopOnce sync.Once
 
@@ -43,7 +42,7 @@ type keyResponse struct {
 	err error
 }
 
-func NewAudioKeyProvider(log *log.Entry, ap *ap.Accesspoint) *KeyProvider {
+func NewAudioKeyProvider(log librespot.Logger, ap *ap.Accesspoint) *KeyProvider {
 	p := &KeyProvider{log: log, ap: ap}
 	p.reqChan = make(chan keyRequest)
 	p.stopChan = make(chan struct{}, 1)

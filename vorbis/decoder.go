@@ -8,8 +8,6 @@ import (
 	"sync"
 
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
-
 	"github.com/xlab/vorbis-go/vorbis"
 )
 
@@ -22,7 +20,7 @@ const (
 type Decoder struct {
 	sync.Mutex
 
-	log *log.Entry
+	log librespot.Logger
 
 	SampleRate int32
 	Channels   int32
@@ -84,7 +82,7 @@ type Info struct {
 }
 
 // New creates and initialises a new OggVorbis decoder for the provided bytestream.
-func New(log *log.Entry, r librespot.SizedReadAtSeeker, meta *MetadataPage, gain float32) (*Decoder, error) {
+func New(log librespot.Logger, r librespot.SizedReadAtSeeker, meta *MetadataPage, gain float32) (*Decoder, error) {
 	d := &Decoder{
 		log:      log,
 		input:    r,

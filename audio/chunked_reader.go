@@ -12,7 +12,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -51,7 +50,7 @@ type chunkItem struct {
 }
 
 type HttpChunkedReader struct {
-	log    *log.Entry
+	log    librespot.Logger
 	client *http.Client
 
 	// TODO: this url will expire at some point
@@ -63,7 +62,7 @@ type HttpChunkedReader struct {
 	pos int64
 }
 
-func NewHttpChunkedReader(log *log.Entry, client *http.Client, audioUrl string) (_ *HttpChunkedReader, err error) {
+func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl string) (_ *HttpChunkedReader, err error) {
 	r := &HttpChunkedReader{log: log, client: client}
 
 	r.url, err = url.Parse(audioUrl)
