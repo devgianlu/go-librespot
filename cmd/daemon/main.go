@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -11,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -47,8 +45,7 @@ type App struct {
 	deviceId    string
 	deviceType  devicespb.DeviceType
 	clientToken string
-	state       *AppState
-	stateLock   sync.Mutex
+	state       librespot.AppState
 
 	server   ApiServer
 	logoutCh chan *AppPlayer
@@ -74,7 +71,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 		return nil, err
 	}
 
-	if err := app.readAppState(); err != nil {
+	if err := app.state.Read(cfg.ConfigDir); err != nil {
 		return nil, err
 	}
 
@@ -95,8 +92,8 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 		// Save device ID so we can reuse it next time.
 		app.state.DeviceId = app.deviceId
-		err := app.writeAppState()
-		if err != nil {
+
+		if err := app.state.Write(); err != nil {
 			return nil, err
 		}
 	}
@@ -204,8 +201,7 @@ func (app *App) withCredentials(ctx context.Context, creds any) (err error) {
 			app.state.Credentials.Username = appPlayer.sess.Username()
 			app.state.Credentials.Data = appPlayer.sess.StoredCredentials()
 
-			err = app.writeAppState()
-			if err != nil {
+			if err = app.state.Write(); err != nil {
 				return nil, err
 			}
 
@@ -342,8 +338,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			app.state.Credentials.Username = newAppPlayer.sess.Username()
 			app.state.Credentials.Data = newAppPlayer.sess.StoredCredentials()
 
-			err = app.writeAppState()
-			if err != nil {
+			if err := app.state.Write(); err != nil {
 				log.WithError(err).Errorf("failed persisting zeroconf credentials")
 			}
 
@@ -464,7 +459,12 @@ func loadConfig(cfg *Config) error {
 	}, "."), nil)
 
 	// load file configuration (if available)
-	configPath := cfg.ConfigPath()
+	var configPath string
+	if _, err := os.Stat(filepath.Join(cfg.ConfigDir, "config.yaml")); os.IsNotExist(err) {
+		configPath = filepath.Join(cfg.ConfigDir, "config.yml")
+	} else {
+		configPath = filepath.Join(cfg.ConfigDir, "config.yaml")
+	}
 
 	if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
 		if !os.IsNotExist(err) {
@@ -494,93 +494,14 @@ func loadConfig(cfg *Config) error {
 	return nil
 }
 
-func (cfg *Config) ConfigPath() string {
-	if _, err := os.Stat(filepath.Join(cfg.ConfigDir, "config.yaml")); os.IsNotExist(err) {
-		return filepath.Join(cfg.ConfigDir, "config.yml")
-	} else {
-		return filepath.Join(cfg.ConfigDir, "config.yaml")
-	}
-}
-
-func (cfg *Config) StatePath() string {
-	return filepath.Join(cfg.ConfigDir, "state.json")
-}
-
-func (cfg *Config) CredentialsPath() string {
-	return filepath.Join(cfg.ConfigDir, "credentials.json")
-}
-
-type AppState struct {
-	DeviceId    string `json:"device_id"`
-	Credentials struct {
-		Username string `json:"username"`
-		Data     []byte `json:"data"`
-	} `json:"credentials"`
-}
-
-func (app *App) readAppState() error {
-	// Read app state saved in a previous run.
-	app.state = &AppState{}
-	if content, err := os.ReadFile(app.cfg.StatePath()); err == nil {
-		if err := json.Unmarshal(content, &app.state); err != nil {
-			return fmt.Errorf("failed unmarshalling state file: %w", err)
-		}
-		log.Debugf("app state loaded")
-	} else {
-		log.Debugf("no app state found")
-	}
-
-	// Read credentials (old configuration, in credentials.json).
-	if app.state.Credentials.Username == "" {
-		if content, err := os.ReadFile(app.cfg.CredentialsPath()); err == nil {
-			if err := json.Unmarshal(content, &app.state.Credentials); err != nil {
-				return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
-			}
-
-			log.Debugf("stored credentials found for %s", app.state.Credentials.Username)
-		} else {
-			log.Debugf("stored credentials not found")
-		}
-	}
-
-	return nil
-}
-
-func (app *App) writeAppState() error {
-	app.stateLock.Lock()
-	defer app.stateLock.Unlock()
-
-	content, err := json.MarshalIndent(&app.state, "", "\t")
-	if err != nil {
-		return fmt.Errorf("failed marshalling app state: %w", err)
-	}
-
-	// Create a temporary file, and overwrite the old file.
-	// This is a way to atomically replace files.
-	// The file is created with mode 0o600 so we don't need to change the mode.
-	tmppath := app.cfg.StatePath()
-	tmpfile, err := os.CreateTemp(filepath.Dir(tmppath), filepath.Base(tmppath)+".*.tmp")
-	if err != nil {
-		return fmt.Errorf("failed creating temporary file for app state: %w", err)
-	}
-	if _, err := tmpfile.Write(content); err != nil {
-		return fmt.Errorf("failed writing app state: %w", err)
-	}
-	if err := os.Rename(tmpfile.Name(), tmppath); err != nil {
-		return fmt.Errorf("failed replacing app state file: %w", err)
-	}
-	return nil
-}
-
 func main() {
 	rand.Seed(uint64(time.Now().UnixNano()))
 
 	var cfg Config
 	if err := loadConfig(&cfg); err != nil {
 		if errors.Is(err, errAlreadyRunning) {
-			// Print a nice error message instead of a harder-to-read log
-			// message.
-			fmt.Fprintln(os.Stderr, "could not start:", err)
+			// Print a nice error message instead of a harder-to-read log message.
+			_, _ = fmt.Fprintln(os.Stderr, "could not start:", err)
 			os.Exit(1)
 		}
 		log.WithError(err).Fatal("failed loading config")
