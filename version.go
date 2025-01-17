@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const SpotifyVersionCode = 125200442
+
 var commit, version string
 
 // Extract and return the commit hash stored in the binary, if available.
