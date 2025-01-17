@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const SpotifyVersionCode = 125200442
+
 var commit, version string
 
 func VersionNumberString() string {
