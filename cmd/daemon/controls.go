@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -146,6 +149,10 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 
 	p.state.setPaused(paused)
 
+	sessionId := make([]byte, 16)
+	_, _ = rand.Read(sessionId)
+	p.state.player.SessionId = base64.StdEncoding.EncodeToString(sessionId)
+
 	p.state.player.ContextUri = spotCtx.Uri
 	p.state.player.ContextUrl = spotCtx.Url
 	p.state.player.Restrictions = spotCtx.Restrictions
@@ -252,6 +259,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 			prefetched)
 
 	p.state.updateTimestamp()
+	p.state.player.PlaybackId = hex.EncodeToString(p.primaryStream.PlaybackId)
 	p.state.player.Duration = int64(p.primaryStream.Media.Duration())
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false

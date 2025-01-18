@@ -8,6 +8,8 @@ import (
 )
 
 type Stream struct {
+	PlaybackId []byte
+
 	Source librespot.AudioSource
 	Media  *librespot.Media
 	File   *metadatapb.AudioFile

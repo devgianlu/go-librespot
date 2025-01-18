@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -161,6 +163,14 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
 			return fmt.Errorf("failed creating track list: %w", err)
+		}
+
+		if sessId := transferState.CurrentSession.OriginalSessionId; sessId != nil {
+			p.state.player.SessionId = *sessId
+		} else {
+			sessionId := make([]byte, 16)
+			_, _ = rand.Read(sessionId)
+			p.state.player.SessionId = base64.StdEncoding.EncodeToString(sessionId)
 		}
 
 		p.state.setActive(true)
