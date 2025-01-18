@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	eventsenderpb "github.com/devgianlu/go-librespot/proto/spotify/event_sender"
+	netfortunepb "github.com/devgianlu/go-librespot/proto/spotify/netfortune"
 	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"io"
 	"net/http"
@@ -384,4 +386,61 @@ func (c *Spclient) ContextResolveAutoplay(ctx context.Context, reqProto *playerp
 
 func (c *Spclient) GetAccessToken(ctx context.Context, force bool) (string, error) {
 	return c.accessToken(ctx, force)
+}
+
+func (c *Spclient) NetFortune(ctx context.Context, bandwidth int) (*netfortunepb.NetFortuneV2Response, error) {
+	resp, err := c.Request(ctx, "GET", "/net-fortune/v2/fortune", url.Values{
+		"bandwidth": []string{fmt.Sprintf("%d", bandwidth)},
+	}, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from net fortune: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var fortune netfortunepb.NetFortuneV2Response
+	if err := proto.Unmarshal(respBytes, &fortune); err != nil {
+		return nil, fmt.Errorf("failed json unmarshalling NetFortuneV2Response: %w", err)
+	}
+
+	return &fortune, nil
+}
+
+func (c *Spclient) PublishEvents(ctx context.Context, reqProto *eventsenderpb.PublishEventsRequest) (*eventsenderpb.PublishEventsResponse, error) {
+	reqBody, err := proto.Marshal(reqProto)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling PublishEventsRequest: %w", err)
+	}
+
+	resp, err := c.Request(ctx, "POST", "/gabo-receiver-service/v3/events/", nil, nil, reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from gabo events receiver: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var respProto eventsenderpb.PublishEventsResponse
+	if err := proto.Unmarshal(respBytes, &respProto); err != nil {
+		return nil, fmt.Errorf("failed json unmarshalling PublishEventsResponse: %w", err)
+	}
+
+	return &respProto, nil
 }
