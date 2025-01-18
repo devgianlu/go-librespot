@@ -13,6 +13,7 @@ import (
 	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
+	"golang.org/x/exp/rand"
 )
 
 const SampleRate = 44100
@@ -410,6 +411,9 @@ const DisableCheckMediaRestricted = true
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := p.log.WithField("uri", spotId.Uri())
 
+	playbackId := make([]byte, 16)
+	_, _ = rand.Read(playbackId)
+
 	var media *librespot.Media
 	var file *metadata.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
@@ -526,5 +530,5 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 	}
 
-	return &Stream{Source: stream, Media: media, File: file}, nil
+	return &Stream{PlaybackId: playbackId, Source: stream, Media: media, File: file}, nil
 }
