@@ -3,9 +3,10 @@ package player
 type EventType int
 
 const (
-	EventTypePlaying EventType = iota
-	EventTypePaused
-	EventTypeStopped
+	EventTypePlay EventType = iota
+	EventTypeResume
+	EventTypePause
+	EventTypeStop
 	EventTypeNotPlaying
 )
 
