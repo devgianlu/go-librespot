@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/devgianlu/go-librespot/player"
 	"net/http"
 	"net/url"
 
@@ -21,6 +22,10 @@ func (s *Session) StoredCredentials() []byte {
 
 func (s *Session) Spclient() *spclient.Spclient {
 	return s.sp
+}
+
+func (s *Session) Events() player.EventManager {
+	return s.events
 }
 
 func (s *Session) AudioKey() *audio.KeyProvider {
