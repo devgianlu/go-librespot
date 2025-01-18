@@ -12,3 +12,6 @@ const (
 type Event struct {
 	Type EventType
 }
+
+type EventManager interface {
+}

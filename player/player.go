@@ -3,9 +3,6 @@ package player
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"time"
-
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/output"
@@ -14,6 +11,8 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
+	"net/http"
+	"time"
 )
 
 const SampleRate = 44100
@@ -30,6 +29,7 @@ type Player struct {
 
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
+	events   EventManager
 
 	newOutput func(source librespot.Float32Reader, volume float32) (output.Output, error)
 
@@ -70,6 +70,7 @@ type playerCmdDataSet struct {
 type Options struct {
 	Spclient *spclient.Spclient
 	AudioKey *audio.KeyProvider
+	Events   EventManager
 
 	Log librespot.Logger
 
@@ -134,6 +135,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		log:                  opts.Log,
 		sp:                   opts.Spclient,
 		audioKey:             opts.AudioKey,
+		events:               opts.Events,
 		normalisationEnabled: opts.NormalisationEnabled,
 		normalisationPregain: opts.NormalisationPregain,
 		countryCode:          opts.CountryCode,

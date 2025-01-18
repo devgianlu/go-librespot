@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/devgianlu/go-librespot/events"
+	"github.com/devgianlu/go-librespot/player"
 	"net/http"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -33,6 +35,7 @@ type Session struct {
 	sp       *spclient.Spclient
 	dealer   *dealer.Dealer
 	audioKey *audio.KeyProvider
+	events   player.EventManager
 }
 
 func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error) {
@@ -192,6 +195,12 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 
 	// init audio key provider
 	s.audioKey = audio.NewAudioKeyProvider(opts.Log, s.ap)
+
+	// init event sender
+	s.events, err = events.Plugin.NewEventManager(opts.Log, opts.AppState, s.sp, s.ap.Username())
+	if err != nil {
+		return nil, fmt.Errorf("failed initializing event sender: %w", err)
+	}
 
 	return &s, nil
 }
