@@ -227,9 +227,9 @@ loop:
 				cmd.resp <- nil
 
 				if data.paused {
-					p.ev <- Event{Type: EventTypePaused}
+					p.ev <- Event{Type: EventTypePause}
 				} else {
-					p.ev <- Event{Type: EventTypePlaying}
+					p.ev <- Event{Type: EventTypePlay}
 				}
 			case playerCmdPlay:
 				if out != nil {
@@ -237,7 +237,7 @@ loop:
 						cmd.resp <- err
 					} else {
 						cmd.resp <- nil
-						p.ev <- Event{Type: EventTypePlaying}
+						p.ev <- Event{Type: EventTypeResume}
 					}
 				} else {
 					cmd.resp <- nil
@@ -248,7 +248,7 @@ loop:
 						cmd.resp <- err
 					} else {
 						cmd.resp <- nil
-						p.ev <- Event{Type: EventTypePaused}
+						p.ev <- Event{Type: EventTypePause}
 					}
 				} else {
 					cmd.resp <- nil
@@ -263,7 +263,7 @@ loop:
 				}
 
 				cmd.resp <- struct{}{}
-				p.ev <- Event{Type: EventTypeStopped}
+				p.ev <- Event{Type: EventTypeStop}
 			case playerCmdSeek:
 				if out != nil {
 					if err := source.SetPositionMs(cmd.data.(int64)); err != nil {
@@ -312,7 +312,7 @@ loop:
 			p.log.Tracef("cleared closed output device")
 
 			// FIXME: this is called even if not needed, like when autoplay starts
-			p.ev <- Event{Type: EventTypeStopped}
+			p.ev <- Event{Type: EventTypeStop}
 		case <-source.Done():
 			p.ev <- Event{Type: EventTypeNotPlaying}
 		}

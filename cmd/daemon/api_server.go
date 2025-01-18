@@ -234,6 +234,7 @@ type ApiEventDataVolume ApiResponseVolume
 
 type ApiEventDataPlaying struct {
 	Uri        string `json:"uri"`
+	Resume     bool   `json:"resume"`
 	PlayOrigin string `json:"play_origin"`
 }
 

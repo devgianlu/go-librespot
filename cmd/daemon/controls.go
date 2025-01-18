@@ -78,7 +78,7 @@ func (p *AppPlayer) schedulePrefetchNext() {
 
 func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 	switch ev.Type {
-	case player.EventTypePlaying:
+	case player.EventTypePlay:
 		p.state.player.IsPlaying = true
 		p.state.setPaused(false)
 		p.state.player.IsBuffering = false
@@ -88,10 +88,25 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
 				Uri:        p.state.player.Track.Uri,
+				Resume:     false,
 				PlayOrigin: p.state.playOrigin(),
 			},
 		})
-	case player.EventTypePaused:
+	case player.EventTypeResume:
+		p.state.player.IsPlaying = true
+		p.state.setPaused(false)
+		p.state.player.IsBuffering = false
+		p.updateState(ctx)
+
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypePlaying,
+			Data: ApiEventDataPlaying{
+				Uri:        p.state.player.Track.Uri,
+				Resume:     true,
+				PlayOrigin: p.state.playOrigin(),
+			},
+		})
+	case player.EventTypePause:
 		p.state.player.IsPlaying = true
 		p.state.setPaused(true)
 		p.state.player.IsBuffering = false
@@ -127,7 +142,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 				},
 			})
 		}
-	case player.EventTypeStopped:
+	case player.EventTypeStop:
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeStopped,
 			Data: ApiEventDataStopped{
