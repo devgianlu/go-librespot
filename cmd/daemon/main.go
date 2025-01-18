@@ -123,6 +123,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		ClientToken: app.clientToken,
 		Resolver:    app.resolver,
 		Client:      app.client,
+		AppState:    &app.state,
 		Credentials: creds,
 	}); err != nil {
 		return nil, err
@@ -133,6 +134,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{
 		Spclient: appPlayer.sess.Spclient(),
 		AudioKey: appPlayer.sess.AudioKey(),
+		Events:   appPlayer.sess.Events(),
 		Log:      app.log,
 
 		NormalisationEnabled: !app.cfg.NormalisationDisabled,

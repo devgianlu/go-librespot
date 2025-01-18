@@ -25,6 +25,9 @@ type Options struct {
 
 	// Client is the HTTP client to use for the session, leave empty for a new one.
 	Client *http.Client
+
+	// AppState is the app state to use.
+	AppState *librespot.AppState
 }
 
 type InteractiveCredentials struct {
