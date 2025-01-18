@@ -1,0 +1,1666 @@
+syntax = "proto3";
+
+package spotify.event_sender;
+
+message Application {
+  string version = 1;
+}
+
+message ApplicationDesktop {
+  string version_string = 1;
+  int64 version_code = 2;
+  bytes session_id = 3;
+}
+
+message ClientContextId {
+  string value = 1;
+}
+
+message ClientId {
+  bytes value = 1;
+}
+
+message Device {
+  string manufacturer = 1;
+  string model = 2;
+}
+
+message DeviceDesktop {
+  string platform_type = 1;
+  string device_manufacturer = 2;
+  string device_model = 3;
+  string device_id = 4;
+  string os_version = 5;
+}
+
+message InstallationId {
+  bytes value = 1;
+}
+
+message MonotonicClock {
+  int64 id = 1;
+  int64 value = 2;
+}
+
+message Os {
+  string name = 1;
+  string version = 2;
+}
+
+message Sdk {
+  string version_name = 1;
+  string type = 2;
+}
+
+message Time {
+  int64 value = 1;
+}
+
+message DroppedEvents {
+  map<string, DroppedEventByEventName> dropped_events_by_sequence_id = 1;
+}
+
+message DroppedEventByEventName {
+  map<string, DroppedEventsInfo> dropped_events_by_name = 1;
+
+  message DroppedEventsInfo {
+    uint32 total_count = 1;
+    uint32 unreported_count = 2;
+  }
+}
+
+message EventEntity {
+  uint32 file_format_version = 1;
+  string event_name = 2;
+  bytes sequence_id = 3;
+  uint64 sequence_number = 4;
+  bytes payload = 5;
+  string owner = 6;
+  bool authenticated = 7;
+  uint64 record_id = 8;
+}
+
+message EventEnvelope {
+  string event_name = 2;
+
+  repeated EventFragment event_fragment = 3;
+  message EventFragment {
+    string name = 1;
+    bytes data = 2;
+  }
+
+  bytes sequence_id = 4;
+  int64 sequence_number = 5;
+
+  reserved 1;
+}
+
+message PublishEventsRequest {
+  repeated EventEnvelope event = 1;
+  bool suppress_persist = 2;
+}
+
+message PublishEventsResponse {
+  repeated EventError error = 1;
+  message EventError {
+    int32 index = 1;
+    bool transient = 2;
+    int32 reason = 3;
+  }
+}
+
+message InstallationEntity {
+  int32 file_format_version = 1;
+  bytes encrypted_part = 2;
+}
+
+message InstallationData {
+  bytes installation_id = 1;
+  bytes last_seen_device_id = 2;
+  int64 monotonic_clock_id = 3;
+}
+
+message RateLimitedEventsEntity {
+  int32 file_format_version = 1;
+  map<string, uint32> map_field = 2;
+}
+
+message RecordId {
+  uint64 value = 1;
+}
+
+message SequenceNumberEntity {
+  uint32 file_format_version = 1;
+  string event_name = 2;
+  bytes sequence_id = 3;
+  uint64 sequence_number_next = 4;
+}
+
+message AdContext {
+  optional string preceding_content_uri = 1;
+  optional string preceding_playback_id = 2;
+  optional int32 preceding_end_position = 3;
+  repeated string ad_ids = 4;
+  optional string ad_request_id = 5;
+  optional string succeeding_content_uri = 6;
+  optional string succeeding_playback_id = 7;
+  optional int32 succeeding_start_position = 8;
+  optional int32 preceding_duration = 9;
+  repeated string ad_slot_ids = 10;
+}
+
+message AdDecisionEvent {
+  optional string request_id = 1;
+  optional string decision_request_id = 2;
+  optional string decision_type = 3;
+  optional string ad_id = 4;
+  optional string decision_state = 5;
+}
+
+message AdError {
+  optional string request_type = 1;
+  optional string error_message = 2;
+  optional int64 http_error_code = 3;
+  optional string request_url = 4;
+  optional string tracking_event = 5;
+  optional string error_type = 6;
+  optional string ad_id = 7;
+  optional string lineitem_id = 8;
+  optional string surface = 9;
+  optional string ad_content_origin = 10;
+  optional string slot = 11;
+  optional string request_id = 12;
+  repeated string slot_ids = 13;
+  optional string type = 14;
+}
+
+message AdEvent {
+  optional string request_id = 1;
+  optional string app_startup_id = 2;
+  optional string ad_id = 3;
+  optional string lineitem_id = 4;
+  optional string creative_id = 5;
+  optional string slot = 6;
+  optional string format = 7;
+  optional string type = 8;
+  optional bool skippable = 9;
+  optional string event = 10;
+  optional string event_source = 11;
+  optional string event_reason = 12;
+  optional int32 event_sequence_num = 13;
+  optional int32 position = 14;
+  optional int32 duration = 15;
+  optional bool in_focus = 16;
+  optional float volume = 17;
+  optional string product_name = 18;
+}
+
+message AdRequestEvent {
+  optional string feature_identifier = 1;
+  optional string requested_ad_type = 2;
+  optional int64 latency_ms = 3;
+  repeated string requested_ad_types = 4;
+  optional string request_id = 5;
+  optional int32 http_error_code = 6;
+}
+
+message AdOpportunityEvent {
+  optional string trigger_id = 1;
+  optional string trigger_type = 2;
+  optional string decision_request_id = 3;
+  optional string trigger_state = 4;
+  optional bool focus_state = 5;
+  optional string content_uri = 6;
+  optional string playback_id = 7;
+  optional string request_id = 8;
+}
+
+message AdSlotEvent {
+  optional string event = 1;
+  optional string ad_id = 2;
+  optional string lineitem_id = 3;
+  optional string creative_id = 4;
+  optional string slot = 5;
+  optional string format = 6;
+  optional bool in_focus = 7;
+  optional string app_startup_id = 8;
+  optional string request_id = 9;
+  optional string reason = 10;
+}
+
+message AmazonWakeUpTime {
+  optional int64 delay_to_online = 1;
+}
+
+message AudioDriverInfo {
+  optional string driver_name = 1;
+  optional string output_device_name = 2;
+  optional string output_device_category = 3;
+  optional string reason = 4;
+}
+
+message AudioIndexRepairReport {
+  optional int64 tracks_num_added_audio = 1;
+  optional int64 tracks_num_in_mdata = 2;
+  optional int64 tracks_num_parse_error = 3;
+  optional int64 tracks_num_missing_audio_id = 4;
+  optional int64 tracks_num_write_error = 5;
+  optional int64 episodes_num_added_audio = 6;
+  optional int64 episodes_num_in_mdata = 7;
+  optional int64 episodes_num_parse_error = 8;
+  optional int64 episodes_num_missing_audio_id = 9;
+  optional int64 episodes_num_write_error = 10;
+}
+
+message AudioOffliningSettingsReport {
+  optional string default_sync_bitrate_product_state = 1;
+  optional int64 user_selected_sync_bitrate = 2;
+  optional int64 sync_bitrate = 3;
+  optional bool sync_over_cellular = 4;
+  optional string primary_resource_type = 5;
+}
+
+message AudioSettingsReport {
+  optional bool offline_mode = 1;
+  optional string default_play_bitrate_product_state = 2;
+  optional int64 user_selected_bitrate = 3;
+  optional int64 play_bitrate = 4;
+  optional bool low_bitrate_on_cellular = 5;
+  optional string default_sync_bitrate_product_state = 6;
+  optional int64 user_selected_sync_bitrate = 7;
+  optional int64 sync_bitrate = 8;
+  optional bool sync_over_cellular = 9;
+  optional string enable_gapless_product_state = 10;
+  optional bool enable_gapless = 11;
+  optional string enable_crossfade_product_state = 12;
+  optional bool enable_crossfade = 13;
+  optional int64 crossfade_time = 14;
+  optional bool enable_normalization = 15;
+  optional int64 playback_speed = 16;
+  optional string audio_loudness_level = 17;
+  optional bool enable_automix = 18;
+  optional bool enable_silence_trimmer = 19;
+  optional bool enable_mono_downmixer = 20;
+  optional string send_reason = 21;
+  repeated string change_list = 22;
+  optional bool enable_equalizer = 23;
+  optional bool enable_dynamic_normalizer = 24;
+}
+
+message AudioStreamingSettingsReport {
+  optional string default_play_bitrate_product_state = 1;
+  optional int64 user_selected_play_bitrate_cellular = 2;
+  optional int64 user_selected_play_bitrate_wifi = 3;
+  optional int64 play_bitrate_cellular = 4;
+  optional int64 play_bitrate_wifi = 5;
+  optional bool allow_downgrade = 6;
+}
+
+message ClientCoreConnectActiveDeviceRace {
+  optional string device_id = 1;
+  optional int64 started_playing_at_timestamp = 2;
+  optional string cluster_active_device_id = 3;
+  optional int64 cluster_started_playing_at_timestamp = 4;
+  optional bool is_playing = 5;
+  optional bool cluster_is_playing = 6;
+  optional int64 has_been_playing_for_millis = 7;
+}
+
+message ClientCoreConnectCommand {
+  optional string command_type = 1;
+  optional string result = 2;
+  optional int64 duration = 3;
+  optional string interaction_ids = 4;
+  optional string http_response = 5;
+  optional int32 http_status_code = 6;
+  optional string context_player_error_message = 7;
+  optional string http_client_error = 8;
+  optional string intent_id = 9;
+  optional int32 command_size_bytes = 10;
+  optional int64 ack_duration = 11;
+  optional string target_device_id = 12;
+  optional string target_device_brand = 13;
+  optional string target_device_model = 14;
+  optional string target_device_client_id = 15;
+}
+
+message ClientCoreConnectPlayCommand {
+  optional int64 observer_duration = 1;
+  optional int64 state_duration = 2;
+  optional string intent_id = 3;
+  optional string context_url = 4;
+}
+
+message ClientLocale {
+  optional string client_default_locale = 1;
+  optional string user_specified_locale = 2;
+}
+
+message CollectionLevelDbInfo {
+  optional string bucket = 1;
+  optional bool use_leveldb = 2;
+  optional bool migration_from_file_ok = 3;
+  optional bool index_check_ok = 4;
+  optional bool leveldb_works = 5;
+  optional bool already_migrated = 6;
+}
+
+message CollectionOfflineControllerEmptyTrackList {
+  optional string link_type = 1;
+  optional bool consistent_with_collection = 2;
+  optional int64 collection_size = 3;
+}
+
+message ConfigurationApplied {
+  optional int64 last_rcs_fetch_time = 1;
+  optional string installation_id = 2;
+  repeated int32 policy_group_ids = 3;
+  optional string configuration_assignment_id = 4;
+  optional string rc_client_id = 5;
+  optional string rc_client_version = 6;
+  optional string platform = 7;
+  optional string fetch_type = 8;
+  map<string, string> identifiers = 9;
+}
+
+message ConfigurationFetched {
+  optional int64 last_rcs_fetch_time = 1;
+  optional string installation_id = 2;
+  optional string configuration_assignment_id = 3;
+  optional string property_set_id = 4;
+  optional string attributes_set_id = 5;
+  optional string rc_client_id = 6;
+  optional string rc_client_version = 7;
+  optional string rc_sdk_version = 8;
+  optional string platform = 9;
+  optional string fetch_type = 10;
+  optional int64 latency = 11;
+  optional int64 payload_size = 12;
+  optional int32 status_code = 13;
+  optional string error_reason = 14;
+  optional string error_message = 15;
+  optional string error_reason_configuration_resolve = 16;
+  optional string error_message_configuration_resolve = 17;
+  optional string error_reason_account_attributes = 18;
+  optional string error_message_account_attributes = 19;
+  optional int32 error_code_account_attributes = 20;
+  optional int32 error_code_configuration_resolve = 21;
+  optional int32 product_state_key_count = 22;
+  map<string, string> identifiers = 23;
+}
+
+message ConfigurationFetchedNonAuth {
+  optional int64 last_rcs_fetch_time = 1;
+  optional string installation_id = 2;
+  optional string configuration_assignment_id = 3;
+  optional string property_set_id = 4;
+  optional string attributes_set_id = 5;
+  optional string rc_client_id = 6;
+  optional string rc_client_version = 7;
+  optional string rc_sdk_version = 8;
+  optional string platform = 9;
+  optional string fetch_type = 10;
+  optional int64 latency = 11;
+  optional int64 payload_size = 12;
+  optional int32 status_code = 13;
+  optional string error_reason = 14;
+  optional string error_message = 15;
+  optional string error_reason_configuration_resolve = 16;
+  optional string error_message_configuration_resolve = 17;
+  optional string error_reason_account_attributes = 18;
+  optional string error_message_account_attributes = 19;
+  optional int32 error_code_account_attributes = 20;
+  optional int32 error_code_configuration_resolve = 21;
+  map<string, string> identifiers = 22;
+}
+
+message ConnectConnectivityError {
+  optional string software_version = 1;
+  optional string error = 2;
+  optional string connection_type_initial = 3;
+  optional string connection_type_error = 4;
+  optional string reason = 5;
+}
+
+message ConnectCredentialsRequest {
+  optional string token_type = 1;
+  optional string client_id = 2;
+}
+
+message ConnectDeviceDiscovered {
+  optional string device_id = 1;
+  optional string discover_method = 2;
+  optional string discovered_device_id = 3;
+  optional string discovered_device_type = 4;
+  optional string discovered_library_version = 5;
+  optional string discovered_brand_display_name = 6;
+  optional string discovered_model_display_name = 7;
+  optional string discovered_client_id = 8;
+  optional string discovered_product_id = 9;
+  optional string discovered_device_availablilty = 10;
+  optional string discovered_device_public_key = 11;
+  optional bool capabilities_resolved = 12;
+}
+
+message ConnectMdnsPacketParseError {
+  optional string type = 1;
+  optional string buffer = 2;
+  optional string ttl = 3;
+  optional string txt = 4;
+  optional string host = 5;
+  optional string discovery_name = 6;
+  optional string context = 7;
+}
+
+message ConnectTransferIncarnation {
+  optional string transfer_intent_id = 1;
+  optional string incarnation_client_id = 2;
+  optional string incarnation_device_id = 3;
+  optional bool incarnation_is_cast = 4;
+}
+
+message ConnectTransferResult {
+  optional string result = 1;
+  optional string device_type = 2;
+  optional string discovery_class = 3;
+  optional string device_model = 4;
+  optional string device_brand = 5;
+  optional string device_software_version = 6;
+  optional int64 duration = 7;
+  optional string device_client_id = 8;
+  optional string transfer_intent_id = 9;
+  optional string transfer_debug_log = 10;
+  optional string error_code = 11;
+  optional int32 http_response_code = 12;
+  optional string initial_device_state = 13;
+  optional int32 retry_count = 14;
+  optional int32 login_retry_count = 15;
+  optional int64 login_duration = 16;
+  optional string target_device_id = 17;
+  optional bool target_device_is_local = 18;
+  optional string final_device_state = 19;
+  repeated string interaction_ids = 20;
+  optional bool target_device_is_group = 21;
+  optional string final_transfer_state = 22;
+  repeated string login_error_codes = 23;
+}
+
+message ConnectionError {
+  optional int64 error_code = 1;
+  optional string ap = 2;
+  optional string proxy = 3;
+}
+
+message ConnectionInfo {
+  optional string ap = 1;
+  optional string proxy = 2;
+  optional bool user_initated_login = 3;
+  optional string reachability_type = 4;
+  optional string web_installer_unique_id = 5;
+  optional string ap_resolve_source = 6;
+  optional string address_type = 7;
+  optional bool ipv6_failed = 8;
+}
+
+message ConnectionStateChange {
+  optional string type = 1;
+  optional string old = 2;
+  optional string new = 3;
+}
+
+message CoreAutoplayLoadingResults {
+  optional int32 response_status = 1;
+  optional string context_uri = 2;
+  optional string endpoint = 3;
+  optional string session_id = 4;
+  optional int32 request_latency = 5;
+}
+
+message DefaultConfigurationApplied {
+  optional string installation_id = 1;
+  optional string configuration_assignment_id = 2;
+  optional string rc_client_id = 3;
+  optional string rc_client_version = 4;
+  optional string platform = 5;
+  optional string fetch_type = 6;
+  optional string reason = 7;
+  map<string, string> identifiers = 8;
+}
+
+message DesktopAuthenticationFailureNonAuth {
+  optional string action_hash = 1;
+  optional string error_category = 2;
+  optional int32 error_code = 3;
+}
+
+message DesktopAuthenticationSuccess {
+  optional string action_hash = 1;
+}
+
+message DesktopGPUAccelerationInfo {
+  optional bool is_enabled = 1;
+}
+
+message DesktopHighMemoryUsage {
+  optional bool is_continuation_event = 1;
+  optional double sample_time_interval_seconds = 2;
+  optional int64 win_committed_bytes = 3;
+  optional int64 win_peak_committed_bytes = 4;
+  optional int64 win_working_set_bytes = 5;
+  optional int64 win_peak_working_set_bytes = 6;
+  optional int64 mac_virtual_size_bytes = 7;
+  optional int64 mac_resident_size_bytes = 8;
+  optional int64 mac_footprint_bytes = 9;
+  optional string process_name = 10;
+}
+
+message DesktopPartnerAPIAuthRequest {
+  optional string client_id = 1;
+  optional bool success = 2;
+  optional string error_description = 3;
+  optional string error_step = 4;
+  optional int64 request_duration_ms = 5;
+}
+
+message DesktopUIShellInteractionNonAuth {
+  optional string section_id = 1;
+  optional string interaction_type = 2;
+  optional string user_intent = 3;
+}
+
+message DesktopUpdateDownloadComplete {
+  optional int64 revision = 1;
+  optional bool is_critical = 2;
+  optional string source = 3;
+  optional bool is_successful = 4;
+  optional bool is_employee = 5;
+}
+
+message DesktopUpdateDownloadError {
+  optional int64 revision = 1;
+  optional bool is_critical = 2;
+  optional string error_message = 3;
+  optional string source = 4;
+  optional bool is_employee = 5;
+}
+
+message DesktopUpdateMessageAction {
+  optional bool will_download = 1;
+  optional int64 this_message_from_revision = 2;
+  optional int64 this_message_to_revision = 3;
+  optional bool is_critical = 4;
+  optional int64 already_downloaded_from_revision = 5;
+  optional int64 already_downloaded_to_revision = 6;
+  optional string source = 7;
+  optional bool is_employee = 8;
+}
+
+message DesktopUpdateMessageProcessed {
+  optional bool success = 1;
+  optional string source = 2;
+  optional int64 revision = 3;
+  optional bool is_critical = 4;
+  optional string binary_hash = 5;
+  optional bool is_employee = 6;
+}
+
+message DesktopUpdateResponse {
+  optional int64 status_code = 1;
+  optional int64 request_time_ms = 2;
+  optional int64 payload_size = 3;
+  optional bool is_employee = 4;
+  optional string error_message = 5;
+}
+
+message DesktopURIActivationNonAuth {
+  optional string uri = 1;
+  optional string activation_source = 2;
+}
+
+message EventSenderCanary {
+  optional string batch_uuid = 1;
+  optional int64 event_id = 2;
+  optional int64 batch_size = 3;
+  optional string sending_system = 4;
+  optional bool sent_as_pending_event = 5;
+  optional int64 batch_start_time_ms = 6;
+  optional int64 event_time_ms = 7;
+  optional string configuration = 8;
+  optional string experiment_variant = 9;
+  optional int64 mutation_count = 10;
+  optional int64 expected_mutation_count = 11;
+}
+
+message EventSenderCanaryError {
+  optional string batch_uuid = 1;
+  optional int64 event_id = 2;
+  optional int64 batch_size = 3;
+  optional string sending_system = 4;
+  optional bool sent_as_pending_event = 5;
+  optional int64 batch_start_time_ms = 6;
+  optional int64 event_time_ms = 7;
+  optional string configuration = 8;
+  optional string error_source = 9;
+  optional string error_type = 10;
+  optional string experiment_variant = 11;
+  optional int64 mutation_count = 12;
+  optional int64 expected_mutation_count = 13;
+}
+
+message EventSenderInternalError2NonAuth {
+  repeated string error_types = 1;
+  repeated int32 error_total_counts = 2;
+  repeated int32 error_unreported_counts = 3;
+}
+
+message EventSenderStats {
+  map<string, int64> storage_size = 1;
+  map<string, int64> sequence_number_min = 2;
+  map<string, int64> sequence_number_next = 3;
+}
+
+message ExternalAccessoryRemoteInteraction {
+  optional string action = 1;
+  optional string interaction_id = 2;
+  optional string integration = 3;
+  optional string protocol = 4;
+  optional string transport_type = 5;
+  optional string accessory_type = 6;
+  optional string accessory_name = 7;
+  optional string brand = 8;
+  optional string model = 9;
+  optional string version = 10;
+  optional string client_id = 11;
+  optional string sender_id = 12;
+  optional string remote_device_id = 13;
+  optional string audio_route_id = 14;
+  optional string accessory_class = 15;
+}
+
+message ExternalDeviceInfo {
+  optional string type = 1;
+  optional string subtype = 2;
+  optional string reason = 3;
+  optional bool taken_over = 4;
+  optional int64 num_tracks = 5;
+  optional int64 num_purchased_tracks = 6;
+  optional int64 num_playlists = 7;
+  optional string error = 8;
+  optional bool full = 9;
+  optional bool sync_all = 10;
+}
+
+message GetInfoFailures {
+  optional string device_id = 1;
+  optional int64 error_code = 2;
+  optional string request = 3;
+  optional string response_body = 4;
+  optional string context = 5;
+}
+
+message ImageDownload {
+  optional string cdn_domain = 1;
+  optional int64 bytes_from_cdn = 2;
+  optional int64 cdn_total_latency = 3;
+  optional int64 cdn_initial_latency = 4;
+  optional string cdn_protocol = 5;
+  optional bool new_connection = 6;
+}
+
+message LocalFileSyncError {
+  optional string error = 1;
+}
+
+message LocalFilesError {
+  optional int64 error_code = 1;
+  optional string context = 2;
+  optional string info = 3;
+}
+
+message LocalFilesImport {
+  optional int64 tracks = 1;
+  optional int64 duplicate_tracks = 2;
+  optional int64 failed_tracks = 3;
+  optional int64 matched_tracks = 4;
+  optional string source = 5;
+  optional int64 invalid_tracks = 6;
+}
+
+message LocalFilesReport {
+  optional int64 total_tracks = 1;
+  optional int64 total_size = 2;
+  optional int64 owned_tracks = 3;
+  optional int64 owned_size = 4;
+  optional int64 tracks_not_found = 5;
+  optional int64 tracks_bad_format = 6;
+  optional int64 tracks_drm_protected = 7;
+  optional int64 tracks_unknown_pruned = 8;
+  optional int64 tracks_reallocated_repaired = 9;
+  optional int64 enabled_sources = 10;
+}
+
+message LocalFilesSourceEvent {
+  optional string id = 1;
+  optional string event = 2;
+}
+
+message LocalFilesSourceReport {
+  optional string id = 1;
+  optional int64 tracks = 2;
+}
+
+message Login5TaskNonAuth {
+  optional string credentials_type = 1;
+  optional string protocol_version = 2;
+  repeated int32 http_response = 3;
+  repeated string login5_response = 4;
+  repeated int64 response_duration = 5;
+  optional string client_error = 6;
+}
+
+message MdnsLoginFailures {
+  optional string device_id = 1;
+  optional int64 error_code = 2;
+  optional string response_body = 3;
+  optional string request = 4;
+  optional int64 esdk_internal_error_code = 5;
+  optional string context = 6;
+}
+
+message Offline2ClientError {
+  optional string error = 1;
+  optional string device_id = 2;
+  optional string cache_id = 3;
+}
+
+message Offline2ClientEvent {
+  optional string event = 1;
+  optional string device_id = 2;
+  optional string cache_id = 3;
+}
+
+message OfflineError {
+  optional int64 error_code = 1;
+  optional string track = 2;
+  optional string cache_id = 3;
+  optional string details = 4;
+}
+
+message OfflineEvent {
+  optional string event = 1;
+  optional string data = 2;
+  optional string cache_id = 3;
+}
+
+message OfflinePlayableCacheReport {
+  optional int64 num_tracks = 1;
+  optional int64 num_missing_files = 2;
+  optional int64 num_missing_keys = 3;
+  optional int64 num_missing_metadata = 4;
+  optional int64 num_expired = 5;
+  optional int64 num_missing_in_audio_index = 6;
+}
+
+message OfflineReport {
+  optional int64 total_num_tracks = 1;
+  optional int64 num_downloaded_tracks = 2;
+  optional int64 num_downloaded_tracks_keyless = 3;
+  optional int64 total_num_links = 4;
+  optional int64 total_num_links_keyless = 5;
+  map<string, int64> context_num_links_map = 6;
+  map<string, int64> linktype_num_tracks_map = 7;
+  optional int64 track_limit = 8;
+  optional int64 expiry = 9;
+  optional string change_reason = 10;
+  optional int64 offline_keys = 11;
+  optional int64 cached_keys = 12;
+  optional int64 total_num_episodes = 13;
+  optional int64 num_downloaded_episodes = 14;
+  optional int64 episode_limit = 15;
+  optional int64 episode_expiry = 16;
+  optional int64 abp_chapter_expiry = 17;
+  map<string, int64> schedule_stats_map = 18;
+  map<string, int64> update_stats_map = 19;
+  optional int64 num_update_all_lists = 20;
+}
+
+message PendingEventsDroppedEventNonAuth {
+  optional string operation = 1;
+  optional string error_type = 2;
+  optional string underlying_error = 3;
+  optional string event_type = 4;
+}
+
+message PendingEventsInternalErrorNonAuth {
+  optional string operation = 1;
+  optional string error_type = 2;
+  optional string underlying_error = 3;
+  optional string event_type = 4;
+  optional int64 event_sequence_no = 5;
+}
+
+message PendingEventsStatsNonAuth {
+  repeated string event_names = 1;
+  repeated int64 sequence_number_mins = 2;
+  repeated int64 sequence_number_nexts = 3;
+  repeated int64 storage_sizes = 4;
+  repeated int64 num_dropped_events = 5;
+}
+
+message PickAndShuffleCapStateRestore {
+  optional int64 cap_day = 1;
+  optional int64 cap_month = 2;
+  optional int64 stream_count = 3;
+  optional int64 time_cap = 4;
+  optional string cap_configuration_origin = 5;
+  optional bool dynamic_cap_enabled = 6;
+}
+
+message PickAndShuffleCapStateSave {
+  optional int64 cap_day = 1;
+  optional int64 cap_month = 2;
+  optional int64 stream_count = 3;
+  optional int64 time_cap = 4;
+  optional string cap_configuration_origin = 5;
+  optional bool dynamic_cap_enabled = 6;
+}
+
+message PlayedStateApplied {
+  optional string playback_id = 1;
+  optional string content_uri = 2;
+  optional int64 client_timestamp = 3;
+  optional int32 play_position = 4;
+}
+
+message PlayedStateSyncFailure {
+  optional int32 number_of_played_states = 1;
+  optional int32 http_status_code = 2;
+}
+
+message PlayedStatePersisted {
+  optional string item_uri = 1;
+  optional int32 play_position = 2;
+  optional string reason = 3;
+  optional string playback_id = 4;
+}
+
+message PlayerStateRestore {
+  optional string error = 1;
+  optional int64 size = 2;
+  optional string context_uri = 3;
+  optional string state = 4;
+  optional string state_restore_mode = 5;
+}
+
+message PlaylistSyncEvent {
+  optional string playlist_id = 1;
+  optional bool is_playlist = 2;
+  optional int64 timestamp_ms = 3;
+  optional int32 error_code = 4;
+  optional string event_description = 5;
+}
+
+message PodcastAdSegmentReceived {
+  optional string episode_uri = 1;
+  optional string playback_id = 2;
+  optional string slots = 3;
+  optional bool is_audio = 4;
+  optional string asset_id = 5;
+}
+
+message PodcastAdSegmentDifference {
+  optional string episode_uri = 1;
+  optional string lhs_segment = 2;
+  optional int64 lhs_start = 3;
+  optional int64 lhs_stop = 4;
+  optional string rhs_segment = 5;
+  optional int64 rhs_start = 6;
+  optional int64 rhs_stop = 7;
+}
+
+message PodcastSAILoopEvent {
+  optional string event = 1;
+  optional string current_track_uri = 2;
+  optional string episode_with_ads = 3;
+  optional string selected_segment = 4;
+  optional int32 start = 5;
+  optional int32 stop = 6;
+  repeated string effects = 7;
+  optional string playback_id = 8;
+  optional string app_startup_id = 9;
+  optional string request_id = 10;
+  optional string loop_id = 11;
+}
+
+message PrefetchError {
+  optional int64 strategy = 1;
+  optional string description = 2;
+}
+
+message PubSubCountPerIdent {
+  optional string ident_filter = 1;
+  optional int32 no_of_messages_received = 2;
+  optional int32 no_of_failed_conversions = 3;
+}
+
+message ReachabilityChanged {
+  optional string type = 1;
+  optional string info = 2;
+}
+
+message RejectedClientEventNonAuth {
+  optional string reject_reason = 1;
+  optional string event_name = 2;
+}
+
+message RemainingSkips {
+  optional string interaction_id = 1;
+  optional int32 remaining_skips_before_skip = 2;
+  optional int32 remaining_skips_after_skip = 3;
+  repeated string interaction_ids = 4;
+}
+
+message RequestAccounting {
+  optional string request = 1;
+  optional int64 downloaded = 2;
+  optional int64 uploaded = 3;
+  optional int64 num_requests = 4;
+  optional string connection = 5;
+  optional string source_identifier = 6;
+  optional string reason = 7;
+  optional int64 duration_ms = 8;
+}
+
+message RequestTime {
+  optional string type = 1;
+  optional int64 first_byte = 2;
+  optional int64 last_byte = 3;
+  optional int64 size = 4;
+  optional int64 size_sent = 5;
+  optional bool error = 6;
+  optional string url = 7;
+  optional string verb = 8;
+  optional int64 payload_size_sent = 9;
+  optional int32 connection_reuse = 10;
+  optional double sampling_probability = 11;
+  optional bool cached = 12;
+  optional int64 redirect_time = 13;
+  optional string connection_type = 14;
+}
+
+message TimeMeasurement {
+  optional string category = 1;
+  map<string, string> dimensions = 2;
+  map<string, int64> point_timestamps = 3;
+  map<string, int64> point_durations = 4;
+  map<string, string> point_feature_ids = 5;
+  optional string feature_id = 6;
+  optional string measurement_id = 7;
+  optional string parent_measurement_id = 8;
+  optional int64 parent_epoch_offset = 9;
+  map<string, string> metadata = 10;
+}
+
+message AudioFileSelection {
+  optional bytes playback_id = 1;
+  optional string strategy_name = 2;
+  optional int64 bitrate = 3;
+  optional bytes predict_id = 4;
+  optional string file_origin = 5;
+  optional int32 target_bitrate = 6;
+}
+
+message AudioRateLimit {
+  optional string driver_name = 1;
+  optional string output_device_name = 2;
+  optional string output_device_category = 3;
+  optional int64 max_size = 4;
+  optional int64 refill_per_milliseconds = 5;
+  optional int64 frames_requested = 6;
+  optional int64 frames_acquired = 7;
+  optional bytes playback_id = 8;
+}
+
+message AudioSessionEvent {
+  optional string event = 1;
+  optional string context = 2;
+  optional string json_data = 3;
+  optional bytes playback_id = 4;
+  optional string reason = 5;
+  optional string feature_identifier = 6;
+  optional int32 seek_position = 7;
+  optional bool paused = 8;
+  optional int64 speed = 9;
+  optional int32 fade_start_position = 10;
+}
+
+message AudioResolve {
+  optional bytes playback_id = 1;
+  optional int64 latency_ms = 2;
+  optional string entity_uri = 3;
+  optional bytes audio_id = 4;
+  optional bytes generated_audio_id = 5;
+}
+
+message BoomboxPlaybackInstrumentation {
+  optional bytes playback_id = 1;
+  optional bool was_playback_paused = 2;
+  repeated string dimensions = 3;
+  map<string, int64> total_buffer_size = 4;
+  map<string, int64> number_of_calls = 5;
+  map<string, int64> total_duration = 6;
+  map<string, int64> first_call_time = 7;
+  map<string, int64> last_call_time = 8;
+}
+
+message BoomboxPlaybackSession {
+  optional bytes playback_id = 1;
+  optional int64 ms_latency = 2;
+  optional int64 ui_latency = 3;
+  optional int64 ms_key_latency = 4;
+  optional int64 ms_rcv_latency = 5;
+  optional bool cached_key = 6;
+  optional int64 n_stutter = 7;
+  optional int64 n_seekback = 8;
+  optional int64 ms_seekback = 9;
+  optional int64 n_seekfwd = 10;
+  optional int64 ms_seekfwd = 11;
+  optional int64 ms_total_est = 12;
+  optional string audio_stream_type_at_start = 13;
+}
+
+message BrokenObject {
+  optional string type = 1;
+  optional string id = 2;
+  optional int64 error_code = 3;
+  optional bytes playback_id = 4;
+}
+
+message CacheError {
+  optional int64 error_code = 1;
+  optional int64 os_error_code = 2;
+  optional string realm = 3;
+  optional bytes file_id = 4;
+  optional int64 num_errors = 5;
+  optional string cache_path = 6;
+  optional int64 size = 7;
+  optional int64 range_start = 8;
+  optional int64 range_end = 9;
+}
+
+message CachePruningReport {
+  optional bytes cache_id = 1;
+  optional int64 time_spent_pruning_ms = 2;
+  optional int64 size_before_prune_kb = 3;
+  optional int64 size_after_prune_kb = 4;
+  optional int64 num_entries_pruned = 5;
+  optional int64 num_entries_pruned_expired = 6;
+  optional int64 size_entries_pruned_expired_kb = 7;
+  optional int64 num_entries_pruned_limit = 8;
+  optional int64 size_pruned_limit_kb = 9;
+  optional int64 num_entries_pruned_never_used = 10;
+  optional int64 size_pruned_never_used_kb = 11;
+  optional int64 num_entries_pruned_max_realm_size = 12;
+  optional int64 size_pruned_max_realm_size_kb = 13;
+  optional int64 num_entries_pruned_min_free_space = 14;
+  optional int64 size_pruned_min_free_space_kb = 15;
+}
+
+message CacheRealmPruningReport {
+  optional bytes cache_id = 1;
+  optional int64 realm_id = 2;
+  optional int64 num_entries_pruned = 3;
+  optional int64 num_entries_pruned_expired = 4;
+  optional int64 size_entries_pruned_expired_kb = 5;
+  optional int64 num_entries_pruned_limit = 6;
+  optional int64 size_pruned_limit_kb = 7;
+  optional int64 num_entries_pruned_never_used = 8;
+  optional int64 size_pruned_never_used_kb = 9;
+  optional int64 num_entries_pruned_max_realm_size = 10;
+  optional int64 size_pruned_max_realm_size_kb = 11;
+  optional int64 num_entries_pruned_min_free_space = 12;
+  optional int64 size_pruned_min_free_space_kb = 13;
+}
+
+message CacheRealmReport {
+  optional bytes cache_id = 1;
+  optional int64 realm_id = 2;
+  optional int64 num_entries = 3;
+  optional int64 num_locked_entries = 4;
+  optional int64 num_locked_entries_current_user = 5;
+  optional int64 num_full_entries = 6;
+  optional int64 size_kb = 7;
+  optional int64 locked_size_kb = 8;
+}
+
+message CacheReport {
+  optional bytes cache_id = 1;
+  optional string cache_path = 21;
+  optional string volatile_path = 22;
+  optional int64 max_cache_size = 2;
+  optional int64 free_space = 3;
+  optional int64 total_space = 4;
+  optional int64 volatile_free_space = 23;
+  optional int64 volatile_total_space = 24;
+  optional bool volatile_on_separate_volume = 25;
+  optional int64 cache_age = 5;
+  optional int64 num_users_with_locked_entries = 6;
+  optional int64 permanent_files = 7;
+  optional int64 permanent_size_kb = 8;
+  optional int64 unknown_permanent_files = 9;
+  optional int64 unknown_permanent_size_kb = 10;
+  optional int64 volatile_files = 11;
+  optional int64 volatile_size_kb = 12;
+  optional int64 unknown_volatile_files = 13;
+  optional int64 unknown_volatile_size_kb = 14;
+  optional int64 num_entries = 15;
+  optional int64 num_locked_entries = 16;
+  optional int64 num_locked_entries_current_user = 17;
+  optional int64 num_full_entries = 18;
+  optional int64 size_kb = 19;
+  optional int64 locked_size_kb = 20;
+  optional string reason = 26;
+  optional int64 missing_files = 27;
+  optional int64 missing_size_kb = 28;
+}
+
+message ConnectPullFailure {
+  optional bytes transfer_data = 1;
+  optional int64 error_code = 2;
+  map<string, string> reasons = 3;
+}
+
+message CorePlaybackFinished {
+  optional string session_id = 1;
+  optional bytes playback_id = 2;
+}
+
+message Download {
+  optional bytes file_id = 1;
+  optional bytes playback_id = 2;
+  optional int64 bytes_from_ap = 3;
+  optional int64 waste_from_ap = 4;
+  optional int64 reqs_from_ap = 5;
+  optional int64 error_from_ap = 6;
+  optional int64 bytes_from_cdn = 7;
+  optional int64 waste_from_cdn = 8;
+  optional int64 bytes_from_cache = 9;
+  optional int64 content_size = 10;
+  optional string content_type = 11;
+  optional int64 ap_initial_latency = 12;
+  optional int64 ap_max_latency = 13;
+  optional int64 ap_min_latency = 14;
+  optional double ap_avg_latency = 15;
+  optional int64 ap_median_latency = 16;
+  optional double ap_avg_bw = 17;
+  optional int64 cdn_initial_latency = 18;
+  optional int64 cdn_max_latency = 19;
+  optional int64 cdn_min_latency = 20;
+  optional double cdn_avg_latency = 21;
+  optional int64 cdn_median_latency = 22;
+  optional int64 cdn_64k_initial_latency = 23;
+  optional int64 cdn_64k_max_latency = 24;
+  optional int64 cdn_64k_min_latency = 25;
+  optional double cdn_64k_avg_latency = 26;
+  optional int64 cdn_64k_median_latency = 27;
+  optional double cdn_avg_bw = 28;
+  optional double cdn_initial_bw_estimate = 29;
+  optional string cdn_uri_scheme = 30;
+  optional string cdn_domain = 31;
+  optional string cdn_socket_reuse = 32;
+  optional string cdn_protocol = 46;
+  optional int64 num_cache_error = 33;
+  optional int64 bytes_from_carrier = 34;
+  optional int64 bytes_from_unknown = 35;
+  optional int64 bytes_from_wifi = 36;
+  optional int64 bytes_from_ethernet = 37;
+  optional string request_type = 38;
+  optional int64 total_time = 39;
+  optional int64 bitrate = 40;
+  optional int64 reqs_from_cdn = 41;
+  optional int64 error_from_cdn = 42;
+  optional string file_origin = 43;
+  optional string initial_disk_state = 44;
+  optional bool locked = 45;
+  optional int64 storage_resolve_latency = 47;
+  optional string original_cdn_domain = 48;
+}
+
+message DrmRequestFailure {
+  optional string reason = 1;
+  optional int64 error_code = 2;
+  optional bool fatal = 3;
+  optional bytes playback_id = 4;
+}
+
+message EndAd {
+  optional bytes file_id = 1;
+  optional bytes playback_id = 2;
+  optional bytes song_id = 3;
+  optional string source_start = 4;
+  optional string reason_start = 5;
+  optional string source_end = 6;
+  optional string reason_end = 7;
+  optional int64 bytes_played = 8;
+  optional int64 bytes_in_song = 9;
+  optional int64 ms_played = 10;
+  optional int64 ms_total_est = 11;
+  optional int64 ms_rcv_latency = 12;
+  optional int64 n_seekback = 13;
+  optional int64 ms_seekback = 14;
+  optional int64 n_seekfwd = 15;
+  optional int64 ms_seekfwd = 16;
+  optional int64 ms_latency = 17;
+  optional int64 n_stutter = 18;
+  optional int64 p_lowbuffer = 19;
+  optional bool skipped = 20;
+  optional bool ad_clicked = 21;
+  optional string token = 22;
+  optional int64 client_ad_count = 23;
+  optional int64 client_campaign_count = 24;
+}
+
+message EventSenderStats2NonAuth {
+  repeated bytes sequence_ids = 1;
+  repeated string event_names = 2;
+  repeated int32 loss_stats_num_entries_per_sequence_id = 3;
+  repeated int32 loss_stats_event_name_index = 4;
+  repeated int64 loss_stats_storage_sizes = 5;
+  repeated int64 loss_stats_sequence_number_mins = 6;
+  repeated int64 loss_stats_sequence_number_nexts = 7;
+  repeated int32 ratelimiter_stats_event_name_index = 8;
+  repeated int64 ratelimiter_stats_drop_count = 9;
+  repeated int32 drop_list_num_entries_per_sequence_id = 10;
+  repeated int32 drop_list_event_name_index = 11;
+  repeated int64 drop_list_counts_total = 12;
+  repeated int64 drop_list_counts_unreported = 13;
+  repeated int32 states_list_event_name_index = 15;
+  repeated int64 states_list_entered_counts_total = 16;
+  repeated int64 states_list_rejected_client_counts_total = 17;
+  repeated int64 states_list_dropped_counts_total = 18;
+  repeated int64 states_list_persisted_counts_total = 19;
+  repeated int64 states_list_rejected_backend_counts_total = 20;
+  repeated int64 states_list_delivered_counts_total = 21;
+  repeated int64 states_list_deleted_counts_total = 22;
+}
+
+message HeadFileDownload {
+  optional bytes file_id = 1;
+  optional bytes playback_id = 2;
+  optional string cdn_uri_scheme = 3;
+  optional string cdn_domain = 4;
+  optional int64 head_file_size = 5;
+  optional int64 bytes_downloaded = 6;
+  optional int64 bytes_wasted = 7;
+  optional int64 http_latency = 8;
+  optional int64 http_64k_latency = 9;
+  optional int64 total_time = 10;
+  optional int64 http_result = 11;
+  optional int64 error_code = 12;
+  optional int64 cached_bytes = 13;
+  optional int64 bytes_from_cache = 14;
+  optional string socket_reuse = 15;
+  optional string request_type = 16;
+  optional string initial_disk_state = 17;
+}
+
+message LegacyEndSong {
+  optional int64 sequence_number = 1;
+  optional string sequence_id = 2;
+  optional bytes playback_id = 3;
+  optional bytes parent_playback_id = 4;
+  optional string source_start = 5;
+  optional string reason_start = 6;
+  optional string source_end = 7;
+  optional string reason_end = 8;
+  optional int64 bytes_played = 9;
+  optional int64 bytes_in_song = 10;
+  optional int64 ms_played = 11;
+  optional int64 ms_nominal_played = 12;
+  optional int64 ms_total_est = 13;
+  optional int64 ms_rcv_latency = 14;
+  optional int64 ms_overlapping = 15;
+  optional int64 n_seekback = 16;
+  optional int64 ms_seekback = 17;
+  optional int64 n_seekfwd = 18;
+  optional int64 ms_seekfwd = 19;
+  optional int64 ms_latency = 20;
+  optional int64 ui_latency = 21;
+  optional string player_id = 22;
+  optional int64 ms_key_latency = 23;
+  optional bool offline_key = 24;
+  optional bool cached_key = 25;
+  optional int64 n_stutter = 26;
+  optional int64 p_lowbuffer = 27;
+  optional bool shuffle = 28;
+  optional int64 max_continous = 29;
+  optional int64 union_played = 30;
+  optional int64 artificial_delay = 31;
+  optional int64 bitrate = 32;
+  optional string play_context = 33;
+  optional string audiocodec = 34;
+  optional string play_track = 35;
+  optional string display_track = 36;
+  optional bool offline = 37;
+  optional int64 offline_timestamp = 38;
+  optional bool incognito_mode = 39;
+  optional string provider = 40;
+  optional string referer = 41;
+  optional string referrer_version = 42;
+  optional string referrer_vendor = 43;
+  optional string transition = 44;
+  optional string streaming_rule = 45;
+  optional string gaia_dev_id = 46;
+  optional string accepted_tc = 47;
+  optional string promotion_type = 48;
+  optional string page_instance_id = 49;
+  optional string interaction_id = 50;
+  optional string parent_play_track = 51;
+  optional int64 core_version = 52;
+  optional int64 ms_narration_overlapping = 53;
+  optional int64 ms_trimmed = 54;
+  optional int64 ms_nominal_trimmed = 55;
+}
+
+message MetadataExtensionClientStatistic {
+  optional bytes task_id = 1;
+  optional string feature_id = 2;
+  optional bool is_online_param = 3;
+  optional int32 num_extensions_with_etags = 4;
+  optional int32 num_extensions_requested = 5;
+  optional int32 num_extensions_needed = 6;
+  optional int32 num_uris_requested = 7;
+  optional int32 num_uris_needed = 8;
+  optional int32 num_prepared_requests = 9;
+  optional int32 num_sent_requests = 10;
+}
+
+message PlaybackError {
+  optional bytes file_id = 1;
+  optional bytes playback_id = 2;
+  optional string track_id = 3;
+  optional int64 bitrate = 4;
+  optional int64 error_code = 5;
+  optional bool fatal = 6;
+  optional string audiocodec = 7;
+  optional bool external_track = 8;
+  optional int64 position_ms = 9;
+  optional int64 key_checksum = 10;
+}
+
+message PlaybackRetry {
+  optional string track = 1;
+  optional bytes playback_id = 2;
+  optional string method = 3;
+  optional string status = 4;
+  optional string reason = 5;
+  optional string prev_etag = 6;
+  optional int64 prev_expiry = 7;
+  optional string etag = 8;
+  optional int64 expiry = 9;
+}
+
+message PlaybackSegments {
+  optional bytes playback_id = 1;
+  optional string track_uri = 2;
+  optional bool overflow = 3;
+  optional string segments = 4;
+}
+
+message Prefetch {
+  optional int64 strategies = 1;
+  optional int64 strategy = 2;
+  optional bytes file_id = 3;
+  optional string track = 4;
+  optional int64 prefetch_index = 5;
+  optional int64 current_window_size = 6;
+  optional int64 max_window_size = 7;
+}
+
+message PrototypeStreamSegment {
+  optional bytes playback_id = 1;
+  optional int64 start_position = 2;
+  optional int64 end_position = 3;
+  optional int32 ms_played = 4;
+  optional string reason_start = 5;
+  optional string reason_end = 6;
+  optional double playback_speed = 7;
+  optional int64 start_timestamp = 8;
+  optional int64 end_timestamp = 9;
+  optional bool is_seek = 10;
+  optional bool is_pause = 11;
+  optional int64 sequence_id = 12;
+  optional string media_type = 13;
+  optional int64 core_version = 14;
+  optional string content_uri = 15;
+  optional int64 start_monotonic_timestamp = 16;
+  optional int64 end_monotonic_timestamp = 17;
+  optional bool is_last = 18;
+  optional string provider = 19;
+  optional string playback_stack = 20;
+  optional string feature_uuid = 21;
+}
+
+message RawCoreStream {
+  optional bytes playback_id = 1;
+  optional bytes parent_playback_id = 2;
+  optional string video_session_id = 3;
+  optional bytes media_id = 4;
+  optional string media_type = 5;
+  optional string feature_identifier = 6;
+  optional string feature_version = 7;
+  optional string view_uri = 8;
+  optional string source_start = 9;
+  optional string reason_start = 10;
+  optional string source_end = 11;
+  optional string reason_end = 12;
+  optional int64 playback_start_time = 13;
+  optional int32 ms_played = 14;
+  optional int32 ms_played_nominal = 15;
+  optional int32 ms_played_overlapping = 16;
+  optional int32 ms_played_video = 17;
+  optional int32 ms_played_background = 18;
+  optional int32 ms_played_fullscreen = 19;
+  optional bool live = 20;
+  optional bool shuffle = 21;
+  optional string audio_format = 22;
+  optional string play_context = 23;
+  optional string content_uri = 24;
+  optional string displayed_content_uri = 25;
+  optional bool content_is_downloaded = 26;
+  optional bool incognito_mode = 27;
+  optional string provider = 28;
+  optional string referrer = 29;
+  optional string referrer_version = 30;
+  optional string referrer_vendor = 31;
+  optional string streaming_rule = 32;
+  optional string connect_controller_device_id = 33;
+  optional string connect_controller_device_id_v2 = 44;
+  optional string page_instance_id = 34;
+  optional string interaction_id = 35;
+  optional string parent_content_uri = 36;
+  optional int64 core_version = 37;
+  optional string core_bundle = 38;
+  optional bool is_assumed_premium = 39;
+  optional int32 ms_played_external = 40;
+  optional string local_content_uri = 41;
+  optional bool client_offline_at_stream_start = 42;
+  optional bool social_listening = 43;
+  optional string playback_stack = 45;
+  optional int32 ms_narration_overlapping = 46;
+  optional string custom_reporting_attribution = 47;
+  optional string decision_id = 48;
+  optional string play_context_decision_id = 49;
+  optional int32 ms_trimmed = 50;
+  optional int32 ms_nominal_trimmed = 51;
+  optional string feature_uuid = 52;
+  optional bytes stream_id = 53;
+}
+
+message RawCoreStreamStart {
+  optional bytes playback_id = 1;
+  optional string content_uri = 2;
+  optional string media_type = 3;
+  optional string reason_start = 4;
+  optional int64 core_version = 5;
+}
+
+message RawCoreStreamSegment {
+  optional bytes playback_id = 1;
+  optional int64 start_position = 2;
+  optional int64 end_position = 3;
+  optional int32 ms_played = 4;
+  optional string reason_start = 5;
+  optional string reason_end = 6;
+  optional double playback_speed = 7;
+  optional int64 start_timestamp = 8;
+  optional int64 end_timestamp = 9;
+  optional bool is_seek = 10;
+  optional bool is_pause = 11;
+  optional int64 sequence_id = 12;
+  optional string media_type = 13;
+  optional int64 core_version = 14;
+  optional string content_uri = 15;
+  optional int64 start_monotonic_timestamp = 16;
+  optional int64 end_monotonic_timestamp = 17;
+  optional bool is_last = 18;
+  optional string provider = 19;
+  optional string playback_stack = 20;
+  optional string feature_uuid = 21;
+  optional bytes stream_id = 22;
+  optional string page_instance_id = 23;
+  optional string interaction_id = 24;
+  optional string play_context = 25;
+  optional int64 start_timestamp_internal = 26;
+  optional int64 end_timestamp_internal = 27;
+  optional int64 sequence_id_internal = 28;
+  optional bool is_audio_on = 29;
+  optional bool is_video_on = 30;
+  optional string video_surface = 31;
+  optional bool is_system_seek = 32;
+}
+
+message ShowRequestDebug {
+  optional int32 num_replies_is_online_false = 1;
+  optional int32 num_replies_is_online_true = 2;
+  optional bytes last_reply_episode_id_0 = 3;
+  optional bytes last_reply_episode_id_1 = 4;
+  optional bytes last_reply_episode_id_2 = 5;
+  optional int32 num_load_show_ok_is_online_false = 6;
+  optional int32 num_load_show_ok_is_online_true = 7;
+  optional int32 num_load_show_fail_is_online_false = 8;
+  optional int32 num_load_show_fail_is_online_true = 9;
+  optional bytes last_load_show_v4_episode_id_0 = 10;
+  optional int32 last_load_show_v4_episode_0_cache_availability = 11;
+  optional bytes last_load_show_v4_episode_id_1 = 12;
+  optional int32 last_load_show_v4_episode_1_cache_availability = 13;
+  optional bytes last_load_show_v4_episode_id_2 = 14;
+  optional int32 last_load_show_v4_episode_2_cache_availability = 15;
+  optional string last_load_show_v4_etag = 16;
+  optional int32 last_load_error = 17;
+  optional bool is_online = 18;
+  optional int32 optimization_level = 19;
+  optional int32 env_now = 20;
+  optional string show_uri = 21;
+  optional int32 last_load_show_v4_stored_at_timestamp = 22;
+  repeated string last_load_show_v4_episode_uris = 23;
+  repeated int32 last_load_show_v4_episode_cache_availabilities = 24;
+  repeated int32 last_load_show_v4_episode_cache_expiry_timestamps = 25;
+  repeated int32 last_load_show_v4_episode_offline_expiry_timestamps = 26;
+  repeated string last_load_show_v4_episode_etags = 27;
+  repeated int32 last_load_show_v4_episode_status_codes = 28;
+  repeated int32 last_load_show_v4_episode_stored_at_timestamps = 29;
+}
+
+message StreamReportingError {
+  optional bytes playback_id = 1;
+  optional string error_type = 2;
+  optional string error_reason = 3;
+}
+
+message StreamReportingSegmentsDebug {
+  optional bytes playback_id = 1;
+  repeated string segments = 2;
+  repeated int64 start = 3;
+  repeated int64 end = 4;
+  repeated bool video = 5;
+  repeated bool overlapping = 6;
+  repeated bool background = 7;
+  repeated bool fullscreen = 8;
+  repeated bool external = 9;
+  repeated float playback_speed = 10;
+  optional int64 app_session_timestamp = 11;
+  repeated bool narration = 12;
+}
+
+message StreamReportingDebugTracerTest {
+  optional int64 event_schema_version = 1;
+  optional int64 message_version = 2;
+  optional bytes playback_id = 3;
+  optional int64 core_version = 4;
+  repeated int32 sequence = 5;
+  optional string reason_send = 6;
+  optional int64 send_iteration = 7;
+  optional int64 total_send = 8;
+  repeated int32 stream_handle = 9;
+  repeated int64 stream_data_holder_size = 10;
+  repeated int64 timestamp = 11;
+  optional int64 initial_timestamp = 12;
+  optional int64 core_version_tiny = 13;
+  optional string configuration = 14;
+}
+
+message Stutter {
+  optional bytes file_id = 1;
+  optional bytes playback_id = 2;
+  optional string track = 3;
+  optional int64 buffer_size = 4;
+  optional int64 max_buffer_size = 5;
+  optional int64 file_byte_offset = 6;
+  optional int64 file_byte_total = 7;
+  optional int64 target_buffer = 8;
+  optional string audio_driver = 9;
+}
+
+message TimeStretcherInstrumentation {
+  optional bytes playback_id = 1;
+  optional bool was_playback_paused = 2;
+  optional int64 total_buffer_size = 3;
+  optional int64 number_of_calls = 4;
+  optional int64 total_duration = 5;
+  optional float duration_per_byte = 6;
+}
+
+message TrackNotPlayed {
+  optional bytes playback_id = 1;
+  optional string source_start = 2;
+  optional string reason_start = 3;
+  optional string source_end = 4;
+  optional string reason_end = 5;
+  optional string play_context = 6;
+  optional string play_track = 7;
+  optional string display_track = 8;
+  optional string provider = 9;
+  optional string referer = 10;
+  optional string referrer_version = 11;
+  optional string referrer_vendor = 12;
+  optional string gaia_dev_id = 13;
+  optional string reason_not_played = 14;
+}
+
+message TrackStuck {
+  optional string track = 1;
+  optional bytes playback_id = 2;
+  optional string source_start = 3;
+  optional string reason_start = 4;
+  optional bool offline = 5;
+  optional int64 position = 6;
+  optional int64 count = 7;
+  optional string audio_driver = 8;
+}
+
+message UctStreamedDecision {
+  optional string decision_id = 1;
+  optional bytes playback_id = 2;
+  optional string play_context_decision_id = 3;
+}
