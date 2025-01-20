@@ -38,6 +38,7 @@ type alsaOutput struct {
 	periodCount int
 	periodSize  int
 	bufferSize  int
+	pcmFormat   C.snd_pcm_format_t
 
 	externalVolume bool
 
@@ -100,6 +101,15 @@ func (out *alsaOutput) alsaError(name string, err C.int) error {
 	return fmt.Errorf("ALSA error at %s: %s", name, C.GoString(C.snd_strerror(err)))
 }
 
+func (out *alsaOutput) isFormatSupported(hwparams *C.snd_pcm_hw_params_t, format C.snd_pcm_format_t) bool {
+	errCode := C.snd_pcm_hw_params_test_format(out.pcmHandle, hwparams, format)
+	if errCode < 0 {
+		return false
+	}
+
+	return true
+}
+
 func (out *alsaOutput) setupPcm() error {
 	cdevice := C.CString(out.device)
 	defer C.free(unsafe.Pointer(cdevice))
@@ -119,8 +129,24 @@ func (out *alsaOutput) setupPcm() error {
 		return out.alsaError("snd_pcm_hw_params_set_access", err)
 	}
 
-	if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, hwparams, C.SND_PCM_FORMAT_FLOAT_LE); err < 0 {
-		return out.alsaError("snd_pcm_hw_params_set_format", err)
+	var formatFound bool
+	for _, format := range []C.snd_pcm_format_t{
+		C.SND_PCM_FORMAT_FLOAT_LE, // 32-bit floating point, little-endian
+		C.SND_PCM_FORMAT_S32_LE,   // 32-bit signed integer, little-endian
+		C.SND_PCM_FORMAT_S16_LE,   // 16-bit signed integer, little-endian
+	} {
+		if !out.isFormatSupported(hwparams, format) {
+			continue
+		}
+
+		if err := C.snd_pcm_hw_params_set_format(out.pcmHandle, hwparams, format); err < 0 {
+			return out.alsaError("snd_pcm_hw_params_set_format", err)
+		}
+		formatFound = true
+	}
+
+	if !formatFound {
+		return fmt.Errorf("could not find a supported PCM format")
 	}
 
 	if err := C.snd_pcm_hw_params_set_channels(out.pcmHandle, hwparams, C.unsigned(out.channels)); err < 0 {
@@ -173,6 +199,13 @@ func (out *alsaOutput) setupPcm() error {
 		out.bufferSize = int(frames)
 	}
 
+	var pcmFormat C.snd_pcm_format_t
+	if err := C.snd_pcm_hw_params_get_format(hwparams, &pcmFormat); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_format", err)
+	} else {
+		out.pcmFormat = pcmFormat
+	}
+
 	var swparams *C.snd_pcm_sw_params_t
 	C.snd_pcm_sw_params_malloc(&swparams)
 	defer C.free(unsafe.Pointer(swparams))
@@ -200,6 +233,45 @@ func (out *alsaOutput) setupPcm() error {
 	go out.outputLoop(pcmHandle)
 
 	return nil
+}
+
+func pcmFormatName(format C.snd_pcm_format_t) string {
+	switch format {
+	case C.SND_PCM_FORMAT_S8:
+		return "S8"
+	case C.SND_PCM_FORMAT_U8:
+		return "U8"
+	case C.SND_PCM_FORMAT_S16_LE:
+		return "S16_LE"
+	case C.SND_PCM_FORMAT_S16_BE:
+		return "S16_BE"
+	case C.SND_PCM_FORMAT_U16_LE:
+		return "U16_LE"
+	case C.SND_PCM_FORMAT_U16_BE:
+		return "U16_BE"
+	case C.SND_PCM_FORMAT_S24_LE:
+		return "S24_LE"
+	case C.SND_PCM_FORMAT_S24_BE:
+		return "S24_BE"
+	case C.SND_PCM_FORMAT_U24_LE:
+		return "U24_LE"
+	case C.SND_PCM_FORMAT_U24_BE:
+		return "U24_BE"
+	case C.SND_PCM_FORMAT_S32_LE:
+		return "S32_LE"
+	case C.SND_PCM_FORMAT_S32_BE:
+		return "S32_BE"
+	case C.SND_PCM_FORMAT_U32_LE:
+		return "U32_LE"
+	case C.SND_PCM_FORMAT_U32_BE:
+		return "U32_BE"
+	case C.SND_PCM_FORMAT_FLOAT_LE:
+		return "FLOAT_LE"
+	case C.SND_PCM_FORMAT_FLOAT_BE:
+		return "FLOAT_BE"
+	default:
+		return "unknown"
+	}
 }
 
 func (out *alsaOutput) logParams(params *C.snd_pcm_hw_params_t) error {
@@ -235,10 +307,49 @@ func (out *alsaOutput) logParams(params *C.snd_pcm_hw_params_t) error {
 		return out.alsaError("snd_pcm_hw_params_get_periods", err)
 	}
 
-	out.log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames",
-		rate, periodTime, frames, bufferTime, bufferSize, periods)
+	var format C.snd_pcm_format_t
+	if err := C.snd_pcm_hw_params_get_format(params, &format); err < 0 {
+		return out.alsaError("snd_pcm_hw_params_get_format", err)
+	}
+
+	out.log.Debugf("alsa driver configured, rate = %d bps, period time = %d us, period size = %d frames, buffer time = %d us, buffer size = %d frames, periods per buffer = %d frames, PCM format = %s",
+		rate, periodTime, frames, bufferTime, bufferSize, periods, pcmFormatName(format))
 
 	return nil
+}
+
+func floatLeToS16Le(floats []float32) []C.int16_t {
+	shorts := make([]C.int16_t, len(floats))
+	for i, f := range floats {
+		// Clip the float to the range [-1.0, 1.0]
+		if f < -1.0 {
+			f = -1.0
+		}
+		if f > 1.0 {
+			f = 1.0
+		}
+
+		// Convert to int16 (short) in the range [-32768, 32767]
+		shorts[i] = C.int16_t(f * 32767)
+	}
+	return shorts
+}
+
+func floatLeToS32Le(floats []float32) []C.int32_t {
+	ints := make([]C.int32_t, len(floats))
+	for i, f := range floats {
+		// Clip the float to the range [-1.0, 1.0]
+		if f < -1.0 {
+			f = -1.0
+		}
+		if f > 1.0 {
+			f = 1.0
+		}
+
+		// Convert to int32 in the range [-2147483648, 2147483647]
+		ints[i] = C.int32_t(f * 2147483647)
+	}
+	return ints
 }
 
 func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
@@ -296,7 +407,24 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 		// be very fast. It might be delayed a bit however if the sleep above
 		// didn't sleep long enough to wait for room in the buffer.
 		if n > 0 {
-			if nn := C.snd_pcm_writei(pcmHandle, unsafe.Pointer(&floats[0]), C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
+			var data unsafe.Pointer
+			switch out.pcmFormat {
+			case C.SND_PCM_FORMAT_FLOAT_LE:
+				data = unsafe.Pointer(&floats[0])
+			case C.SND_PCM_FORMAT_S32_LE:
+				ints := floatLeToS32Le(floats)
+				data = unsafe.Pointer(&ints[0])
+			case C.SND_PCM_FORMAT_S16_LE:
+				shorts := floatLeToS16Le(floats)
+				data = unsafe.Pointer(&shorts[0])
+			default:
+				out.err <- fmt.Errorf("unsupported PCM format: %s", pcmFormatName(out.pcmFormat))
+				out.closed = true
+				out.lock.Unlock()
+				return
+			}
+
+			if nn := C.snd_pcm_writei(pcmHandle, data, C.snd_pcm_uframes_t(n/out.channels)); nn < 0 {
 				// Got an error, so must recover (even for an underrun).
 				errCode := C.snd_pcm_recover(pcmHandle, C.int(nn), 1)
 				if errCode < 0 {
