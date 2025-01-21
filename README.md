@@ -79,6 +79,8 @@ credentials:
 If `persist_credentials` is `true`, after connecting to the device for the first time credentials will be stored locally
 and you can switch to interactive mode without having to authenticate manually.
 
+If `zeroconf_interfaces_to_advertise` is provided, you can limit interfaces that will be advertised. For example if on you host you have docker installed, you may want do disable to advirtize it bridge interface, or you may want do disable interfaces that will be not reachible. 
+
 ### Interactive mode
 
 This mode allows you to associate your account with the device and make it discoverable even outside the network. It
