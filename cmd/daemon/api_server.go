@@ -22,7 +22,12 @@ import (
 
 const timeout = 10 * time.Second
 
-type ApiServer struct {
+type ApiServer interface {
+	Emit(ev *ApiEvent)
+	Receive() <-chan ApiRequest
+}
+
+type ConcreteApiServer struct {
 	log librespot.Logger
 
 	allowOrigin string
@@ -270,8 +275,8 @@ type ApiEventDataShuffleContext struct {
 	Value bool `json:"value"`
 }
 
-func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string) (_ *ApiServer, err error) {
-	s := &ApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
+func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string) (_ ApiServer, err error) {
+	s := &ConcreteApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
 	s.requests = make(chan ApiRequest)
 
 	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
@@ -285,13 +290,23 @@ func NewApiServer(log librespot.Logger, address string, port int, allowOrigin st
 	return s, nil
 }
 
-func NewStubApiServer() (*ApiServer, error) {
-	s := &ApiServer{}
-	s.requests = make(chan ApiRequest)
-	return s, nil
+type StubApiServer struct {
+	log librespot.Logger
 }
 
-func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
+func NewStubApiServer(log librespot.Logger) (ApiServer, error) {
+	return &StubApiServer{log: log}, nil
+}
+
+func (s *StubApiServer) Emit(ev *ApiEvent) {
+	s.log.Tracef("voiding websocket event: %s", ev.Type)
+}
+
+func (s *StubApiServer) Receive() <-chan ApiRequest {
+	return make(<-chan ApiRequest)
+}
+
+func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	req.resp = make(chan apiResponse, 1)
 	s.requests <- req
 	resp := <-req.resp
@@ -333,7 +348,7 @@ func (s *ApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	}
 }
 
-func (s *ApiServer) serve() {
+func (s *ConcreteApiServer) serve() {
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -603,7 +618,7 @@ func (s *ApiServer) serve() {
 	}
 }
 
-func (s *ApiServer) Emit(ev *ApiEvent) {
+func (s *ConcreteApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
 	defer s.clientsLock.RUnlock()
 
@@ -620,11 +635,11 @@ func (s *ApiServer) Emit(ev *ApiEvent) {
 	}
 }
 
-func (s *ApiServer) Receive() <-chan ApiRequest {
+func (s *ConcreteApiServer) Receive() <-chan ApiRequest {
 	return s.requests
 }
 
-func (s *ApiServer) Close() {
+func (s *ConcreteApiServer) Close() {
 	s.close = true
 
 	// close all websocket clients
