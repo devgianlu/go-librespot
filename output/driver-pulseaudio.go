@@ -51,7 +51,23 @@ func newPulseAudioOutput(opts *NewOutputOptions) (*pulseAudioOutput, error) {
 		return nil, fmt.Errorf("cannot play %d channels, pulse only supports mono and stereo", opts.ChannelCount)
 	}
 	volumeUpdates := make(chan proto.ChannelVolumes, 1)
-	out.stream, err = out.client.NewPlayback(pulse.Float32Reader(out.float32Reader), pulse.PlaybackSampleRate(out.sampleRate), channelOpt, pulse.PlaybackVolumeChanges(volumeUpdates))
+	lplaybackopts := []pulse.PlaybackOption{
+		pulse.PlaybackSampleRate(out.sampleRate),
+		pulse.PlaybackVolumeChanges(volumeUpdates),
+		channelOpt,
+	}
+
+	if opts.Device != "" {
+		lsink, err := client.SinkByID(opts.Device)
+		if err != nil {
+			client.Close()
+			return nil, fmt.Errorf("cannot find pulseaudio sink %s: %w", opts.Device, err)
+		}
+
+		lplaybackopts = append(lplaybackopts, pulse.PlaybackSink(lsink))
+	}
+
+	out.stream, err = out.client.NewPlayback(pulse.Float32Reader(out.float32Reader), lplaybackopts...)
 	if err != nil {
 		return nil, err
 	}
