@@ -50,7 +50,7 @@ type App struct {
 	state       *AppState
 	stateLock   sync.Mutex
 
-	server   *ApiServer
+	server   ApiServer
 	logoutCh chan *AppPlayer
 }
 
@@ -600,7 +600,7 @@ func main() {
 			log.WithError(err).Fatal("failed creating api server")
 		}
 	} else {
-		app.server, _ = NewStubApiServer()
+		app.server, _ = NewStubApiServer(app.log)
 	}
 
 	ctx := context.TODO()

@@ -138,6 +138,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		countryCode:          opts.CountryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
+				Log:              opts.Log,
 				Backend:          opts.AudioBackend,
 				Reader:           reader,
 				SampleRate:       SampleRate,
