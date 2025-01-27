@@ -155,6 +155,11 @@
           "description": "The port to use for the Zeroconf service (empty for random)",
           "default": 0
         },
+        "zeroconf_interfaces_to_advertise": {
+          "type": "array",
+          "description": "List of network interfaces that will be advertised throw zeroconf (empty to advertize all present interfaces)",
+          "default": []
+        },
         "credentials": {
           "type": "object",
           "properties": {
