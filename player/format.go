@@ -4,7 +4,7 @@ import (
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 )
 
-func formatBitrate(format metadatapb.AudioFile_Format) int {
+func GetFormatBitrate(format metadatapb.AudioFile_Format) int {
 	switch format {
 	case metadatapb.AudioFile_OGG_VORBIS_96:
 		return 96
@@ -30,7 +30,7 @@ func selectBestMediaFormat(files []*metadatapb.AudioFile, preferredBitrate int) 
 	var best *metadatapb.AudioFile
 	var bestDist int
 	for _, ff := range files {
-		bitrate := formatBitrate(*ff.Format)
+		bitrate := GetFormatBitrate(*ff.Format)
 		dist := absDist(bitrate, preferredBitrate)
 		if best == nil || dist < bestDist {
 			best = ff
