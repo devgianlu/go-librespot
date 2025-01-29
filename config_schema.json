@@ -157,7 +157,7 @@
         },
         "zeroconf_interfaces_to_advertise": {
           "type": "array",
-          "description": "List of network interfaces that will be advertised throw zeroconf (empty to advertize all present interfaces)",
+          "description": "List of network interfaces that will be advertised through zeroconf (empty to advertise all present interfaces)",
           "default": []
         },
         "credentials": {
