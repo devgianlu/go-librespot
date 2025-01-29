@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
 	"math"
 	"net/http"
 	"os"
@@ -14,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	librespot "github.com/devgianlu/go-librespot"
 
 	"github.com/devgianlu/go-librespot/apresolve"
 	"github.com/devgianlu/go-librespot/player"
@@ -234,7 +235,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType)
+	z, err := zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType, app.cfg.ZeroconfInterfacesToAdvertise)
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
@@ -361,29 +362,30 @@ type Config struct {
 	// finalizer will run, probably closing the lock.
 	configLock *flock.Flock
 
-	LogLevel              log.Level `koanf:"log_level"`
-	DeviceId              string    `koanf:"device_id"`
-	DeviceName            string    `koanf:"device_name"`
-	DeviceType            string    `koanf:"device_type"`
-	ClientToken           string    `koanf:"client_token"`
-	AudioBackend          string    `koanf:"audio_backend"`
-	AudioDevice           string    `koanf:"audio_device"`
-	MixerDevice           string    `koanf:"mixer_device"`
-	MixerControlName      string    `koanf:"mixer_control_name"`
-	AudioBufferTime       int       `koanf:"audio_buffer_time"`
-	AudioPeriodCount      int       `koanf:"audio_period_count"`
-	AudioOutputPipe       string    `koanf:"audio_output_pipe"`
-	AudioOutputPipeFormat string    `koanf:"audio_output_pipe_format"`
-	Bitrate               int       `koanf:"bitrate"`
-	VolumeSteps           uint32    `koanf:"volume_steps"`
-	InitialVolume         uint32    `koanf:"initial_volume"`
-	NormalisationDisabled bool      `koanf:"normalisation_disabled"`
-	NormalisationPregain  float32   `koanf:"normalisation_pregain"`
-	ExternalVolume        bool      `koanf:"external_volume"`
-	ZeroconfEnabled       bool      `koanf:"zeroconf_enabled"`
-	ZeroconfPort          int       `koanf:"zeroconf_port"`
-	DisableAutoplay       bool      `koanf:"disable_autoplay"`
-	Server                struct {
+	LogLevel                      log.Level `koanf:"log_level"`
+	DeviceId                      string    `koanf:"device_id"`
+	DeviceName                    string    `koanf:"device_name"`
+	DeviceType                    string    `koanf:"device_type"`
+	ClientToken                   string    `koanf:"client_token"`
+	AudioBackend                  string    `koanf:"audio_backend"`
+	AudioDevice                   string    `koanf:"audio_device"`
+	MixerDevice                   string    `koanf:"mixer_device"`
+	MixerControlName              string    `koanf:"mixer_control_name"`
+	AudioBufferTime               int       `koanf:"audio_buffer_time"`
+	AudioPeriodCount              int       `koanf:"audio_period_count"`
+	AudioOutputPipe               string    `koanf:"audio_output_pipe"`
+	AudioOutputPipeFormat         string    `koanf:"audio_output_pipe_format"`
+	Bitrate                       int       `koanf:"bitrate"`
+	VolumeSteps                   uint32    `koanf:"volume_steps"`
+	InitialVolume                 uint32    `koanf:"initial_volume"`
+	NormalisationDisabled         bool      `koanf:"normalisation_disabled"`
+	NormalisationPregain          float32   `koanf:"normalisation_pregain"`
+	ExternalVolume                bool      `koanf:"external_volume"`
+	ZeroconfEnabled               bool      `koanf:"zeroconf_enabled"`
+	ZeroconfPort                  int       `koanf:"zeroconf_port"`
+	DisableAutoplay               bool      `koanf:"disable_autoplay"`
+	ZeroconfInterfacesToAdvertise []string  `koanf:"zeroconf_interfaces_to_advertise"`
+	Server                        struct {
 		Enabled     bool   `koanf:"enabled"`
 		Address     string `koanf:"address"`
 		Port        int    `koanf:"port"`
