@@ -189,6 +189,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 
 		// current session
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
+		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
 		p.state.player.ContextUri = transferState.CurrentSession.Context.Uri
 		p.state.player.ContextUrl = transferState.CurrentSession.Context.Url
 		p.state.player.ContextRestrictions = transferState.CurrentSession.Context.Restrictions

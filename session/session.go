@@ -202,7 +202,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	s.audioKey = audio.NewAudioKeyProvider(opts.Log, s.ap)
 
 	// init event sender
-	s.events, err = events.Plugin.NewEventManager(opts.Log, opts.AppState, s.sp, s.ap.Username())
+	s.events, err = events.Plugin.NewEventManager(opts.Log, opts.AppState, s.hg, s.sp, s.ap.Username())
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing event sender: %w", err)
 	}
