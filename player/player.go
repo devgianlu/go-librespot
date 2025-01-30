@@ -416,6 +416,8 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	playbackId := make([]byte, 16)
 	_, _ = rand.Read(playbackId)
 
+	p.events.PreStreamLoadNew(playbackId, spotId, mediaPosition)
+
 	var media *librespot.Media
 	var file *metadata.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
@@ -464,12 +466,16 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		return nil, fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
 
+	p.events.PostStreamResolveAudioFile(playbackId, int32(bitrate), media, file)
+
 	log.Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
 
 	audioKey, err := p.audioKey.Request(ctx, spotId.Id(), file.FileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed retrieving audio key: %w", err)
 	}
+
+	p.events.PostStreamRequestAudioKey(playbackId)
 
 	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, false)
 	if err != nil {
@@ -492,10 +498,14 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		return nil, fmt.Errorf("unknown storage resolve result: %s", storageResolve.Result)
 	}
 
+	p.events.PostStreamResolveStorage(playbackId)
+
 	rawStream, err := audio.NewHttpChunkedReader(log.WithField("uri", spotId.String()), client, trackUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing chunked reader: %w", err)
 	}
+
+	p.events.PostStreamInitHttpChunkReader(playbackId, rawStream)
 
 	decryptedStream, err := audio.NewAesAudioDecryptor(rawStream, audioKey)
 	if err != nil {

@@ -84,6 +84,15 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.player.IsBuffering = false
 		p.updateState(ctx)
 
+		p.sess.Events().OnPlayerPlay(
+			p.primaryStream,
+			p.state.player.ContextUri,
+			p.state.player.Options.ShufflingContext,
+			p.state.player.PlayOrigin,
+			p.state.tracks.CurrentTrack(),
+			p.state.trackPosition(),
+		)
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
@@ -97,6 +106,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.setPaused(false)
 		p.state.player.IsBuffering = false
 		p.updateState(ctx)
+
+		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -112,6 +123,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.player.IsBuffering = false
 		p.updateState(ctx)
 
+		p.sess.Events().OnPlayerPause(p.primaryStream, p.state.trackPosition())
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
 			Data: ApiEventDataPaused{
@@ -120,6 +133,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			},
 		})
 	case player.EventTypeNotPlaying:
+		p.sess.Events().OnPlayerEnd(p.primaryStream, p.state.trackPosition())
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
@@ -220,7 +235,11 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 }
 
 func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) error {
-	p.primaryStream = nil
+	if p.primaryStream != nil {
+		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream)
+
+		p.primaryStream = nil
+	}
 
 	spotId, err := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
 	if err != nil {
@@ -267,6 +286,8 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	if err := p.player.SetPrimaryStream(p.primaryStream.Source, paused, drop); err != nil {
 		return fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
+
+	p.sess.Events().PostPrimaryStreamLoad(p.primaryStream, paused)
 
 	p.app.log.WithField("uri", spotId.Uri()).
 		Infof("loaded %s %s (paused: %t, position: %dms, duration: %dms, prefetched: %t)", spotId.Type(),
@@ -430,6 +451,7 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 		return fmt.Errorf("no primary stream")
 	}
 
+	oldPosition := p.player.PositionMs()
 	position = max(0, min(position, int64(p.primaryStream.Media.Duration())))
 
 	p.app.log.Debugf("seek track to %dms", position)
@@ -441,6 +463,8 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 	p.state.player.PositionAsOfTimestamp = position
 	p.updateState(ctx)
 	p.schedulePrefetchNext()
+
+	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
@@ -459,6 +483,8 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 	if allowSeeking && p.player.PositionMs() > 3000 {
 		return p.seek(ctx, 0)
 	}
+
+	p.sess.Events().OnPlayerSkipBackward(p.primaryStream, p.player.PositionMs())
 
 	if p.state.tracks != nil {
 		p.app.log.Debug("skip previous track")
@@ -482,6 +508,8 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 }
 
 func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack) error {
+	p.sess.Events().OnPlayerSkipForward(p.primaryStream, p.player.PositionMs())
+
 	if track != nil {
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
 		if err := p.state.tracks.TrySeek(ctx, tracks.ContextTrackComparator(contextSpotType, track)); err != nil {
