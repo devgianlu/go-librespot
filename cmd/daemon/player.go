@@ -636,6 +636,4 @@ loop:
 			p.volumeUpdated(runCtx)
 		}
 	}
-
-	p.sess.Dealer().Close()
 }
