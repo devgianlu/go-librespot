@@ -80,7 +80,9 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 	resp, err := backoff.RetryWithData(func() (*http.Response, error) {
 		accessToken, err := c.accessToken(ctx, forceNewToken)
 		if err != nil {
-			return nil, fmt.Errorf("failed obtaining spclient access token: %w", err)
+			// Fail with a permanent error if we can't get a new token. The caller should have already retried, there's
+			// nothing we can do.
+			return nil, backoff.Permanent(fmt.Errorf("failed obtaining spclient access token: %w", err))
 		}
 
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
