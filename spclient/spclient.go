@@ -94,7 +94,7 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 		}
 
 		return resp, nil
-	}, backoff.NewExponentialBackOff())
+	}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 	if err != nil {
 		return nil, fmt.Errorf("spclient request failed: %w", err)
 	}
