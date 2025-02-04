@@ -67,7 +67,7 @@ jobs:
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
+          name: binaries-${{ matrix.target }}
           path: /tmp/out
           retention-days: 7
 
@@ -80,8 +80,9 @@ jobs:
       - name: Download compiled binaries
         uses: actions/download-artifact@v4
         with:
-          name: binaries
+          pattern: binaries-*
           path: /tmp/out
+          merge-multiple: true
 
       - name: Generate changelog
         uses: jaywcjlove/changelog-generator@main
