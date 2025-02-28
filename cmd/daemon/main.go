@@ -495,7 +495,11 @@ func loadConfig(cfg *Config) error {
 }
 
 func (cfg *Config) ConfigPath() string {
-	return filepath.Join(cfg.ConfigDir, "config.yml")
+	if _, err := os.Stat(filepath.Join(cfg.ConfigDir, "config.yaml")); os.IsNotExist(err) {
+		return filepath.Join(cfg.ConfigDir, "config.yml")
+	} else {
+		return filepath.Join(cfg.ConfigDir, "config.yaml")
+	}
 }
 
 func (cfg *Config) StatePath() string {
