@@ -6,12 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"time"
+
+	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
@@ -61,10 +62,8 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 		Header: http.Header{},
 	}
 
-	if header != nil {
-		for name, values := range header {
-			req.Header[name] = values
-		}
+	for name, values := range header {
+		req.Header[name] = values
 	}
 
 	req.Header.Set("Client-Token", c.clientToken)

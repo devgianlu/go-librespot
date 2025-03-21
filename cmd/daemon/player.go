@@ -27,7 +27,7 @@ type AppPlayer struct {
 	app  *App
 	sess *session.Session
 
-	stop   chan struct{}
+	stopCh chan struct{}
 	logout chan *AppPlayer
 
 	player            *player.Player
@@ -545,13 +545,16 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 }
 
 func (p *AppPlayer) Close() {
-	p.stop <- struct{}{}
+	close(p.stopCh)
 	p.player.Close()
 	p.sess.Close()
 }
 
-func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
-	err := p.sess.Dealer().Connect(ctx)
+func (p *AppPlayer) Run(_ctx context.Context, apiRecv <-chan ApiRequest) {
+	runCtx, cancelFn := context.WithCancel(_ctx)
+	defer cancelFn()
+
+	err := p.sess.Dealer().Connect(runCtx)
 	if err != nil {
 		p.app.log.WithError(err).Error("failed connecting to dealer")
 		p.Close()
@@ -566,31 +569,58 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 	volumeTimer := time.NewTimer(time.Minute)
 	volumeTimer.Stop() // don't emit a volume change event at start
 
+loop:
 	for {
 		select {
-		case <-p.stop:
-			return
-		case pkt := <-apRecv:
+		case <-p.stopCh:
+			break loop
+
+		case pkt, lok := <-apRecv:
+			if !lok {
+				break
+			}
+
 			if err := p.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
 				p.app.log.WithError(err).Warn("failed handling accesspoint packet")
 			}
-		case msg := <-msgRecv:
-			if err := p.handleDealerMessage(ctx, msg); err != nil {
+
+		case msg, lok := <-msgRecv:
+			if !lok {
+				break
+			}
+
+			if err := p.handleDealerMessage(runCtx, msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
-		case req := <-reqRecv:
-			if err := p.handleDealerRequest(ctx, req); err != nil {
+
+		case req, lok := <-reqRecv:
+			if !lok {
+				break
+			}
+
+			if err := p.handleDealerRequest(runCtx, req); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
 				p.app.log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
-		case req := <-apiRecv:
-			data, err := p.handleApiRequest(ctx, req)
+
+		case req, lok := <-apiRecv:
+			if !lok {
+				break
+			}
+
+			data, err := p.handleApiRequest(runCtx, req)
 			req.Reply(data, err)
-		case ev := <-playerRecv:
-			p.handlePlayerEvent(ctx, &ev)
+
+		case ev, lok := <-playerRecv:
+			if !lok {
+				break
+			}
+
+			p.handlePlayerEvent(runCtx, &ev)
+
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.
@@ -600,9 +630,10 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 			// matches the Spotify Web Player.
 			p.state.device.Volume = uint32(volume * player.MaxStateVolume)
 			volumeTimer.Reset(time.Second)
+
 		case <-volumeTimer.C:
 			// We've gone 1 second without update, send the new value now.
-			p.volumeUpdated(ctx)
+			p.volumeUpdated(runCtx)
 		}
 	}
 }
