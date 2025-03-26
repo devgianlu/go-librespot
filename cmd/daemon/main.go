@@ -111,7 +111,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
 		app:          app,
-		stop:         make(chan struct{}, 1),
+		stopCh:       make(chan struct{}),
 		logout:       app.logoutCh,
 		countryCode:  new(string),
 		volumeUpdate: make(chan float32, 1),

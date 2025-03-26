@@ -4,5 +4,7 @@
 /config.yml
 /credentials.json
 /state.json
-
+.gocache
+.vagrant
+.vscode
 /dist
