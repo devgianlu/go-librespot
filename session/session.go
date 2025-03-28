@@ -64,7 +64,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	// use provided client token or retrieve a new one
 	if len(opts.ClientToken) == 0 {
 		var err error
-		s.clientToken, err = retrieveClientToken(s.deviceId)
+		s.clientToken, err = retrieveClientToken(s.client, s.deviceId)
 		if err != nil {
 			return nil, fmt.Errorf("failed obtaining client token: %w", err)
 		}
