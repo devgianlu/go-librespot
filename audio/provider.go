@@ -62,6 +62,7 @@ func (p *KeyProvider) recvLoop() {
 	for {
 		select {
 		case <-p.stopChan:
+			p.stopChan <- struct{}{}
 			return
 		case pkt := <-ch:
 			resp := bytes.NewReader(pkt.Payload)
@@ -134,4 +135,5 @@ func (p *KeyProvider) Request(ctx context.Context, gid []byte, fileId []byte) ([
 
 func (p *KeyProvider) Close() {
 	p.stopChan <- struct{}{}
+	<-p.stopChan
 }
