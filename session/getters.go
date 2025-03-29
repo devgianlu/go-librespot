@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/player"
 	"net/http"
 	"net/url"
@@ -38,6 +39,10 @@ func (s *Session) Dealer() *dealer.Dealer {
 
 func (s *Session) Accesspoint() *ap.Accesspoint {
 	return s.ap
+}
+
+func (s *Session) Mercury() *mercury.Client {
+	return s.hg
 }
 
 func (s *Session) WebApi(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
