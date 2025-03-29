@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/devgianlu/go-librespot/events"
+	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/player"
 	"net/http"
 
@@ -32,6 +33,7 @@ type Session struct {
 	login5   *login5.Login5
 
 	ap       *ap.Accesspoint
+	hg       *mercury.Client
 	sp       *spclient.Spclient
 	dealer   *dealer.Dealer
 	audioKey *audio.KeyProvider
@@ -193,6 +195,9 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	}
 	s.dealer = dealer.NewDealer(opts.Log, s.client, dealerAddr, s.login5.AccessToken())
 
+	// initialize mercury/hermes
+	s.hg = mercury.NewClient(opts.Log, s.ap)
+
 	// init audio key provider
 	s.audioKey = audio.NewAudioKeyProvider(opts.Log, s.ap)
 
@@ -207,6 +212,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 
 func (s *Session) Close() {
 	s.audioKey.Close()
+	s.hg.Close()
 	s.dealer.Close()
 	s.ap.Close()
 }
