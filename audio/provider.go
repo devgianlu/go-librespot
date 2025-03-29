@@ -105,6 +105,7 @@ func (p *KeyProvider) recvLoop() {
 				delete(reqs, reqSeq)
 				req.resp <- keyResponse{err: fmt.Errorf("failed sending key request for file %s, gid: %s: %w",
 					hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid), err)}
+				continue
 			}
 
 			p.log.Debugf("requested aes key for file %s, gid: %s", hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid))
