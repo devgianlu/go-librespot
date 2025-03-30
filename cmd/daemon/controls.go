@@ -236,7 +236,7 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 
 func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) error {
 	if p.primaryStream != nil {
-		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream)
+		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream, p.player.PositionMs())
 
 		p.primaryStream = nil
 	}
@@ -508,7 +508,7 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 }
 
 func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack) error {
-	p.sess.Events().OnPlayerSkipForward(p.primaryStream, p.player.PositionMs())
+	p.sess.Events().OnPlayerSkipForward(p.primaryStream, p.player.PositionMs(), track != nil)
 
 	if track != nil {
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)

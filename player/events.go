@@ -28,14 +28,14 @@ type EventManager interface {
 	PostStreamResolveStorage(playbackId []byte)
 	PostStreamInitHttpChunkReader(playbackId []byte, reader *audio.HttpChunkedReader)
 
-	OnPrimaryStreamUnload(stream *Stream)
+	OnPrimaryStreamUnload(stream *Stream, pos int64)
 	PostPrimaryStreamLoad(stream *Stream, paused bool)
 
 	OnPlayerPlay(stream *Stream, ctxUri string, shuffle bool, playOrigin *connectpb.PlayOrigin, track *connectpb.ProvidedTrack, pos int64)
 	OnPlayerResume(stream *Stream, pos int64)
 	OnPlayerPause(stream *Stream, pos int64)
 	OnPlayerSeek(stream *Stream, oldPos, newPos int64)
-	OnPlayerSkipForward(stream *Stream, pos int64)
+	OnPlayerSkipForward(stream *Stream, pos int64, skipTo bool)
 	OnPlayerSkipBackward(stream *Stream, pos int64)
 	OnPlayerEnd(stream *Stream, pos int64)
 }

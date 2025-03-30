@@ -40,7 +40,7 @@ func (d dummyEventManager) PostStreamResolveStorage([]byte) {
 func (d dummyEventManager) PostStreamInitHttpChunkReader([]byte, *audio.HttpChunkedReader) {
 }
 
-func (d dummyEventManager) OnPrimaryStreamUnload(*player.Stream) {
+func (d dummyEventManager) OnPrimaryStreamUnload(*player.Stream, int64) {
 }
 
 func (d dummyEventManager) PostPrimaryStreamLoad(*player.Stream, bool) {
@@ -58,7 +58,7 @@ func (d dummyEventManager) OnPlayerPause(*player.Stream, int64) {
 func (d dummyEventManager) OnPlayerSeek(*player.Stream, int64, int64) {
 }
 
-func (d dummyEventManager) OnPlayerSkipForward(*player.Stream, int64) {
+func (d dummyEventManager) OnPlayerSkipForward(*player.Stream, int64, bool) {
 }
 
 func (d dummyEventManager) OnPlayerSkipBackward(*player.Stream, int64) {
