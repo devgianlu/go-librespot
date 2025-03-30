@@ -256,6 +256,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		return nil
 	case "play":
 		p.state.player.PlayOrigin = req.Command.PlayOrigin
+		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
 		p.state.player.Suppressions = req.Command.Options.Suppressions
 
 		// apply overrides
