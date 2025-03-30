@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -60,6 +61,9 @@ type HttpChunkedReader struct {
 
 	len int64
 	pos int64
+
+	initialLatency time.Duration
+	latencies      []time.Duration
 }
 
 func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl string) (_ *HttpChunkedReader, err error) {
@@ -97,7 +101,7 @@ func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl st
 		r.chunks[i] = &chunkItem{Cond: sync.NewCond(&sync.Mutex{}), data: nil, err: nil}
 	}
 
-	r.chunks[0].data, err = io.ReadAll(resp.Body)
+	r.chunks[0].data, err = io.ReadAll(r.measureLatency(true, resp.Body))
 	if err != nil {
 		return nil, fmt.Errorf("failed reading first chunk: %w", err)
 	}
@@ -166,7 +170,7 @@ func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	// read the chunk data
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(r.measureLatency(false, resp.Body))
 	if chunk.err != nil {
 		// update chunk and signal not fetching
 		chunk.L.Lock()
@@ -274,6 +278,98 @@ func (r *HttpChunkedReader) Seek(offset int64, whence int) (int64, error) {
 	}
 }
 
+func (r *HttpChunkedReader) measureLatency(initial bool, rr io.Reader) io.Reader {
+	return &LatencyReader{
+		Reader: rr,
+		Callback: func(latency time.Duration) {
+			if initial {
+				r.initialLatency = latency
+			}
+
+			r.latencies = append(r.latencies, latency)
+		},
+	}
+}
+
 func (r *HttpChunkedReader) Size() int64 {
 	return r.len
+}
+
+func (r *HttpChunkedReader) Url() *url.URL {
+	return r.url
+}
+
+func (r *HttpChunkedReader) InitialLatency() time.Duration {
+	return r.initialLatency
+}
+
+func (r *HttpChunkedReader) MaxLatency() time.Duration {
+	if len(r.latencies) == 0 {
+		return 0
+	}
+
+	maxLatency := r.latencies[0]
+	for _, latency := range r.latencies {
+		if latency > maxLatency {
+			maxLatency = latency
+		}
+	}
+
+	return maxLatency
+}
+
+func (r *HttpChunkedReader) MinLatency() time.Duration {
+	if len(r.latencies) == 0 {
+		return 0
+	}
+
+	minLatency := r.latencies[0]
+	for _, latency := range r.latencies {
+		if latency < minLatency {
+			minLatency = latency
+		}
+	}
+
+	return minLatency
+}
+
+func (r *HttpChunkedReader) AvgLatencyMs() float64 {
+	if len(r.latencies) == 0 {
+		return 0
+	}
+
+	var sum time.Duration
+	for _, latency := range r.latencies {
+		sum += latency
+	}
+
+	return float64(sum.Milliseconds()) / float64(len(r.latencies))
+}
+
+func (r *HttpChunkedReader) MedianLatency() time.Duration {
+	if len(r.latencies) == 0 {
+		return 0
+	}
+
+	latencies := make([]time.Duration, len(r.latencies))
+	copy(latencies, r.latencies)
+
+	sort.Slice(latencies, func(i, j int) bool {
+		return latencies[i] < latencies[j]
+	})
+
+	mid := len(latencies) / 2
+	if len(latencies)%2 == 0 {
+		return (latencies[mid-1] + latencies[mid]) / 2
+	}
+
+	return latencies[mid]
+}
+
+func (r *HttpChunkedReader) TotalTime() time.Duration {
+	var sum time.Duration
+	for _, latency := range r.latencies {
+		sum += latency
+	}
+	return sum
 }
