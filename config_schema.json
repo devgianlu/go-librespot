@@ -237,6 +237,11 @@
           "description": "Whether track/album normalisation should be disabled",
           "default": false
         },
+        "normalisation_use_album_gain": {
+          "type": "boolean",
+          "description": "Whether album gain should be used instead of track gain for normalisation",
+          "default": false
+        },
         "normalisation_pregain": {
           "type": "number",
           "description": "The normalisation pregain to apply to track/album normalisation factors",

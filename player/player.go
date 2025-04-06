@@ -24,6 +24,7 @@ type Player struct {
 	log librespot.Logger
 
 	normalisationEnabled bool
+	normalisationUseAlbumGain bool
 	normalisationPregain float32
 	countryCode          *string
 
@@ -77,6 +78,9 @@ type Options struct {
 	// NormalisationEnabled specifies if the volume should be normalised according
 	// to Spotify parameters. Only track normalization is supported.
 	NormalisationEnabled bool
+	// NormalisationUseAlbumGain specifies whether album gain instead of track gain
+	// should be used for normalisation
+	NormalisationUseAlbumGain bool
 	// NormalisationPregain specifies the pre-gain to apply when normalising the volume
 	// in dB. Use negative values to avoid clipping.
 	NormalisationPregain float32
@@ -137,6 +141,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		audioKey:             opts.AudioKey,
 		events:               opts.Events,
 		normalisationEnabled: opts.NormalisationEnabled,
+		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain: opts.NormalisationPregain,
 		countryCode:          opts.CountryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
@@ -519,7 +524,11 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 	var normalisationFactor float32
 	if p.normalisationEnabled {
-		normalisationFactor = meta.GetTrackFactor(p.normalisationPregain)
+		if p.normalisationUseAlbumGain {
+			normalisationFactor = meta.GetAlbumFactor(p.normalisationPregain)
+		} else {
+			normalisationFactor = meta.GetTrackFactor(p.normalisationPregain)
+		}
 	} else {
 		normalisationFactor = 1
 	}
