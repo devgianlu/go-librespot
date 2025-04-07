@@ -139,6 +139,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		Log:      app.log,
 
 		NormalisationEnabled: !app.cfg.NormalisationDisabled,
+		NormalisationUseAlbumGain: app.cfg.NormalisationUseAlbumGain,
 		NormalisationPregain: app.cfg.NormalisationPregain,
 
 		CountryCode: appPlayer.countryCode,
@@ -376,6 +377,7 @@ type Config struct {
 	VolumeSteps                   uint32    `koanf:"volume_steps"`
 	InitialVolume                 uint32    `koanf:"initial_volume"`
 	NormalisationDisabled         bool      `koanf:"normalisation_disabled"`
+	NormalisationUseAlbumGain     bool	`koanf:"normalisation_use_album_gain"`
 	NormalisationPregain          float32   `koanf:"normalisation_pregain"`
 	ExternalVolume                bool      `koanf:"external_volume"`
 	ZeroconfEnabled               bool      `koanf:"zeroconf_enabled"`
