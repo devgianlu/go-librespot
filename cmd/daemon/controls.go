@@ -123,7 +123,14 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.player.IsBuffering = false
 		p.updateState(ctx)
 
-		p.sess.Events().OnPlayerPause(p.primaryStream, p.state.trackPosition())
+		p.sess.Events().OnPlayerPause(
+			p.primaryStream,
+			p.state.player.ContextUri,
+			p.state.player.Options.ShufflingContext,
+			p.state.player.PlayOrigin,
+			p.state.tracks.CurrentTrack(),
+			p.state.trackPosition(),
+		)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,

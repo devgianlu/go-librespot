@@ -52,7 +52,7 @@ func (d dummyEventManager) OnPlayerPlay(*player.Stream, string, bool, *connectpb
 func (d dummyEventManager) OnPlayerResume(*player.Stream, int64) {
 }
 
-func (d dummyEventManager) OnPlayerPause(*player.Stream, int64) {
+func (d dummyEventManager) OnPlayerPause(*player.Stream, string, bool, *connectpb.PlayOrigin, *connectpb.ProvidedTrack, int64) {
 }
 
 func (d dummyEventManager) OnPlayerSeek(*player.Stream, int64, int64) {
