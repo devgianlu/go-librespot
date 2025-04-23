@@ -240,11 +240,12 @@ loop:
 
 			// something went very wrong, give up
 			d.Close()
-		}
-		d.connMu.Unlock()
+		} else {
+			d.connMu.Unlock()
 
-		// reconnection was successful, do not close receivers
-		return
+			// reconnection was successful, do not close receivers
+			return
+		}
 	}
 
 	d.requestReceiversLock.RLock()
