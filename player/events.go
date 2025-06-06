@@ -38,4 +38,6 @@ type EventManager interface {
 	OnPlayerSkipForward(stream *Stream, pos int64, skipTo bool)
 	OnPlayerSkipBackward(stream *Stream, pos int64)
 	OnPlayerEnd(stream *Stream, pos int64)
+
+	Close()
 }
