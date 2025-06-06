@@ -66,3 +66,6 @@ func (d dummyEventManager) OnPlayerSkipBackward(*player.Stream, int64) {
 
 func (d dummyEventManager) OnPlayerEnd(*player.Stream, int64) {
 }
+
+func (d dummyEventManager) Close() {
+}
