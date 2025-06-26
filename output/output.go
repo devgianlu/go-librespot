@@ -129,6 +129,12 @@ func NewOutput(options *NewOutputOptions) (Output, error) {
 			return nil, err
 		}
 		return out, nil
+	case "audio-toolbox":
+		out, err := newAudioToolboxOutput(options)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
 	default:
 		return nil, fmt.Errorf("unknown audio backend: %s", options.Backend)
 	}
