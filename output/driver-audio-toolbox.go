@@ -5,11 +5,16 @@ package output
 // #cgo LDFLAGS: -framework AudioToolbox -framework CoreAudio
 // #include <AudioToolbox/AudioToolbox.h>
 // #include <CoreAudio/CoreAudio.h>
+// #include <stdlib.h>
 // extern void audioCallback(void * inUserData, AudioQueueRef inAQ,	AudioQueueBufferRef inBuffer);
 //
 // typedef struct {
 //     void *output;
 // } AudioContext;
+//
+// static AudioContext* allocateAudioContext() {
+//     return (AudioContext*)malloc(sizeof(AudioContext));
+// }
 //
 // static void freeAudioContext(AudioContext *ctx) {
 //     free(ctx);
@@ -35,7 +40,6 @@ type toolboxOutput struct {
 	paused     bool
 	volume     float32
 	err        chan error
-	stopChan   chan struct{}
 }
 
 func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels int, initialVolume float32) (*toolboxOutput, error) {
@@ -46,20 +50,21 @@ func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels 
 		bufferSize: 2048,
 		volume:     initialVolume,
 		err:        make(chan error, 1),
-		stopChan:   make(chan struct{}),
 	}
 
 	// We need the C.AudioContext to give the callback safe access to the output context
-	log.Tracef("Allocating audio context")
-	ctx := (*C.AudioContext)(C.malloc(C.size_t(unsafe.Sizeof(C.AudioContext{}))))
+	log.Tracef("allocating audio context")
+	ctx := C.allocateAudioContext()
 	if ctx == nil {
-		out.err <- errors.New("failed to allocate AudioContext")
-		return nil, errors.New("failed to allocate AudioContext")
+		allocErr := errors.New("failed to allocate AudioContext")
+		out.err <- allocErr
+		return nil, allocErr
 	}
 	ctx.output = unsafe.Pointer(out)
+	out.context = ctx
 
 	// Create a new Audio Toolbox output
-	log.Tracef("Configuring output")
+	log.Tracef("configuring output")
 	description := C.AudioStreamBasicDescription{
 		mSampleRate:       C.double(out.sampleRate),
 		mFormatID:         C.kAudioFormatLinearPCM,
@@ -85,7 +90,7 @@ func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels 
 	}
 
 	// Allocate Audio Toolbox buffers
-	log.Tracef("Allocating audio buffer")
+	log.Tracef("allocating audio buffer")
 	for i := 0; i < 3; i++ {
 		var buffer C.AudioQueueBufferRef
 		status := C.AudioQueueAllocateBuffer(out.audioQueue, C.UInt32(out.bufferSize*4), &buffer)
@@ -103,12 +108,12 @@ func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels 
 	}
 
 	// Start the Audio Toolbox output
-	log.Tracef("Starting audio queue")
+	log.Tracef("starting audio queue")
 	if err := C.AudioQueueStart(out.audioQueue, nil); err != 0 {
 		return nil, out.toolboxError("startAudioQueue", err)
 	}
 
-	log.Info("Started audio-toolbox output")
+	log.Info("started audio-toolbox output")
 	return out, nil
 }
 
@@ -244,8 +249,6 @@ func (out *toolboxOutput) Close() error {
 		C.freeAudioContext(out.context)
 		out.context = nil
 	}
-
-	close(out.stopChan)
 
 	return nil
 }
