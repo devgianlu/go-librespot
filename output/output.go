@@ -130,7 +130,7 @@ func NewOutput(options *NewOutputOptions) (Output, error) {
 		}
 		return out, nil
 	case "audio-toolbox":
-		out, err := newAudioToolboxOutput(options.Reader, options.SampleRate, options.ChannelCount, options.InitialVolume)
+		out, err := newAudioToolboxOutput(options)
 		if err != nil {
 			return nil, err
 		}

@@ -42,13 +42,13 @@ type toolboxOutput struct {
 	err        chan error
 }
 
-func newAudioToolboxOutput(reader librespot.Float32Reader, sampleRate, channels int, initialVolume float32) (*toolboxOutput, error) {
+func newAudioToolboxOutput(opts *NewOutputOptions) (*toolboxOutput, error) {
 	out := &toolboxOutput{
-		channels:   channels,
-		sampleRate: sampleRate,
-		reader:     reader,
+		channels:   opts.ChannelCount,
+		sampleRate: opts.SampleRate,
+		reader:     opts.Reader,
 		bufferSize: 2048,
-		volume:     initialVolume,
+		volume:     opts.InitialVolume,
 		err:        make(chan error, 1),
 	}
 
