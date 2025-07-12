@@ -657,6 +657,12 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	p.app.log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
 	p.player.SetVolume(newVal)
 
+	// If there is a value in the channel buffer, remove it.
+	select {
+	case <-p.volumeUpdate:
+	default:
+	}
+
 	p.volumeUpdate <- float32(newVal) / player.MaxStateVolume
 }
 
