@@ -23,10 +23,10 @@ const MaxStateVolume = 65535
 type Player struct {
 	log librespot.Logger
 
-	normalisationEnabled bool
+	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
-	normalisationPregain float32
-	countryCode          *string
+	normalisationPregain      float32
+	countryCode               *string
 
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
@@ -136,14 +136,14 @@ type Options struct {
 
 func NewPlayer(opts *Options) (*Player, error) {
 	p := &Player{
-		log:                  opts.Log,
-		sp:                   opts.Spclient,
-		audioKey:             opts.AudioKey,
-		events:               opts.Events,
-		normalisationEnabled: opts.NormalisationEnabled,
+		log:                       opts.Log,
+		sp:                        opts.Spclient,
+		audioKey:                  opts.AudioKey,
+		events:                    opts.Events,
+		normalisationEnabled:      opts.NormalisationEnabled,
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
-		normalisationPregain: opts.NormalisationPregain,
-		countryCode:          opts.CountryCode,
+		normalisationPregain:      opts.NormalisationPregain,
+		countryCode:               opts.CountryCode,
 		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
 				Log:              opts.Log,
