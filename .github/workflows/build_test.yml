@@ -23,5 +23,8 @@ jobs:
       - name: Build daemon
         run: go build -v ./cmd/daemon
 
+      - name: Format
+        run: test -z "$(gofmt -l .)"
+
       - name: Test
         run: go test -v ./...
