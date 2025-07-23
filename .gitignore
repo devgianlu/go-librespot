@@ -4,5 +4,6 @@
 /config.yml
 /credentials.json
 /state.json
+/lockfile
 
 /dist
