@@ -73,7 +73,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
-		p.app.log.Debugf("received connection id: %s", p.spotConnId)
+		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
 
 		// put the initial state
 		if err := p.putConnectState(ctx, connectpb.PutStateReason_NEW_DEVICE); err != nil {
@@ -95,7 +95,8 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		p.updateVolume(uint32(setVolCmd.Volume))
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/logout") {
 		// this should happen only with zeroconf enabled
-		p.app.log.Debugf("requested logout out from %s", p.sess.Username())
+		p.app.log.WithField("username", librespot.ObfuscateUsername(p.sess.Username())).
+			Debugf("requested logout out")
 		p.logout <- p
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
 		var clusterUpdate connectpb.ClusterUpdate

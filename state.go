@@ -3,7 +3,6 @@ package go_librespot
 import (
 	"encoding/json"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +11,7 @@ import (
 type AppState struct {
 	sync.Mutex
 
+	log  Logger
 	path string
 
 	DeviceId     string          `json:"device_id"`
@@ -22,6 +22,10 @@ type AppState struct {
 	} `json:"credentials"`
 }
 
+func (s *AppState) SetLogger(log Logger) {
+	s.log = log
+}
+
 func (s *AppState) Read(configDir string) error {
 	s.path = filepath.Join(configDir, "state.json")
 
@@ -29,9 +33,9 @@ func (s *AppState) Read(configDir string) error {
 		if err := json.Unmarshal(content, &s); err != nil {
 			return fmt.Errorf("failed unmarshalling state file: %w", err)
 		}
-		log.Debugf("app state loaded")
+		s.log.Debugf("app state loaded")
 	} else {
-		log.Debugf("no app state found")
+		s.log.Debugf("no app state found")
 	}
 
 	// Read credentials (old configuration, in credentials.json).
@@ -41,9 +45,10 @@ func (s *AppState) Read(configDir string) error {
 				return fmt.Errorf("failed unmarshalling stored credentials file: %w", err)
 			}
 
-			log.Debugf("stored credentials found for %s", s.Credentials.Username)
+			s.log.WithField("username", ObfuscateUsername(s.Credentials.Username)).
+				Debugf("stored credentials found")
 		} else {
-			log.Debugf("stored credentials not found")
+			s.log.Debugf("stored credentials not found")
 		}
 	}
 

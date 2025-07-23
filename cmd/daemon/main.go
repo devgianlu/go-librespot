@@ -71,6 +71,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 		return nil, err
 	}
 
+	app.state.SetLogger(app.log)
 	if err := app.state.Read(cfg.ConfigDir); err != nil {
 		return nil, err
 	}
@@ -168,7 +169,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 func (app *App) Zeroconf(ctx context.Context) error {
 	return app.withAppPlayer(ctx, func(ctx context.Context) (*AppPlayer, error) {
 		if app.cfg.Credentials.Zeroconf.PersistCredentials && len(app.state.Credentials.Data) > 0 {
-			log.WithField("username", app.state.Credentials.Username).Infof("loading previously persisted zeroconf credentials")
+			app.log.WithField("username", librespot.ObfuscateUsername(app.state.Credentials.Username)).
+				Infof("loading previously persisted zeroconf credentials")
 			return app.newAppPlayer(ctx, session.StoredCredentials{
 				Username: app.state.Credentials.Username,
 				Data:     app.state.Credentials.Data,
@@ -208,7 +210,8 @@ func (app *App) withCredentials(ctx context.Context, creds any) (err error) {
 				return nil, err
 			}
 
-			log.Debugf("stored credentials for %s", appPlayer.sess.Username())
+			app.log.WithField("username", librespot.ObfuscateUsername(appPlayer.sess.Username())).
+				Debugf("stored credentials")
 			return appPlayer, nil
 		}
 	})
@@ -248,7 +251,8 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 
 	// set current player to the provided one if we have it
 	if currentPlayer != nil {
-		log.Debugf("initializing zeroconf session, username: %s", currentPlayer.sess.Username())
+		app.log.WithField("username", librespot.ObfuscateUsername(currentPlayer.sess.Username())).
+			Debugf("initializing zeroconf session")
 
 		apiCh = make(chan ApiRequest)
 		go currentPlayer.Run(ctx, apiCh)
@@ -307,7 +311,8 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 					// let zeroconf know that we already have a user
 					z.SetCurrentUser(newAppPlayer.sess.Username())
 
-					log.Debugf("restored session after logout, username: %s", currentPlayer.sess.Username())
+					app.log.WithField("username", librespot.ObfuscateUsername(currentPlayer.sess.Username())).
+						Debugf("restored session after logout")
 				}
 			}
 		}
@@ -329,7 +334,8 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			Blob:     req.AuthBlob,
 		})
 		if err != nil {
-			log.WithError(err).Errorf("failed creating new session for %s from %s", req.Username, req.DeviceName)
+			app.log.WithError(err).WithField("username", librespot.ObfuscateUsername(req.Username)).
+				Errorf("failed creating new session from %s", req.DeviceName)
 			return false
 		}
 
@@ -345,7 +351,8 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				log.WithError(err).Errorf("failed persisting zeroconf credentials")
 			}
 
-			log.WithField("username", newAppPlayer.sess.Username()).Debugf("persisted zeroconf credentials")
+			app.log.WithField("username", librespot.ObfuscateUsername(newAppPlayer.sess.Username())).
+				Debugf("persisted zeroconf credentials")
 		}
 
 		go newAppPlayer.Run(ctx, apiCh)

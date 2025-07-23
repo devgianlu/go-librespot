@@ -221,7 +221,8 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 		z.authenticatingUser = ""
 		z.userLock.Unlock()
 
-		z.log.Infof("refused zeroconf user %s from %s", username, deviceName)
+		z.log.WithField("username", librespot.ObfuscateUsername(username)).
+			Infof("refused zeroconf from %s", deviceName)
 		writer.WriteHeader(http.StatusForbidden)
 		return nil
 	}
@@ -231,7 +232,8 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 	z.currentUser = username
 	z.userLock.Unlock()
 
-	z.log.Infof("accepted zeroconf user %s from %s", username, deviceName)
+	z.log.WithField("username", librespot.ObfuscateUsername(username)).
+		Infof("accepted zeroconf from %s", deviceName)
 
 	writer.WriteHeader(http.StatusOK)
 	return json.NewEncoder(writer).Encode(AddUserResponse{

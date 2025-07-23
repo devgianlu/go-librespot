@@ -521,7 +521,8 @@ func (ap *Accesspoint) authenticate(ctx context.Context, credentials *pb.LoginCr
 		}
 
 		ap.welcome = &welcome
-		ap.log.Infof("authenticated AP as %s", *welcome.CanonicalUsername)
+		ap.log.WithField("username", librespot.ObfuscateUsername(*welcome.CanonicalUsername)).
+			Infof("authenticated AP")
 
 		return nil
 	} else if recvPkt == PacketTypeAuthFailure {

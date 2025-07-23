@@ -150,7 +150,8 @@ func (c *Login5) Login(ctx context.Context, credentials proto.Message) error {
 	if ok := resp.GetOk(); ok != nil {
 		c.loginOk = ok
 		c.loginOkExp = time.Now().Add(time.Duration(c.loginOk.AccessTokenExpiresIn) * time.Second)
-		c.log.Infof("authenticated Login5 as %s", c.loginOk.Username)
+		c.log.WithField("username", librespot.ObfuscateUsername(c.loginOk.Username)).
+			Infof("authenticated Login5")
 		return nil
 	} else {
 		return &LoginError{Code: resp.GetError()}
