@@ -401,6 +401,9 @@ func (out *alsaOutput) DelayMs() (int64, error) {
 func (out *alsaOutput) SetVolume(vol float32) {
 	if vol < 0 || vol > 1 {
 		panic(fmt.Sprintf("invalid volume value: %0.2f", vol))
+	} else if vol == out.volume {
+		// No need to update the volume if it didn't change.
+		return
 	}
 
 	out.volume = vol

@@ -609,12 +609,11 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 			// or from the system volume mixer.
 			// Because these updates can be quite frequent, we have to rate
 			// limit them (otherwise we get HTTP error 429: Too many requests
-			// for user). Sending the new value after 1 second of no updates
-			// matches the Spotify Web Player.
+			// for user).
 			p.state.device.Volume = uint32(volume * player.MaxStateVolume)
-			volumeTimer.Reset(time.Second)
+			volumeTimer.Reset(100 * time.Millisecond)
 		case <-volumeTimer.C:
-			// We've gone 1 second without update, send the new value now.
+			// We've gone some time without update, send the new value now.
 			p.volumeUpdated(ctx)
 		}
 	}
