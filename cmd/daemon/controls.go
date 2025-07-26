@@ -654,7 +654,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 		newVal = 0
 	}
 
-	p.app.log.Debugf("update volume to %d/%d", newVal, player.MaxStateVolume)
+	p.app.log.Debugf("update volume requested to %d/%d", newVal, player.MaxStateVolume)
 	p.player.SetVolume(newVal)
 
 	// If there is a value in the channel buffer, remove it.

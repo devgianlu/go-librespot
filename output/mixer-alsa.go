@@ -59,6 +59,7 @@ func (out *alsaOutput) setupMixer() error {
 	C.snd_mixer_selem_get_playback_volume(out.mixerElemHandle, C.SND_MIXER_SCHN_MONO, &volume)
 	out.volume = float32(volume-out.mixerMinVolume) / float32(out.mixerMaxVolume-out.mixerMinVolume)
 
+	out.log.Debugf("dispatching initial mixer volume update: %d/%d", volume, out.mixerMaxVolume)
 	sendVolumeUpdate(out.volumeUpdate, out.volume)
 
 	// set callback and initialize private
@@ -67,6 +68,9 @@ func (out *alsaOutput) setupMixer() error {
 	C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
 
 	go out.waitForMixerEvents()
+
+	out.log.Debugf("alsa mixer initialized: %s, control: %s, min volume: %d, max volume: %d\n",
+		out.mixer, out.control, out.mixerMinVolume, out.mixerMaxVolume)
 
 	out.mixerEnabled = true
 	return nil
