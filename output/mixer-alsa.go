@@ -78,38 +78,36 @@ func (out *alsaOutput) setupMixer() error {
 
 func (out *alsaOutput) waitForMixerEvents() {
 	for !out.closed {
-		var res = C.snd_mixer_wait(out.mixerHandle, -1)
+		res := C.snd_mixer_wait(out.mixerHandle, -1)
 		if out.closed {
-			// if we reach here, the playing context has probably changed
 			break
+		} else if res < 0 {
+			out.log.WithError(out.alsaError("snd_mixer_wait", res)).
+				Warnf("error while waiting for alsa mixer events")
+			continue
 		}
-		if res >= 0 {
-			res = C.snd_mixer_handle_events(out.mixerHandle)
-			if res <= 0 {
-				errStrPtr := C.snd_strerror(res)
-				out.log.Warnf("error while handling alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
 
-				// no need to free the errStrPtr, because it doesn't point into heap
-				continue
-			}
+		if res = C.snd_mixer_handle_events(out.mixerHandle); res < 0 {
+			out.log.WithError(out.alsaError("snd_mixer_handle_events", res)).
+				Warnf("error while handling alsa mixer events")
+			continue
+		} else if res == 0 {
+			// No events to handle, continue waiting
+			continue
+		}
 
-			var priv = float32(*(*C.float)(C.snd_mixer_elem_get_callback_private(out.mixerElemHandle)))
-			if priv < 0 {
-				// volume update came from spotify, so no need to tell spotify about it
-				// reset the private, but discard the event
-				C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
+		newVol := float32(*(*C.float)(C.snd_mixer_elem_get_callback_private(out.mixerElemHandle)))
+		if newVol < 0 {
+			// Volume update came from Spotify, so no need to tell Spotify about it.
+			// Reset the private, but discard the event
+			C.snd_mixer_elem_set_callback_private(out.mixerElemHandle, unsafe.Pointer(&out.volume))
+			continue
+		}
 
-				continue
-			}
-			if priv == out.volume {
-				out.log.Debugf("skipping alsa mixer event, volume already updated: %.2f\n", priv)
-				continue
-			}
-
-			sendVolumeUpdate(out.volumeUpdate, priv)
-		} else {
-			errStrPtr := C.snd_strerror(res)
-			out.log.Warnf("error while waiting for alsa mixer events. (%s)\n", string(C.GoString(errStrPtr)))
+		if newVol != out.volume {
+			out.log.Debugf("dispatching mixer volume update: %d/%d",
+				out.mixerMinVolume+C.long(newVol*float32(out.mixerMaxVolume-out.mixerMinVolume)), out.mixerMaxVolume)
+			sendVolumeUpdate(out.volumeUpdate, newVol)
 		}
 	}
 }
@@ -125,13 +123,11 @@ func alsaMixerCallback(elem *C.snd_mixer_elem_t, _ C.uint) C.int {
 		return 0
 	}
 
-	var val C.long
-	var minVol C.long
-	var maxVol C.long
-	C.snd_mixer_selem_get_playback_volume(elem, C.SND_MIXER_SCHN_MONO, &val)
+	var vol, minVol, maxVol C.long
+	C.snd_mixer_selem_get_playback_volume(elem, C.SND_MIXER_SCHN_MONO, &vol)
 	C.snd_mixer_selem_get_playback_volume_range(elem, &minVol, &maxVol)
 
-	var normalizedVolume = C.float(float32(val-minVol) / float32(maxVol-minVol))
+	normalizedVolume := C.float(float32(vol-minVol) / float32(maxVol-minVol))
 	C.snd_mixer_elem_set_callback_private(elem, unsafe.Pointer(&normalizedVolume))
 
 	return 0
