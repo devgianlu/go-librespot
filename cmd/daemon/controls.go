@@ -643,7 +643,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 // Return the volume as an integer in the range 0..player.MaxStateVolume, as
 // used in the API.
 func (p *AppPlayer) apiVolume() uint32 {
-	return uint32(math.Ceil(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
+	return uint32(math.Round(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
 }
 
 // Set the player volume to the new volume, also notifies about the change.

@@ -9,6 +9,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -610,7 +611,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 			// Because these updates can be quite frequent, we have to rate
 			// limit them (otherwise we get HTTP error 429: Too many requests
 			// for user).
-			p.state.device.Volume = uint32(volume * player.MaxStateVolume)
+			p.state.device.Volume = uint32(math.Round(float64(volume * player.MaxStateVolume)))
 			volumeTimer.Reset(100 * time.Millisecond)
 		case <-volumeTimer.C:
 			// We've gone some time without update, send the new value now.
