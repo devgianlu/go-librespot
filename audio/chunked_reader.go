@@ -130,7 +130,7 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 		}
 
 		return resp, nil
-	}, backoff.NewConstantBackOff(1*time.Second))
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 3))
 }
 
 func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
