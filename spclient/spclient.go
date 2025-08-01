@@ -186,7 +186,7 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 			c.log.Debugf("put connect state because %s", reqProto.PutStateReason)
 			return resp, nil
 		}
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2))
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2), ctx))
 	if err != nil {
 		return err
 	}
