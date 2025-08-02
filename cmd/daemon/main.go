@@ -64,7 +64,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
 	app.log = &LogrusAdapter{log.NewEntry(log.StandardLogger())}
-	app.client = &http.Client{}
+	app.client = &http.Client{Timeout: 30 * time.Second}
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
 	if err != nil {

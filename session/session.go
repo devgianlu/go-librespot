@@ -8,6 +8,7 @@ import (
 	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/player"
 	"net/http"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
@@ -60,7 +61,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	}
 
 	if s.client == nil {
-		s.client = &http.Client{}
+		s.client = &http.Client{Timeout: 30 * time.Second}
 	}
 
 	// use provided client token or retrieve a new one
