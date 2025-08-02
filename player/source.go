@@ -77,8 +77,8 @@ func (s *SwitchingAudioSource) SetPositionMs(pos int64) error {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
-	for s.source[s.which] == nil {
-		s.cond.Wait()
+	if s.source[s.which] == nil {
+		return nil
 	}
 
 	return s.source[s.which].SetPositionMs(pos)
@@ -88,8 +88,8 @@ func (s *SwitchingAudioSource) PositionMs() int64 {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
-	for s.source[s.which] == nil {
-		s.cond.Wait()
+	if s.source[s.which] == nil {
+		return 0
 	}
 
 	return s.source[s.which].PositionMs()
