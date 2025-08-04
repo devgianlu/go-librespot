@@ -12,6 +12,7 @@ import (
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -415,6 +416,43 @@ func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
 
 const DisableCheckMediaRestricted = true
 
+func (p *Player) httpChunkedReaderFromStorageResolve(log librespot.Logger, client *http.Client, storageResolve *downloadpb.StorageResolveResponse) (*audio.HttpChunkedReader, error) {
+	if storageResolve.Result == downloadpb.StorageResolveResponse_STORAGE {
+		return nil, fmt.Errorf("old storage not supported")
+	} else if storageResolve.Result == downloadpb.StorageResolveResponse_RESTRICTED {
+		return nil, fmt.Errorf("storage is restricted")
+	} else if storageResolve.Result == downloadpb.StorageResolveResponse_CDN {
+		if len(storageResolve.Cdnurl) == 0 {
+			return nil, fmt.Errorf("no cdn urls")
+		}
+
+		log.Tracef("found %d cdn urls", len(storageResolve.Cdnurl))
+
+		var err error
+		for i := 0; i < len(storageResolve.Cdnurl); i++ {
+			var cdnUrl *url.URL
+			cdnUrl, err = url.Parse(storageResolve.Cdnurl[i])
+			if err != nil {
+				log.WithError(err).WithField("url", storageResolve.Cdnurl[i]).Warnf("failed parsing cdn url, trying next url")
+				continue
+			}
+
+			var rawStream *audio.HttpChunkedReader
+			rawStream, err = audio.NewHttpChunkedReader(log, client, cdnUrl.String())
+			if err != nil {
+				log.WithError(err).WithField("url", cdnUrl.String()).Warnf("failed creating chunked reader for %s, trying next url", cdnUrl.Host)
+				continue
+			}
+
+			return rawStream, nil
+		}
+
+		return nil, fmt.Errorf("failed creating chunked reader for any cdn url: %w", err)
+	} else {
+		return nil, fmt.Errorf("unknown storage resolve result: %s", storageResolve.Result)
+	}
+}
+
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := p.log.WithField("uri", spotId.Uri())
 
@@ -487,27 +525,11 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		return nil, fmt.Errorf("failed resolving track storage: %w", err)
 	}
 
-	var trackUrl string
-	switch storageResolve.Result {
-	case downloadpb.StorageResolveResponse_CDN:
-		if len(storageResolve.Cdnurl) == 0 {
-			return nil, fmt.Errorf("no cdn urls")
-		}
-
-		trackUrl = storageResolve.Cdnurl[0]
-	case downloadpb.StorageResolveResponse_STORAGE:
-		return nil, fmt.Errorf("old storage not supported")
-	case downloadpb.StorageResolveResponse_RESTRICTED:
-		return nil, fmt.Errorf("storage is restricted")
-	default:
-		return nil, fmt.Errorf("unknown storage resolve result: %s", storageResolve.Result)
-	}
-
 	p.events.PostStreamResolveStorage(playbackId)
 
-	rawStream, err := audio.NewHttpChunkedReader(log.WithField("uri", spotId.String()), client, trackUrl)
+	rawStream, err := p.httpChunkedReaderFromStorageResolve(log, client, storageResolve)
 	if err != nil {
-		return nil, fmt.Errorf("failed initializing chunked reader: %w", err)
+		return nil, fmt.Errorf("failed creating chunked reader: %w", err)
 	}
 
 	p.events.PostStreamInitHttpChunkReader(playbackId, rawStream)
