@@ -240,7 +240,12 @@ func (c *Spclient) MetadataForTrack(ctx context.Context, track librespot.Spotify
 		panic(fmt.Sprintf("invalid type: %s", track.Type()))
 	}
 
-	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/metadata/4/track/%s", track.Hex()), nil, nil, nil)
+	reqUrl, err := url.Parse(fmt.Sprintf("https://spclient.wg.spotify.com/metadata/4/track/%s", track.Hex()))
+	if err != nil {
+		return nil, fmt.Errorf("invalid metadata track URL: %w", err)
+	}
+
+	resp, err := c.innerRequest(ctx, "GET", reqUrl, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +274,12 @@ func (c *Spclient) MetadataForEpisode(ctx context.Context, episode librespot.Spo
 		panic(fmt.Sprintf("invalid type: %s", episode.Type()))
 	}
 
-	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/metadata/4/episode/%s", episode.Hex()), nil, nil, nil)
+	reqUrl, err := url.Parse(fmt.Sprintf("https://spclient.wg.spotify.com/metadata/4/episode/%s", episode.Hex()))
+	if err != nil {
+		return nil, fmt.Errorf("invalid metadata episode URL: %w", err)
+	}
+
+	resp, err := c.innerRequest(ctx, "GET", reqUrl, nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
