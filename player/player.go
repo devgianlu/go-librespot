@@ -3,6 +3,10 @@ package player
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"time"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/output"
@@ -11,15 +15,18 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
-	"net/http"
-	"net/url"
-	"time"
 )
 
-const SampleRate = 44100
-const Channels = 2
+const (
+	SampleRate = 44100
+	Channels   = 2
+)
 
 const MaxStateVolume = 65535
+
+const DisableCheckMediaRestricted = true
+
+const CdnUrlQuarantineDuration = 15 * time.Minute
 
 type Player struct {
 	log librespot.Logger
@@ -32,6 +39,8 @@ type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 	events   EventManager
+
+	cdnQuarantine map[string]time.Time
 
 	newOutput func(source librespot.Float32Reader, volume float32) (output.Output, error)
 
@@ -141,6 +150,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		sp:                        opts.Spclient,
 		audioKey:                  opts.AudioKey,
 		events:                    opts.Events,
+		cdnQuarantine:             make(map[string]time.Time),
 		normalisationEnabled:      opts.NormalisationEnabled,
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain:      opts.NormalisationPregain,
@@ -414,8 +424,6 @@ func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
 	<-resp
 }
 
-const DisableCheckMediaRestricted = true
-
 func (p *Player) httpChunkedReaderFromStorageResolve(log librespot.Logger, client *http.Client, storageResolve *downloadpb.StorageResolveResponse) (*audio.HttpChunkedReader, error) {
 	if storageResolve.Result == downloadpb.StorageResolveResponse_STORAGE {
 		return nil, fmt.Errorf("old storage not supported")
@@ -437,13 +445,24 @@ func (p *Player) httpChunkedReaderFromStorageResolve(log librespot.Logger, clien
 				continue
 			}
 
+			if lastFailed, found := p.cdnQuarantine[cdnUrl.Host]; found {
+				if i == len(storageResolve.Cdnurl)-1 {
+					log.WithField("host", cdnUrl.Host).Warnf("cannot skip cdn url because it is the last one")
+				} else if time.Since(lastFailed) < CdnUrlQuarantineDuration {
+					log.WithField("host", cdnUrl.Host).Infof("skipping cdn url because it has failed recently")
+					continue
+				}
+			}
+
 			var rawStream *audio.HttpChunkedReader
 			rawStream, err = audio.NewHttpChunkedReader(log, client, cdnUrl.String())
 			if err != nil {
-				log.WithError(err).WithField("url", cdnUrl.String()).Warnf("failed creating chunked reader for %s, trying next url", cdnUrl.Host)
+				log.WithError(err).WithField("host", cdnUrl.Host).Warnf("failed creating chunked reader, trying next url")
+				p.cdnQuarantine[cdnUrl.Host] = time.Now()
 				continue
 			}
 
+			delete(p.cdnQuarantine, cdnUrl.Host)
 			return rawStream, nil
 		}
 
