@@ -11,7 +11,8 @@ import (
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/output"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
-	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
@@ -481,14 +482,15 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	p.events.PreStreamLoadNew(playbackId, spotId, mediaPosition)
 
 	var media *librespot.Media
-	var file *metadata.AudioFile
+	var file *metadatapb.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
-		trackMeta, err := p.sp.MetadataForTrack(ctx, spotId)
+		var trackMeta metadatapb.Track
+		err := p.sp.ExtendedMetadataSimple(ctx, spotId, extmetadatapb.ExtensionKind_TRACK_V4, &trackMeta)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting track metadata: %w", err)
 		}
 
-		media = librespot.NewMediaFromTrack(trackMeta)
+		media = librespot.NewMediaFromTrack(&trackMeta)
 		if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
 			return nil, librespot.ErrMediaRestricted
 		}
@@ -510,12 +512,13 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 			return nil, librespot.ErrNoSupportedFormats
 		}
 	} else if spotId.Type() == librespot.SpotifyIdTypeEpisode {
-		episodeMeta, err := p.sp.MetadataForEpisode(ctx, spotId)
+		var episodeMeta metadatapb.Episode
+		err := p.sp.ExtendedMetadataSimple(ctx, spotId, extmetadatapb.ExtensionKind_EPISODE_V4, &episodeMeta)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting episode metadata: %w", err)
 		}
 
-		media = librespot.NewMediaFromEpisode(episodeMeta)
+		media = librespot.NewMediaFromEpisode(&episodeMeta)
 		if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
 			return nil, librespot.ErrMediaRestricted
 		}
