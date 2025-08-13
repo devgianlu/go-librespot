@@ -25,6 +25,7 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `play_origin`: Who started the playback
 - `playing`: The current track is playing
     - `uri`: The track URI
+    - `resume`: Was this resumed from paused playback?
     - `play_origin`: Who started the playback
 - `not_playing`: The current track has finished playing
     - `uri`: The track URI
