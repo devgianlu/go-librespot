@@ -3,23 +3,31 @@ package player
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"time"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/output"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
-	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
-	"net/http"
-	"net/url"
-	"time"
 )
 
-const SampleRate = 44100
-const Channels = 2
+const (
+	SampleRate = 44100
+	Channels   = 2
+)
 
 const MaxStateVolume = 65535
+
+const DisableCheckMediaRestricted = true
+
+const CdnUrlQuarantineDuration = 15 * time.Minute
 
 type Player struct {
 	log librespot.Logger
@@ -32,6 +40,8 @@ type Player struct {
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
 	events   EventManager
+
+	cdnQuarantine map[string]time.Time
 
 	newOutput func(source librespot.Float32Reader, volume float32) (output.Output, error)
 
@@ -141,6 +151,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		sp:                        opts.Spclient,
 		audioKey:                  opts.AudioKey,
 		events:                    opts.Events,
+		cdnQuarantine:             make(map[string]time.Time),
 		normalisationEnabled:      opts.NormalisationEnabled,
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain:      opts.NormalisationPregain,
@@ -414,8 +425,6 @@ func (p *Player) SetSecondaryStream(source librespot.AudioSource) {
 	<-resp
 }
 
-const DisableCheckMediaRestricted = true
-
 func (p *Player) httpChunkedReaderFromStorageResolve(log librespot.Logger, client *http.Client, storageResolve *downloadpb.StorageResolveResponse) (*audio.HttpChunkedReader, error) {
 	if storageResolve.Result == downloadpb.StorageResolveResponse_STORAGE {
 		return nil, fmt.Errorf("old storage not supported")
@@ -437,13 +446,24 @@ func (p *Player) httpChunkedReaderFromStorageResolve(log librespot.Logger, clien
 				continue
 			}
 
+			if lastFailed, found := p.cdnQuarantine[cdnUrl.Host]; found {
+				if i == len(storageResolve.Cdnurl)-1 {
+					log.WithField("host", cdnUrl.Host).Warnf("cannot skip cdn url because it is the last one")
+				} else if time.Since(lastFailed) < CdnUrlQuarantineDuration {
+					log.WithField("host", cdnUrl.Host).Infof("skipping cdn url because it has failed recently")
+					continue
+				}
+			}
+
 			var rawStream *audio.HttpChunkedReader
 			rawStream, err = audio.NewHttpChunkedReader(log, client, cdnUrl.String())
 			if err != nil {
-				log.WithError(err).WithField("url", cdnUrl.String()).Warnf("failed creating chunked reader for %s, trying next url", cdnUrl.Host)
+				log.WithError(err).WithField("host", cdnUrl.Host).Warnf("failed creating chunked reader, trying next url")
+				p.cdnQuarantine[cdnUrl.Host] = time.Now()
 				continue
 			}
 
+			delete(p.cdnQuarantine, cdnUrl.Host)
 			return rawStream, nil
 		}
 
@@ -462,14 +482,15 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	p.events.PreStreamLoadNew(playbackId, spotId, mediaPosition)
 
 	var media *librespot.Media
-	var file *metadata.AudioFile
+	var file *metadatapb.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
-		trackMeta, err := p.sp.MetadataForTrack(ctx, spotId)
+		var trackMeta metadatapb.Track
+		err := p.sp.ExtendedMetadataSimple(ctx, spotId, extmetadatapb.ExtensionKind_TRACK_V4, &trackMeta)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting track metadata: %w", err)
 		}
 
-		media = librespot.NewMediaFromTrack(trackMeta)
+		media = librespot.NewMediaFromTrack(&trackMeta)
 		if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
 			return nil, librespot.ErrMediaRestricted
 		}
@@ -491,12 +512,13 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 			return nil, librespot.ErrNoSupportedFormats
 		}
 	} else if spotId.Type() == librespot.SpotifyIdTypeEpisode {
-		episodeMeta, err := p.sp.MetadataForEpisode(ctx, spotId)
+		var episodeMeta metadatapb.Episode
+		err := p.sp.ExtendedMetadataSimple(ctx, spotId, extmetadatapb.ExtensionKind_EPISODE_V4, &episodeMeta)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting episode metadata: %w", err)
 		}
 
-		media = librespot.NewMediaFromEpisode(episodeMeta)
+		media = librespot.NewMediaFromEpisode(&episodeMeta)
 		if !DisableCheckMediaRestricted && isMediaRestricted(media, *p.countryCode) {
 			return nil, librespot.ErrMediaRestricted
 		}

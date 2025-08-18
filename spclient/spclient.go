@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	eventsenderpb "github.com/devgianlu/go-librespot/proto/spotify/event_sender"
-	netfortunepb "github.com/devgianlu/go-librespot/proto/spotify/netfortune"
-	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"io"
 	"net/http"
 	"net/url"
@@ -19,8 +16,11 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	storagepb "github.com/devgianlu/go-librespot/proto/spotify/download"
-	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	eventsenderpb "github.com/devgianlu/go-librespot/proto/spotify/event_sender"
+	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
+	netfortunepb "github.com/devgianlu/go-librespot/proto/spotify/netfortune"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
+	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -235,17 +235,13 @@ func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte,
 	return &protoResp, nil
 }
 
-func (c *Spclient) MetadataForTrack(ctx context.Context, track librespot.SpotifyId) (*metadatapb.Track, error) {
-	if track.Type() != librespot.SpotifyIdTypeTrack {
-		panic(fmt.Sprintf("invalid type: %s", track.Type()))
-	}
-
-	reqUrl, err := url.Parse(fmt.Sprintf("https://spclient.wg.spotify.com/metadata/4/track/%s", track.Hex()))
+func (c *Spclient) ExtendedMetadata(ctx context.Context, req *extmetadatapb.BatchedEntityRequest) (*extmetadatapb.BatchedExtensionResponse, error) {
+	reqBody, err := proto.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("invalid metadata track URL: %w", err)
+		return nil, fmt.Errorf("failed marshalling BatchedEntityRequest: %w", err)
 	}
 
-	resp, err := c.innerRequest(ctx, "GET", reqUrl, nil, nil, nil)
+	resp, err := c.Request(ctx, "POST", "/extended-metadata/v0/extended-metadata", nil, nil, reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +249,7 @@ func (c *Spclient) MetadataForTrack(ctx context.Context, track librespot.Spotify
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from track metadata: %d", resp.StatusCode)
+		return nil, fmt.Errorf("invalid status code from extended metadata: %d", resp.StatusCode)
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -261,46 +257,50 @@ func (c *Spclient) MetadataForTrack(ctx context.Context, track librespot.Spotify
 		return nil, fmt.Errorf("failed reading response body: %w", err)
 	}
 
-	var protoResp metadatapb.Track
+	var protoResp extmetadatapb.BatchedExtensionResponse
 	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling Track: %w", err)
+		return nil, fmt.Errorf("failed unmarshalling BatchedExtensionResponse: %w", err)
 	}
 
 	return &protoResp, nil
 }
 
-func (c *Spclient) MetadataForEpisode(ctx context.Context, episode librespot.SpotifyId) (*metadatapb.Episode, error) {
-	if episode.Type() != librespot.SpotifyIdTypeEpisode {
-		panic(fmt.Sprintf("invalid type: %s", episode.Type()))
-	}
-
-	reqUrl, err := url.Parse(fmt.Sprintf("https://spclient.wg.spotify.com/metadata/4/episode/%s", episode.Hex()))
+func (c *Spclient) ExtendedMetadataSimple(ctx context.Context, id librespot.SpotifyId, ext extmetadatapb.ExtensionKind, data proto.Message) error {
+	resp, err := c.ExtendedMetadata(ctx, &extmetadatapb.BatchedEntityRequest{
+		EntityRequest: []*extmetadatapb.EntityRequest{{
+			EntityUri: id.Uri(),
+			Query: []*extmetadatapb.ExtensionQuery{{
+				ExtensionKind: ext,
+			}},
+		}},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("invalid metadata episode URL: %w", err)
+		return err
 	}
 
-	resp, err := c.innerRequest(ctx, "GET", reqUrl, nil, nil, nil)
-	if err != nil {
-		return nil, err
+	for _, item := range resp.ExtendedMetadata {
+		if item.ExtensionKind != ext {
+			continue
+		}
+
+		for _, extData := range item.ExtensionData {
+			if extData.EntityUri != id.Uri() {
+				continue
+			}
+
+			if extData.Header.StatusCode != 200 {
+				return fmt.Errorf("extended metadata request returned status %d", extData.Header.StatusCode)
+			}
+
+			if err := extData.ExtensionData.UnmarshalTo(data); err != nil {
+				return fmt.Errorf("failed unmarshalling extended metadata data: %w", err)
+			}
+
+			return nil
+		}
 	}
 
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from episode metadata: %d", resp.StatusCode)
-	}
-
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed reading response body: %w", err)
-	}
-
-	var protoResp metadatapb.Episode
-	if err := proto.Unmarshal(respBytes, &protoResp); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling Episode: %w", err)
-	}
-
-	return &protoResp, nil
+	return fmt.Errorf("extended metadata with kind %s not found", ext)
 }
 
 func (c *Spclient) PlaylistSignals(ctx context.Context, playlist librespot.SpotifyId, reqProto *playlist4pb.ListSignals, lenses []string) (*playlist4pb.SelectedListContent, error) {
