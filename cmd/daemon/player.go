@@ -546,7 +546,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	}
 }
 
-func (p *AppPlayer) handleMprisEvent(ctx context.Context, req *mpris.MediaPlayer2PlayerCommand) error {
+func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
 	switch req.Type {
 	case mpris.MediaPlayer2PlayerCommandTypeNext:
 		return p.skipNext(ctx, p.state.tracks.PeekNext(ctx))
@@ -611,7 +611,7 @@ func (p *AppPlayer) Close() {
 	p.sess.Close()
 }
 
-func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRecv <-chan *mpris.MediaPlayer2PlayerCommand) {
+func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaPlayer2PlayerCommand) {
 	err := p.sess.Dealer().Connect(ctx)
 	if err != nil {
 		p.app.log.WithError(err).Error("failed connecting to dealer")
@@ -653,7 +653,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 		case mprisReq := <-mprisRecv:
 			p.app.log.Tracef("new mpris message %v", mprisReq)
 			err := p.handleMprisEvent(ctx, mprisReq)
-			dbusError := &mpris.MediaPlayer2PlayerCommandResponse{
+			dbusError := mpris.MediaPlayer2PlayerCommandResponse{
 				Err: &dbus.Error{},
 			}
 			if err != nil {

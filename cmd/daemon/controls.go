@@ -98,7 +98,7 @@ func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 	}
 
 	p.app.mpris.EmitStateUpdate(
-		&mpris.MprisState{
+		mpris.MprisState{
 			PlaybackStatus: playbackStatus,
 			LoopStatus: mpris.GetLoopStatus(
 				p.state.player.Options.RepeatingContext, p.state.player.Options.RepeatingTrack),
@@ -516,9 +516,11 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
 
-	p.app.mpris.EmitSeekUpdate(&mpris.MprisSeekState{
-		PositionMs: position,
-	})
+	p.app.mpris.EmitSeekUpdate(
+		mpris.MprisSeekState{
+			PositionMs: position,
+		},
+	)
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
