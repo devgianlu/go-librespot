@@ -187,8 +187,6 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 	case player.EventTypeNotPlaying:
 		p.sess.Events().OnPlayerEnd(p.primaryStream, p.state.trackPosition())
 
-		p.emitMprisUpdate(mpris.Stopped)
-
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
@@ -210,6 +208,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 					PlayOrigin: p.state.playOrigin(),
 				},
 			})
+			p.emitMprisUpdate(mpris.Stopped)
 		}
 	case player.EventTypeStop:
 		p.app.server.Emit(&ApiEvent{
