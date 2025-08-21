@@ -15,6 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devgianlu/go-librespot/mpris"
+	"github.com/godbus/dbus/v5"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -560,13 +563,72 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	}
 }
 
+func (p *AppPlayer) handleMprisEvent(ctx context.Context, req *mpris.MediaPlayer2PlayerCommand) error {
+	switch req.Type {
+	case mpris.MediaPlayer2PlayerCommandTypeNext:
+		return p.skipNext(ctx, p.state.tracks.PeekNext(ctx))
+	case mpris.MediaPlayer2PlayerCommandTypePrevious:
+		return p.skipPrev(ctx, true)
+	case mpris.MediaPlayer2PlayerCommandTypePlay:
+		return p.player.Play()
+	case mpris.MediaPlayer2PlayerCommandTypePause:
+		return p.player.Pause()
+	case mpris.MediaPlayer2PlayerCommandTypePlayPause:
+		if p.state.player.IsPaused {
+			return p.player.Play()
+		} else {
+			return p.player.Pause()
+		}
+	case mpris.MediaPlayer2PlayerCommandTypeStop:
+		// fixme: no response
+		p.player.Stop()
+		return nil
+	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
+		log.Tracef("mpris loop status argument %s", req.Argument)
+		dt := req.Argument
+		t := true
+		f := false
+		switch dt {
+		case mpris.None:
+			p.setOptions(ctx, &f, &f, nil)
+		case mpris.Playlist:
+			p.setOptions(ctx, &t, &f, nil)
+		case mpris.Track:
+			p.setOptions(ctx, &t, &t, nil)
+		default:
+			log.Warnf("mpris loop status argument is invalid (%s)", req.Argument)
+		}
+		return nil
+	case mpris.MediaPlayer2PlayerCommandShuffleChanged:
+		sh := req.Argument.(bool)
+		p.setOptions(ctx, nil, nil, &sh)
+		return nil
+	case mpris.MediaPlayer2PlayerCommandVolumeChanged:
+		volRelative := req.Argument.(float64)
+		volAbs := uint32(player.MaxStateVolume * volRelative)
+
+		p.updateVolume(volAbs)
+		return nil
+	case mpris.MediaPlayer2PlayerCommandTypeSetPosition:
+		newPositionAbs := req.Argument.([2]any)[1].(int64) / 1000
+		return p.seek(ctx, newPositionAbs)
+	case mpris.MediaPlayer2PlayerCommandTypeSeek:
+		newPosAbs := p.player.PositionMs() + req.Argument.(int64)/1000
+		return p.seek(ctx, newPosAbs)
+	case mpris.MediaPlayer2PlayerCommandTypeOpenUri, mpris.MediaPlayer2PlayerCommandRateChanged:
+		log.Warnf("unimplemented mpris event %d", req.Type)
+		return fmt.Errorf("unimplemented mpris event %d", req.Type)
+	}
+	return nil
+}
+
 func (p *AppPlayer) Close() {
 	p.stop <- struct{}{}
 	p.player.Close()
 	p.sess.Close()
 }
 
-func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
+func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRecv <-chan *mpris.MediaPlayer2PlayerCommand) {
 	err := p.sess.Dealer().Connect(ctx)
 	if err != nil {
 		p.app.log.WithError(err).Error("failed connecting to dealer")
@@ -605,6 +667,18 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 		case req := <-apiRecv:
 			data, err := p.handleApiRequest(ctx, req)
 			req.Reply(data, err)
+		case mprisReq := <-mprisRecv:
+			p.app.log.Tracef("new mpris message %v", mprisReq)
+			err := p.handleMprisEvent(ctx, mprisReq)
+			dbusError := &mpris.MediaPlayer2PlayerCommandResponse{
+				Err: &dbus.Error{},
+			}
+			if err != nil {
+				dbusError.Err.Name = err.Error()
+			} else {
+				dbusError.Err = nil
+			}
+			mprisReq.Reply(dbusError)
 		case ev := <-playerRecv:
 			p.handlePlayerEvent(ctx, &ev)
 		case volume := <-p.volumeUpdate:

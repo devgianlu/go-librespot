@@ -84,6 +84,7 @@ message Track {
   optional string original_title = 27;
   optional string version_title = 28;
   repeated ArtistWithRole artist_with_role = 32;
+  optional string track_uri = 36;
 }
 
 message ArtistWithRole {
