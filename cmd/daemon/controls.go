@@ -78,6 +78,25 @@ func (p *AppPlayer) schedulePrefetchNext() {
 }
 
 func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
+	if p.state == nil {
+		return
+	}
+	if p.state.player == nil {
+		return
+	}
+	if p.state.player.Options == nil {
+		return
+	}
+	if p.state.device == nil {
+		return
+	}
+	if p.primaryStream == nil {
+		return
+	}
+	if p.primaryStream.Media == nil {
+		return
+	}
+
 	p.app.mpris.EmitStateUpdate(
 		&mpris.MprisState{
 			PlaybackStatus: playbackStatus,
@@ -709,4 +728,27 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 			Max:   p.app.cfg.VolumeSteps,
 		},
 	})
+}
+
+func (p *AppPlayer) Stop(ctx context.Context) error {
+	p.player.Stop()
+	p.primaryStream = nil
+	p.secondaryStream = nil
+
+	p.state.reset()
+	if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
+		return fmt.Errorf("failed inactive state put: %w", err)
+	}
+
+	p.schedulePrefetchNext()
+
+	if p.app.cfg.ZeroconfEnabled {
+		p.logout <- p
+	}
+
+	p.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeInactive,
+	})
+
+	return nil
 }

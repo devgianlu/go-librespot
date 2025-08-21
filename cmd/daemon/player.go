@@ -121,24 +121,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		}
 		p.app.log.Infof("playback was transferred to %s", name)
 
-		p.player.Stop()
-		p.primaryStream = nil
-		p.secondaryStream = nil
-
-		p.state.reset()
-		if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
-			return fmt.Errorf("failed inactive state put: %w", err)
-		}
-
-		p.schedulePrefetchNext()
-
-		if p.app.cfg.ZeroconfEnabled {
-			p.logout <- p
-		}
-
-		p.app.server.Emit(&ApiEvent{
-			Type: ApiEventTypeInactive,
-		})
+		return p.Stop(ctx)
 	}
 
 	return nil
@@ -580,9 +563,7 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req *mpris.MediaPlayer
 			return p.player.Pause()
 		}
 	case mpris.MediaPlayer2PlayerCommandTypeStop:
-		// fixme: no response
-		p.player.Stop()
-		return nil
+		return p.Stop(ctx)
 	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
 		log.Tracef("mpris loop status argument %s", req.Argument)
 		dt := req.Argument
@@ -610,7 +591,9 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req *mpris.MediaPlayer
 		p.updateVolume(volAbs)
 		return nil
 	case mpris.MediaPlayer2PlayerCommandTypeSetPosition:
-		newPositionAbs := req.Argument.([2]any)[1].(int64) / 1000
+		arg := req.Argument.(mpris.MediaPlayer2CommandSetPositionPayload)
+
+		newPositionAbs := arg.PositionUs / 1000
 		return p.seek(ctx, newPositionAbs)
 	case mpris.MediaPlayer2PlayerCommandTypeSeek:
 		newPosAbs := p.player.PositionMs() + req.Argument.(int64)/1000
