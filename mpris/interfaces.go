@@ -61,19 +61,19 @@ func (r MediaPlayer2RootInterface) Quit() *dbus.Error {
 type MediaPlayer2PlayerCommandType int32
 
 const (
-	MediaPlayer2PlayerCommandTypeNext          MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypePrevious      MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypePause         MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypePlayPause     MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypeStop          MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypePlay          MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypeSeek          MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypeSetPosition   MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypeOpenUri       MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandLoopStatusChanged MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandRateChanged       MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandShuffleChanged    MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandVolumeChanged     MediaPlayer2PlayerCommandType = iota
+	MediaPlayer2PlayerCommandTypeNext MediaPlayer2PlayerCommandType = iota
+	MediaPlayer2PlayerCommandTypePrevious
+	MediaPlayer2PlayerCommandTypePause
+	MediaPlayer2PlayerCommandTypePlayPause
+	MediaPlayer2PlayerCommandTypeStop
+	MediaPlayer2PlayerCommandTypePlay
+	MediaPlayer2PlayerCommandTypeSeek
+	MediaPlayer2PlayerCommandTypeSetPosition
+	MediaPlayer2PlayerCommandTypeOpenUri
+	MediaPlayer2PlayerCommandLoopStatusChanged
+	MediaPlayer2PlayerCommandRateChanged
+	MediaPlayer2PlayerCommandShuffleChanged
+	MediaPlayer2PlayerCommandVolumeChanged
 )
 
 type MediaPlayer2PlayerCommandResponse struct {
