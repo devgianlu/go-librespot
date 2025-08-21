@@ -17,7 +17,6 @@ import (
 
 	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/godbus/dbus/v5"
-	log "github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/proto"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -569,7 +568,7 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 	case mpris.MediaPlayer2PlayerCommandTypeStop:
 		return p.stopPlayback(ctx)
 	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
-		log.Tracef("mpris loop status argument %s", req.Argument)
+		p.app.log.Tracef("mpris loop status argument %s", req.Argument)
 		dt := req.Argument
 		switch dt {
 		case mpris.None:
@@ -579,7 +578,7 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 		case mpris.Track:
 			p.setOptions(ctx, pointer(true), pointer(true), nil)
 		default:
-			log.Warnf("mpris loop status argument is invalid (%s)", req.Argument)
+			p.app.log.Warnf("mpris loop status argument is invalid (%s)", req.Argument)
 		}
 		return nil
 	case mpris.MediaPlayer2PlayerCommandShuffleChanged:
@@ -595,7 +594,7 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 	case mpris.MediaPlayer2PlayerCommandTypeSetPosition:
 		arg := req.Argument.(mpris.MediaPlayer2CommandSetPositionPayload)
 
-		log.Tracef("media player set position argument: %v", arg)
+		p.app.log.Tracef("media player set position argument: %v", arg)
 
 		if arg.ObjectPath.IsValid() {
 			spotifyId := strings.Join(strings.Split(string(arg.ObjectPath), "/")[3:], ":")
@@ -610,7 +609,7 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 		newPosAbs := p.player.PositionMs() + req.Argument.(int64)/1000
 		return p.seek(ctx, newPosAbs)
 	case mpris.MediaPlayer2PlayerCommandTypeOpenUri, mpris.MediaPlayer2PlayerCommandRateChanged:
-		log.Warnf("unimplemented mpris event %d", req.Type)
+		p.app.log.Warnf("unimplemented mpris event %d", req.Type)
 		return fmt.Errorf("unimplemented mpris event %d", req.Type)
 	}
 	return nil
