@@ -35,8 +35,8 @@ type MediaState struct {
 	Shuffle        bool
 	Volume         float64
 	PositionMs     int64
-	Uri            string
-	Media          *librespot.Media
+	Uri            *string          // nilable
+	Media          *librespot.Media // nilable
 }
 
 type SeekState struct {
@@ -79,34 +79,41 @@ func artUrl(fileId []uint8) string {
 	return "https://i.scdn.co/image/" + hex.EncodeToString(fileId)
 }
 
-func makeMetadata(uri string, media *librespot.Media) map[string]any {
+func makeMetadata(uri *string, media *librespot.Media) map[string]any {
+	// uri and media can both be nil here
+	// todo: what should happen here if uri/media are nil, should the old values be retained or overridden with nil
+	// => cross-reference other implementations
+
 	m := make(map[string]any)
 
-	if media.IsTrack() {
-		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(uri, ":", "/", -1))
-		m["mpris:length"] = media.Track().GetDuration() * 1000 // convert from ms to us
-		m["mpris:artUrl"] = artUrl(last(media.Track().GetAlbum().GetCoverGroup().GetImage()).FileId)
-		m["xesam:album"] = media.Track().Album.Name
-		m["xesam:albumArtist"] = Map(media.Track().Album.Artist, func(f *metadata.Artist) *string { return f.Name })
-		m["xesam:artist"] = Map(media.Track().Artist, func(f *metadata.Artist) *string { return f.Name })
-		m["xesam:autoRating"] = float64(*media.Track().Popularity) / 100.0
-		m["xesam:discNumber"] = *media.Track().DiscNumber
-		m["xesam:title"] = *media.Track().Name
-		m["xesam:trackNumber"] = *media.Track().Number
-		m["xesam:url"] = "https://open.spotify.com/track/" + last_(strings.Split(uri, ":"))
+	if uri != nil {
+		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(*uri, ":", "/", -1))
+		m["xesam:url"] = "https://open.spotify.com/track/" + last_(strings.Split(*uri, ":"))
 	}
-	if media.IsEpisode() {
-		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(uri, ":", "/", -1))
-		m["mpris:length"] = media.Episode().GetDuration() * 1000
-		m["mpris:artUrl"] = artUrl(last(media.Episode().GetCoverImage().GetImage()).FileId)
-		m["xesam:album"] = media.Episode().GetShow().GetName()
-		m["xesam:albumArtist"] = [1]string{media.Episode().GetShow().GetName()}
-		m["xesam:artist"] = [1]string{media.Episode().GetShow().GetName()}
-		m["xesam:autoRating"] = 1
-		m["xesam:discNumber"] = 1
-		m["xesam:title"] = media.Episode().GetName()
-		m["xesam:trackNumber"] = 1
-		m["xesam:url"] = "https://open.spotify.com/episode/" + last_(strings.Split(uri, ":"))
+
+	if media != nil {
+		if media.IsTrack() {
+			m["mpris:length"] = media.Track().GetDuration() * 1000 // convert from ms to us
+			m["mpris:artUrl"] = artUrl(last(media.Track().GetAlbum().GetCoverGroup().GetImage()).FileId)
+			m["xesam:album"] = media.Track().Album.Name
+			m["xesam:albumArtist"] = Map(media.Track().Album.Artist, func(f *metadata.Artist) *string { return f.Name })
+			m["xesam:artist"] = Map(media.Track().Artist, func(f *metadata.Artist) *string { return f.Name })
+			m["xesam:autoRating"] = float64(*media.Track().Popularity) / 100.0
+			m["xesam:discNumber"] = *media.Track().DiscNumber
+			m["xesam:title"] = *media.Track().Name
+			m["xesam:trackNumber"] = *media.Track().Number
+		}
+		if media.IsEpisode() {
+			m["mpris:length"] = media.Episode().GetDuration() * 1000
+			m["mpris:artUrl"] = artUrl(last(media.Episode().GetCoverImage().GetImage()).FileId)
+			m["xesam:album"] = media.Episode().GetShow().GetName()
+			m["xesam:albumArtist"] = [1]string{media.Episode().GetShow().GetName()}
+			m["xesam:artist"] = [1]string{media.Episode().GetShow().GetName()}
+			m["xesam:autoRating"] = 1
+			m["xesam:discNumber"] = 1
+			m["xesam:title"] = media.Episode().GetName()
+			m["xesam:trackNumber"] = 1
+		}
 	}
 	return m
 }

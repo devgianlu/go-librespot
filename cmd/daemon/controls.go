@@ -78,27 +78,15 @@ func (p *AppPlayer) schedulePrefetchNext() {
 }
 
 func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
-	// todo: stupid solution, but not sure when members are nil and when not
-	if p.state == nil {
-		return
+	// p.state, p.state.player, p.state.device, p.state.player.Options are assumed to always be non-nil here
+
+	var trackUri *string = nil
+	var media *librespot.Media = nil
+	if p.state.player.Track != nil {
+		trackUri = &p.state.player.Track.Uri
 	}
-	if p.state.player == nil {
-		return
-	}
-	if p.state.player.Options == nil {
-		return
-	}
-	if p.state.player.Track == nil {
-		return
-	}
-	if p.state.device == nil {
-		return
-	}
-	if p.primaryStream == nil {
-		return
-	}
-	if p.primaryStream.Media == nil {
-		return
+	if p.primaryStream != nil {
+		media = p.primaryStream.Media
 	}
 
 	p.app.mpris.EmitStateUpdate(
@@ -109,8 +97,8 @@ func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 			Shuffle:    p.state.player.Options.ShufflingContext,
 			Volume:     float64(p.state.device.Volume) / float64(player.MaxStateVolume),
 			PositionMs: p.state.player.Position,
-			Uri:        p.state.player.Track.Uri,
-			Media:      p.primaryStream.Media,
+			Uri:        trackUri,
+			Media:      media,
 		},
 	)
 }
