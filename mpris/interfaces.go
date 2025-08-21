@@ -44,17 +44,18 @@ var mediaPlayer2Props = map[string]*prop.Prop{
 
 // MediaPlayer2RootInterface : empty, does not do much
 type MediaPlayer2RootInterface struct {
+	log *log.Logger
 }
 
 func (r MediaPlayer2RootInterface) Raise() *dbus.Error {
 	// never implement, because there is no "window-raising" to be done in a cli application
-	log.Tracef("PlayerInterface::Raise")
+	r.log.Tracef("PlayerInterface::Raise")
 	return nil
 }
 
 func (r MediaPlayer2RootInterface) Quit() *dbus.Error {
 	// not yet implemented, because the web api also does not support it
-	log.Tracef("PlayerInterface::Quit")
+	r.log.Tracef("PlayerInterface::Quit")
 	return nil
 }
 
@@ -91,6 +92,8 @@ func (m *MediaPlayer2PlayerCommand) Reply(resp MediaPlayer2PlayerCommandResponse
 }
 
 type MediaPlayer2PlayerInterface struct {
+	log *log.Logger
+
 	commands chan MediaPlayer2PlayerCommand
 }
 
@@ -125,18 +128,18 @@ func (p MediaPlayer2PlayerInterface) enqueueCommand(command MediaPlayer2PlayerCo
 		resp := <-command.response
 
 		if resp.Err != nil {
-			log.Tracef("mpris command %v returned an error %s", command, resp.Err)
+			p.log.Tracef("mpris command %v returned an error %s", command, resp.Err)
 		}
 
 		return resp.Err
 	default:
-		log.Tracef("mpris command not enqueued, because there was no listener registered")
+		p.log.Tracef("mpris command not enqueued, because there was no listener registered")
 		return nil
 	}
 }
 
 func (p MediaPlayer2PlayerInterface) shuffleChanged(change *prop.Change) *dbus.Error {
-	log.Tracef("PlayerInterface::shuffleChanged")
+	p.log.Tracef("PlayerInterface::shuffleChanged")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -147,7 +150,7 @@ func (p MediaPlayer2PlayerInterface) shuffleChanged(change *prop.Change) *dbus.E
 }
 
 func (p MediaPlayer2PlayerInterface) loopStatusChanged(change *prop.Change) *dbus.Error {
-	log.Tracef("PlayerInterface::loopStatusChanged")
+	p.log.Tracef("PlayerInterface::loopStatusChanged")
 
 	// stupid, because sometimes the value gets parsed as LoopStatus, sometime as string, no idea why
 	value := change.Value
@@ -164,7 +167,7 @@ func (p MediaPlayer2PlayerInterface) loopStatusChanged(change *prop.Change) *dbu
 }
 
 func (p MediaPlayer2PlayerInterface) volumeChanged(change *prop.Change) *dbus.Error {
-	log.Tracef("PlayerInterface::volumeChanged")
+	p.log.Tracef("PlayerInterface::volumeChanged")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -175,7 +178,7 @@ func (p MediaPlayer2PlayerInterface) volumeChanged(change *prop.Change) *dbus.Er
 }
 
 func (p MediaPlayer2PlayerInterface) Next() *dbus.Error {
-	log.Tracef("PlayerInterface::Next")
+	p.log.Tracef("PlayerInterface::Next")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -184,7 +187,7 @@ func (p MediaPlayer2PlayerInterface) Next() *dbus.Error {
 	)
 }
 func (p MediaPlayer2PlayerInterface) Previous() *dbus.Error {
-	log.Tracef("PlayerInterface::Previous")
+	p.log.Tracef("PlayerInterface::Previous")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -194,7 +197,7 @@ func (p MediaPlayer2PlayerInterface) Previous() *dbus.Error {
 
 }
 func (p MediaPlayer2PlayerInterface) Pause() *dbus.Error {
-	log.Tracef("PlayerInterface::Pause")
+	p.log.Tracef("PlayerInterface::Pause")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -203,7 +206,7 @@ func (p MediaPlayer2PlayerInterface) Pause() *dbus.Error {
 	)
 }
 func (p MediaPlayer2PlayerInterface) PlayPause() *dbus.Error {
-	log.Tracef("PlayerInterface::PlayPause")
+	p.log.Tracef("PlayerInterface::PlayPause")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -212,7 +215,7 @@ func (p MediaPlayer2PlayerInterface) PlayPause() *dbus.Error {
 	)
 }
 func (p MediaPlayer2PlayerInterface) Stop() *dbus.Error {
-	log.Tracef("PlayerInterface::Stop")
+	p.log.Tracef("PlayerInterface::Stop")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -221,7 +224,7 @@ func (p MediaPlayer2PlayerInterface) Stop() *dbus.Error {
 	)
 }
 func (p MediaPlayer2PlayerInterface) Play() *dbus.Error {
-	log.Tracef("PlayerInterface::Play")
+	p.log.Tracef("PlayerInterface::Play")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -230,7 +233,7 @@ func (p MediaPlayer2PlayerInterface) Play() *dbus.Error {
 	)
 }
 func (p MediaPlayer2PlayerInterface) Seek(x int64) *dbus.Error {
-	log.Tracef("PlayerInterface::Seek")
+	p.log.Tracef("PlayerInterface::Seek")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -246,7 +249,7 @@ type MediaPlayer2CommandSetPositionPayload struct {
 }
 
 func (p MediaPlayer2PlayerInterface) SetPosition(o dbus.ObjectPath, x int64) *dbus.Error {
-	log.Tracef("PlayerInterface::SetPosition")
+	p.log.Tracef("PlayerInterface::SetPosition")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -256,7 +259,7 @@ func (p MediaPlayer2PlayerInterface) SetPosition(o dbus.ObjectPath, x int64) *db
 	)
 }
 func (p MediaPlayer2PlayerInterface) OpenUri(s dbus.ObjectPath) *dbus.Error {
-	log.Tracef("PlayerInterface::OpenUri")
+	p.log.Tracef("PlayerInterface::OpenUri")
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{

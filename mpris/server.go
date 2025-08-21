@@ -47,6 +47,8 @@ type Server interface {
 	EmitStateUpdate(state MediaState)
 	EmitSeekUpdate(state SeekState)
 	Receive() <-chan MediaPlayer2PlayerCommand
+
+	Close()
 }
 
 type ConcreteServer struct {
@@ -55,6 +57,9 @@ type ConcreteServer struct {
 	playerInterface MediaPlayer2PlayerInterface
 
 	lastUploadedState MediaState
+	closed            bool
+
+	log *log.Logger
 
 	stateChannel chan MediaState
 	seekChannel  chan SeekState
@@ -143,41 +148,41 @@ func (s *ConcreteServer) Receive() <-chan MediaPlayer2PlayerCommand {
 func (s *ConcreteServer) executeStateUpdate(state MediaState) *dbus.Error {
 	if state.PlaybackStatus != s.lastUploadedState.PlaybackStatus {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "PlaybackStatus", state.PlaybackStatus); err != nil {
-			log.Warnf("error executing mpris state update (playbackStatus) %s", err)
+			s.log.Warnf("error executing mpris state update (playbackStatus) %s", err)
 			return err
 		}
 	}
 	if state.LoopStatus != s.lastUploadedState.LoopStatus {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "LoopStatus", state.LoopStatus); err != nil {
-			log.Warnf("error executing mpris state update (loopStatus) %s", err)
+			s.log.Warnf("error executing mpris state update (loopStatus) %s", err)
 			return err
 		}
 	}
 	if state.Shuffle != s.lastUploadedState.Shuffle {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Shuffle", state.Shuffle); err != nil {
-			log.Warnf("error executing mpris state update (shuffle) %s", err)
+			s.log.Warnf("error executing mpris state update (shuffle) %s", err)
 			return err
 		}
 	}
 	if state.Volume != s.lastUploadedState.Volume {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Volume", state.Volume); err != nil {
-			log.Warnf("error executing mpris state update (volume) %s", err)
+			s.log.Warnf("error executing mpris state update (volume) %s", err)
 			return err
 		}
 	}
 	if state.PositionMs != s.lastUploadedState.PositionMs {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs); err != nil {
-			log.Warnf("error executing mpris state update (position) %s", err)
+			s.log.Warnf("error executing mpris state update (position) %s", err)
 			return err
 		}
 	}
 	if state.Media != s.lastUploadedState.Media {
 		mt := makeMetadata(state.Uri, state.Media)
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Metadata", mt); err != nil {
-			log.Warnf("error executing mpris state update (media) %s %s", err, mt)
+			s.log.Warnf("error executing mpris state update (media) %s %s", err, mt)
 			return err
 		}
-		log.Tracef("successfully updated metadata %s", mt)
+		s.log.Tracef("successfully updated metadata %s", mt)
 	}
 	return nil
 }
@@ -191,7 +196,7 @@ func (s *ConcreteServer) executeSeekSignal(state SeekState) error {
 }
 
 func (s *ConcreteServer) waitOnChannel() {
-	for {
+	for !s.closed {
 		select {
 		case state := <-s.stateChannel:
 			err := s.executeStateUpdate(state)
@@ -202,21 +207,44 @@ func (s *ConcreteServer) waitOnChannel() {
 		case seekState := <-s.seekChannel:
 			err := s.executeSeekSignal(seekState)
 			if err != nil {
-				log.Warnf("error executing mpris state seek %s", err)
+				s.log.Warnf("error executing mpris state seek %s", err)
 			}
 		}
 	}
 }
 
 func (s *ConcreteServer) Close() {
+	s.closed = true
+
 	close(s.seekChannel)
 	close(s.stateChannel)
 	s.dbus.conn.Close()
 }
 
-// opens the dbus connection and registers everything important
-func NewServer() (_ *ConcreteServer, err error) {
-	s := &ConcreteServer{}
+// NewServer opens the dbus connection and registers everything important
+func NewServer(logger *log.Logger) (_ *ConcreteServer, err error) {
+	s := &ConcreteServer{
+		log: logger,
+		rootInterface: MediaPlayer2RootInterface{
+			log: logger,
+		},
+		playerInterface: MediaPlayer2PlayerInterface{
+			log: logger,
+
+			commands: make(chan MediaPlayer2PlayerCommand),
+		},
+		lastUploadedState: MediaState{
+			PlaybackStatus: Stopped,
+			LoopStatus:     None,
+			Shuffle:        false,
+			Volume:         0,
+			PositionMs:     0,
+			Media:          nil,
+		},
+		closed:       false,
+		stateChannel: make(chan MediaState),
+		seekChannel:  make(chan SeekState),
+	}
 
 	conn, err := dbus.SessionBus()
 	if err != nil {
@@ -225,11 +253,6 @@ func NewServer() (_ *ConcreteServer, err error) {
 
 	s.dbus = &DBusInstance{
 		conn: conn,
-	}
-
-	s.rootInterface = MediaPlayer2RootInterface{}
-	s.playerInterface = MediaPlayer2PlayerInterface{
-		commands: make(chan MediaPlayer2PlayerCommand),
 	}
 
 	s.dbus.props, err = prop.Export(
@@ -258,24 +281,12 @@ func NewServer() (_ *ConcreteServer, err error) {
 		return nil, err
 	}
 
-	s.lastUploadedState = MediaState{
-		PlaybackStatus: Stopped,
-		LoopStatus:     None,
-		Shuffle:        false,
-		Volume:         0,
-		PositionMs:     0,
-		Media:          nil,
-	}
-
 	if dbusErr := s.executeStateUpdate(s.lastUploadedState); dbusErr != nil {
 		return nil, err
 	}
-	s.stateChannel = make(chan MediaState)
-	s.seekChannel = make(chan SeekState)
-
 	go s.waitOnChannel()
 
-	log.Debugf("created mpris server")
+	s.log.Debugf("created mpris server")
 
 	return s, nil
 }
@@ -292,3 +303,5 @@ func (d DummyServer) EmitSeekUpdate(_ SeekState) {
 func (d DummyServer) Receive() <-chan MediaPlayer2PlayerCommand {
 	return make(<-chan MediaPlayer2PlayerCommand)
 }
+
+func (d DummyServer) Close() {}
