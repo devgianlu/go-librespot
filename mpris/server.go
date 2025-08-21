@@ -29,22 +29,23 @@ func (d *DBusInstance) setProperty(interfaceName string, fieldName string, value
 	return nil
 }
 
-type MprisState struct {
+type MediaState struct {
 	PlaybackStatus PlaybackStatus
 	LoopStatus     LoopStatus
 	Shuffle        bool
 	Volume         float64
 	PositionMs     int64
+	Uri            string
 	Media          *librespot.Media
 }
 
-type MprisSeekState struct {
+type SeekState struct {
 	PositionMs int64
 }
 
 type Server interface {
-	EmitStateUpdate(state MprisState)
-	EmitSeekUpdate(state MprisSeekState)
+	EmitStateUpdate(state MediaState)
+	EmitSeekUpdate(state SeekState)
 	Receive() <-chan MediaPlayer2PlayerCommand
 }
 
@@ -53,10 +54,10 @@ type ConcreteServer struct {
 	rootInterface   MediaPlayer2RootInterface
 	playerInterface MediaPlayer2PlayerInterface
 
-	lastUploadedState MprisState
+	lastUploadedState MediaState
 
-	stateChannel chan MprisState
-	seekChannel  chan MprisSeekState
+	stateChannel chan MediaState
+	seekChannel  chan SeekState
 }
 
 func last[T any](a []*T) *T {
@@ -78,24 +79,24 @@ func artUrl(fileId []uint8) string {
 	return "https://i.scdn.co/image/" + hex.EncodeToString(fileId)
 }
 
-func makeMetadata(media *librespot.Media) map[string]any {
+func makeMetadata(uri string, media *librespot.Media) map[string]any {
 	m := make(map[string]any)
 
 	if media.IsTrack() {
-		m["mpris:trackid"] = dbus.ObjectPath("/com/" + strings.Replace(*media.Track().TrackUri, ":", "/", -1))
+		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(uri, ":", "/", -1))
 		m["mpris:length"] = media.Track().GetDuration() * 1000 // convert from ms to us
 		m["mpris:artUrl"] = artUrl(last(media.Track().GetAlbum().GetCoverGroup().GetImage()).FileId)
 		m["xesam:album"] = media.Track().Album.Name
 		m["xesam:albumArtist"] = Map(media.Track().Album.Artist, func(f *metadata.Artist) *string { return f.Name })
 		m["xesam:artist"] = Map(media.Track().Artist, func(f *metadata.Artist) *string { return f.Name })
-		m["xesam:autoRating"] = 1
+		m["xesam:autoRating"] = float64(*media.Track().Popularity) / 100.0
 		m["xesam:discNumber"] = *media.Track().DiscNumber
 		m["xesam:title"] = *media.Track().Name
 		m["xesam:trackNumber"] = *media.Track().Number
-		m["xesam:url"] = "https://open.spotify.com/track/" + last_(strings.Split(*media.Track().TrackUri, ":"))
+		m["xesam:url"] = "https://open.spotify.com/track/" + last_(strings.Split(uri, ":"))
 	}
 	if media.IsEpisode() {
-		m["mpris:trackid"] = "" // todo: "/com/spotify/episode/" + hex.EncodeToString(media.Episode().Gid
+		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(uri, ":", "/", -1))
 		m["mpris:length"] = media.Episode().GetDuration() * 1000
 		m["mpris:artUrl"] = artUrl(last(media.Episode().GetCoverImage().GetImage()).FileId)
 		m["xesam:album"] = media.Episode().GetShow().GetName()
@@ -105,7 +106,7 @@ func makeMetadata(media *librespot.Media) map[string]any {
 		m["xesam:discNumber"] = 1
 		m["xesam:title"] = media.Episode().GetName()
 		m["xesam:trackNumber"] = 1
-		m["xesam:url"] = "" // todo
+		m["xesam:url"] = "https://open.spotify.com/episode/" + last_(strings.Split(uri, ":"))
 	}
 	return m
 }
@@ -120,11 +121,11 @@ func GetLoopStatus(repeatingContext bool, repeatingTrack bool) LoopStatus {
 	return None
 }
 
-func (s *ConcreteServer) EmitStateUpdate(state MprisState) {
+func (s *ConcreteServer) EmitStateUpdate(state MediaState) {
 	s.stateChannel <- state
 }
 
-func (s *ConcreteServer) EmitSeekUpdate(state MprisSeekState) {
+func (s *ConcreteServer) EmitSeekUpdate(state SeekState) {
 	s.seekChannel <- state
 }
 
@@ -132,7 +133,7 @@ func (s *ConcreteServer) Receive() <-chan MediaPlayer2PlayerCommand {
 	return s.playerInterface.commands
 }
 
-func (s *ConcreteServer) executeStateUpdate(state MprisState) *dbus.Error {
+func (s *ConcreteServer) executeStateUpdate(state MediaState) *dbus.Error {
 	if state.PlaybackStatus != s.lastUploadedState.PlaybackStatus {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "PlaybackStatus", state.PlaybackStatus); err != nil {
 			log.Warnf("error executing mpris state update (playbackStatus) %s", err)
@@ -164,9 +165,9 @@ func (s *ConcreteServer) executeStateUpdate(state MprisState) *dbus.Error {
 		}
 	}
 	if state.Media != s.lastUploadedState.Media {
-		mt := makeMetadata(state.Media)
+		mt := makeMetadata(state.Uri, state.Media)
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Metadata", mt); err != nil {
-			log.Warnf("error executing mpris state update (media) %s", err)
+			log.Warnf("error executing mpris state update (media) %s %s", err, mt)
 			return err
 		}
 		log.Tracef("successfully updated metadata %s", mt)
@@ -174,7 +175,7 @@ func (s *ConcreteServer) executeStateUpdate(state MprisState) *dbus.Error {
 	return nil
 }
 
-func (s *ConcreteServer) executeSeekSignal(state MprisSeekState) error {
+func (s *ConcreteServer) executeSeekSignal(state SeekState) error {
 	return s.dbus.conn.Emit(
 		"/org/mpris/MediaPlayer2",
 		"org.mpris.MediaPlayer2.Player.Seeked",
@@ -250,7 +251,7 @@ func NewServer() (_ *ConcreteServer, err error) {
 		return nil, err
 	}
 
-	s.lastUploadedState = MprisState{
+	s.lastUploadedState = MediaState{
 		PlaybackStatus: Stopped,
 		LoopStatus:     None,
 		Shuffle:        false,
@@ -262,8 +263,8 @@ func NewServer() (_ *ConcreteServer, err error) {
 	if dbusErr := s.executeStateUpdate(s.lastUploadedState); dbusErr != nil {
 		return nil, err
 	}
-	s.stateChannel = make(chan MprisState)
-	s.seekChannel = make(chan MprisSeekState)
+	s.stateChannel = make(chan MediaState)
+	s.seekChannel = make(chan SeekState)
 
 	go s.waitOnChannel()
 
@@ -275,10 +276,10 @@ func NewServer() (_ *ConcreteServer, err error) {
 type DummyServer struct {
 }
 
-func (d DummyServer) EmitStateUpdate(_ MprisState) {
+func (d DummyServer) EmitStateUpdate(_ MediaState) {
 }
 
-func (d DummyServer) EmitSeekUpdate(_ MprisSeekState) {
+func (d DummyServer) EmitSeekUpdate(_ SeekState) {
 }
 
 func (d DummyServer) Receive() <-chan MediaPlayer2PlayerCommand {

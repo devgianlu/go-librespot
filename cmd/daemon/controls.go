@@ -78,6 +78,7 @@ func (p *AppPlayer) schedulePrefetchNext() {
 }
 
 func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
+	// todo: stupid solution, but not sure when members are nil and when not
 	if p.state == nil {
 		return
 	}
@@ -85,6 +86,9 @@ func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 		return
 	}
 	if p.state.player.Options == nil {
+		return
+	}
+	if p.state.player.Track == nil {
 		return
 	}
 	if p.state.device == nil {
@@ -98,13 +102,14 @@ func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 	}
 
 	p.app.mpris.EmitStateUpdate(
-		mpris.MprisState{
+		mpris.MediaState{
 			PlaybackStatus: playbackStatus,
 			LoopStatus: mpris.GetLoopStatus(
 				p.state.player.Options.RepeatingContext, p.state.player.Options.RepeatingTrack),
 			Shuffle:    p.state.player.Options.ShufflingContext,
 			Volume:     float64(p.state.device.Volume) / float64(player.MaxStateVolume),
 			PositionMs: p.state.player.Position,
+			Uri:        p.state.player.Track.Uri,
 			Media:      p.primaryStream.Media,
 		},
 	)
@@ -517,7 +522,7 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
 
 	p.app.mpris.EmitSeekUpdate(
-		mpris.MprisSeekState{
+		mpris.SeekState{
 			PositionMs: position,
 		},
 	)
