@@ -9,7 +9,6 @@ import (
 	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
-	log "github.com/sirupsen/logrus"
 )
 
 type DBusInstance struct {
@@ -59,7 +58,7 @@ type ConcreteServer struct {
 	lastUploadedState MediaState
 	closed            bool
 
-	log *log.Logger
+	log librespot.Logger
 
 	stateChannel chan MediaState
 	seekChannel  chan SeekState
@@ -222,7 +221,7 @@ func (s *ConcreteServer) Close() {
 }
 
 // NewServer opens the dbus connection and registers everything important
-func NewServer(logger *log.Logger) (_ *ConcreteServer, err error) {
+func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
 	s := &ConcreteServer{
 		log: logger,
 		rootInterface: MediaPlayer2RootInterface{

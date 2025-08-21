@@ -544,7 +544,7 @@ func main() {
 
 	// create mpris server if needed
 	if cfg.MprisEnabled {
-		app.mpris, err = mpris.NewServer()
+		app.mpris, err = mpris.NewServer(app.log)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating mpris server")
 		}

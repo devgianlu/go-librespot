@@ -3,9 +3,9 @@ package mpris
 import (
 	"reflect"
 
+	librespot "github.com/devgianlu/go-librespot"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
-	log "github.com/sirupsen/logrus"
 )
 
 type PlaybackStatus string
@@ -44,7 +44,7 @@ var mediaPlayer2Props = map[string]*prop.Prop{
 
 // MediaPlayer2RootInterface : empty, does not do much
 type MediaPlayer2RootInterface struct {
-	log *log.Logger
+	log librespot.Logger
 }
 
 func (r MediaPlayer2RootInterface) Raise() *dbus.Error {
@@ -92,7 +92,7 @@ func (m *MediaPlayer2PlayerCommand) Reply(resp MediaPlayer2PlayerCommandResponse
 }
 
 type MediaPlayer2PlayerInterface struct {
-	log *log.Logger
+	log librespot.Logger
 
 	commands chan MediaPlayer2PlayerCommand
 }
