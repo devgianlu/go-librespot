@@ -546,6 +546,10 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	}
 }
 
+func pointer[T any](d T) *T {
+	return &d
+}
+
 func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
 	switch req.Type {
 	case mpris.MediaPlayer2PlayerCommandTypeNext:
@@ -567,15 +571,13 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
 		log.Tracef("mpris loop status argument %s", req.Argument)
 		dt := req.Argument
-		t := true
-		f := false
 		switch dt {
 		case mpris.None:
-			p.setOptions(ctx, &f, &f, nil)
+			p.setOptions(ctx, pointer(false), pointer(false), nil)
 		case mpris.Playlist:
-			p.setOptions(ctx, &t, &f, nil)
+			p.setOptions(ctx, pointer(true), pointer(false), nil)
 		case mpris.Track:
-			p.setOptions(ctx, &t, &t, nil)
+			p.setOptions(ctx, pointer(true), pointer(true), nil)
 		default:
 			log.Warnf("mpris loop status argument is invalid (%s)", req.Argument)
 		}
