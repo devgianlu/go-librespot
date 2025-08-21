@@ -593,6 +593,15 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 	case mpris.MediaPlayer2PlayerCommandTypeSetPosition:
 		arg := req.Argument.(mpris.MediaPlayer2CommandSetPositionPayload)
 
+		log.Tracef("media player set position argument: %v", arg)
+
+		if arg.ObjectPath.IsValid() {
+			spotifyId := strings.Join(strings.Split(string(arg.ObjectPath), "/")[3:], ":")
+			if spotifyId != p.state.player.Track.Uri {
+				return fmt.Errorf("seek tries to jump to different uri, not yet supported (got: %s, expected: %s)", spotifyId, p.state.player.Track.Uri)
+			}
+		}
+
 		newPositionAbs := arg.PositionUs / 1000
 		return p.seek(ctx, newPositionAbs)
 	case mpris.MediaPlayer2PlayerCommandTypeSeek:

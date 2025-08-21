@@ -123,6 +123,11 @@ func (p MediaPlayer2PlayerInterface) enqueueCommand(command MediaPlayer2PlayerCo
 	select {
 	case p.commands <- command:
 		resp := <-command.response
+
+		if resp.Err != nil {
+			log.Tracef("mpris command %v returned an error %s", command, resp.Err)
+		}
+
 		return resp.Err
 	default:
 		log.Tracef("mpris command not enqueued, because there was no listener registered")
