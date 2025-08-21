@@ -736,7 +736,7 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 	})
 }
 
-func (p *AppPlayer) Stop(ctx context.Context) error {
+func (p *AppPlayer) stopPlayback(ctx context.Context) error {
 	p.player.Stop()
 	p.primaryStream = nil
 	p.secondaryStream = nil

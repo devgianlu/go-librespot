@@ -121,7 +121,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		}
 		p.app.log.Infof("playback was transferred to %s", name)
 
-		return p.Stop(ctx)
+		return p.stopPlayback(ctx)
 	}
 
 	return nil
@@ -549,21 +549,21 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
 	switch req.Type {
 	case mpris.MediaPlayer2PlayerCommandTypeNext:
-		return p.skipNext(ctx, p.state.tracks.PeekNext(ctx))
+		return p.skipNext(ctx, nil)
 	case mpris.MediaPlayer2PlayerCommandTypePrevious:
 		return p.skipPrev(ctx, true)
 	case mpris.MediaPlayer2PlayerCommandTypePlay:
-		return p.player.Play()
+		return p.play(ctx)
 	case mpris.MediaPlayer2PlayerCommandTypePause:
-		return p.player.Pause()
+		return p.pause(ctx)
 	case mpris.MediaPlayer2PlayerCommandTypePlayPause:
 		if p.state.player.IsPaused {
-			return p.player.Play()
+			return p.play(ctx)
 		} else {
-			return p.player.Pause()
+			return p.pause(ctx)
 		}
 	case mpris.MediaPlayer2PlayerCommandTypeStop:
-		return p.Stop(ctx)
+		return p.stopPlayback(ctx)
 	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
 		log.Tracef("mpris loop status argument %s", req.Argument)
 		dt := req.Argument
