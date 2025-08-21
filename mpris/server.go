@@ -1,0 +1,306 @@
+package mpris
+
+import (
+	"encoding/hex"
+	"errors"
+	"strings"
+
+	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/prop"
+)
+
+type DBusInstance struct {
+	props *prop.Properties
+	conn  *dbus.Conn
+}
+
+func (d *DBusInstance) setProperty(interfaceName string, fieldName string, value interface{}) *dbus.Error {
+	err := d.props.Set(
+		interfaceName,
+		fieldName,
+		dbus.MakeVariant(value),
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type MediaState struct {
+	PlaybackStatus PlaybackStatus
+	LoopStatus     LoopStatus
+	Shuffle        bool
+	Volume         float64
+	PositionMs     int64
+	Uri            *string          // nilable
+	Media          *librespot.Media // nilable
+}
+
+type SeekState struct {
+	PositionMs int64
+}
+
+type Server interface {
+	EmitStateUpdate(state MediaState)
+	EmitSeekUpdate(state SeekState)
+	Receive() <-chan MediaPlayer2PlayerCommand
+
+	Close()
+}
+
+type ConcreteServer struct {
+	dbus            *DBusInstance
+	rootInterface   MediaPlayer2RootInterface
+	playerInterface MediaPlayer2PlayerInterface
+
+	lastUploadedState MediaState
+	closed            bool
+
+	log librespot.Logger
+
+	stateChannel chan MediaState
+	seekChannel  chan SeekState
+}
+
+func last[T any](a []*T) *T {
+	return a[len(a)-1]
+}
+func last_[T any](a []T) T {
+	return a[len(a)-1]
+}
+
+func Map[T any, S any](a []*T, f func(*T) *S) []*S {
+	result := make([]*S, len(a))
+	for idx, it := range a {
+		result[idx] = f(it)
+	}
+	return result
+}
+
+func artUrl(fileId []uint8) string {
+	return "https://i.scdn.co/image/" + hex.EncodeToString(fileId)
+}
+
+func makeMetadata(uri *string, media *librespot.Media) map[string]any {
+	// uri and media can both be nil here
+	// todo: what should happen here if uri/media are nil, should the old values be retained or overridden with nil
+	// => cross-reference other implementations
+
+	m := make(map[string]any)
+
+	if uri != nil {
+		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(*uri, ":", "/", -1))
+		m["xesam:url"] = "https://open.spotify.com/track/" + last_(strings.Split(*uri, ":"))
+	}
+
+	if media != nil {
+		if media.IsTrack() {
+			m["mpris:length"] = media.Track().GetDuration() * 1000 // convert from ms to us
+			m["mpris:artUrl"] = artUrl(last(media.Track().GetAlbum().GetCoverGroup().GetImage()).FileId)
+			m["xesam:album"] = media.Track().Album.Name
+			m["xesam:albumArtist"] = Map(media.Track().Album.Artist, func(f *metadata.Artist) *string { return f.Name })
+			m["xesam:artist"] = Map(media.Track().Artist, func(f *metadata.Artist) *string { return f.Name })
+			m["xesam:autoRating"] = float64(*media.Track().Popularity) / 100.0
+			m["xesam:discNumber"] = *media.Track().DiscNumber
+			m["xesam:title"] = *media.Track().Name
+			m["xesam:trackNumber"] = *media.Track().Number
+		}
+		if media.IsEpisode() {
+			m["mpris:length"] = media.Episode().GetDuration() * 1000
+			m["mpris:artUrl"] = artUrl(last(media.Episode().GetCoverImage().GetImage()).FileId)
+			m["xesam:album"] = media.Episode().GetShow().GetName()
+			m["xesam:albumArtist"] = [1]string{media.Episode().GetShow().GetName()}
+			m["xesam:artist"] = [1]string{media.Episode().GetShow().GetName()}
+			m["xesam:autoRating"] = 1
+			m["xesam:discNumber"] = 1
+			m["xesam:title"] = media.Episode().GetName()
+			m["xesam:trackNumber"] = 1
+		}
+	}
+	return m
+}
+
+func GetLoopStatus(repeatingContext bool, repeatingTrack bool) LoopStatus {
+	if repeatingTrack {
+		return Track
+	}
+	if repeatingContext {
+		return Playlist
+	}
+	return None
+}
+
+func (s *ConcreteServer) EmitStateUpdate(state MediaState) {
+	s.stateChannel <- state
+}
+
+func (s *ConcreteServer) EmitSeekUpdate(state SeekState) {
+	s.seekChannel <- state
+}
+
+func (s *ConcreteServer) Receive() <-chan MediaPlayer2PlayerCommand {
+	return s.playerInterface.commands
+}
+
+func (s *ConcreteServer) executeStateUpdate(state MediaState) *dbus.Error {
+	if state.PlaybackStatus != s.lastUploadedState.PlaybackStatus {
+		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "PlaybackStatus", state.PlaybackStatus); err != nil {
+			s.log.Warnf("error executing mpris state update (playbackStatus) %s", err)
+			return err
+		}
+	}
+	if state.LoopStatus != s.lastUploadedState.LoopStatus {
+		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "LoopStatus", state.LoopStatus); err != nil {
+			s.log.Warnf("error executing mpris state update (loopStatus) %s", err)
+			return err
+		}
+	}
+	if state.Shuffle != s.lastUploadedState.Shuffle {
+		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Shuffle", state.Shuffle); err != nil {
+			s.log.Warnf("error executing mpris state update (shuffle) %s", err)
+			return err
+		}
+	}
+	if state.Volume != s.lastUploadedState.Volume {
+		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Volume", state.Volume); err != nil {
+			s.log.Warnf("error executing mpris state update (volume) %s", err)
+			return err
+		}
+	}
+	if state.PositionMs != s.lastUploadedState.PositionMs {
+		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs); err != nil {
+			s.log.Warnf("error executing mpris state update (position) %s", err)
+			return err
+		}
+	}
+	if state.Media != s.lastUploadedState.Media {
+		mt := makeMetadata(state.Uri, state.Media)
+		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Metadata", mt); err != nil {
+			s.log.Warnf("error executing mpris state update (media) %s %s", err, mt)
+			return err
+		}
+		s.log.Tracef("successfully updated metadata %s", mt)
+	}
+	return nil
+}
+
+func (s *ConcreteServer) executeSeekSignal(state SeekState) error {
+	return s.dbus.conn.Emit(
+		"/org/mpris/MediaPlayer2",
+		"org.mpris.MediaPlayer2.Player.Seeked",
+		state.PositionMs*1000,
+	)
+}
+
+func (s *ConcreteServer) waitOnChannel() {
+	for !s.closed {
+		select {
+		case state := <-s.stateChannel:
+			err := s.executeStateUpdate(state)
+			if err != nil {
+				continue
+			}
+			s.lastUploadedState = state
+		case seekState := <-s.seekChannel:
+			err := s.executeSeekSignal(seekState)
+			if err != nil {
+				s.log.Warnf("error executing mpris state seek %s", err)
+			}
+		}
+	}
+}
+
+func (s *ConcreteServer) Close() {
+	s.closed = true
+
+	close(s.seekChannel)
+	close(s.stateChannel)
+	s.dbus.conn.Close()
+}
+
+// NewServer opens the dbus connection and registers everything important
+func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
+	s := &ConcreteServer{
+		log: logger,
+		rootInterface: MediaPlayer2RootInterface{
+			log: logger,
+		},
+		playerInterface: MediaPlayer2PlayerInterface{
+			log: logger,
+
+			commands: make(chan MediaPlayer2PlayerCommand),
+		},
+		lastUploadedState: MediaState{
+			PlaybackStatus: Stopped,
+			LoopStatus:     None,
+			Shuffle:        false,
+			Volume:         0,
+			PositionMs:     0,
+			Media:          nil,
+		},
+		closed:       false,
+		stateChannel: make(chan MediaState),
+		seekChannel:  make(chan SeekState),
+	}
+
+	conn, err := dbus.SessionBus()
+	if err != nil {
+		return nil, err
+	}
+
+	s.dbus = &DBusInstance{
+		conn: conn,
+	}
+
+	s.dbus.props, err = prop.Export(
+		conn,
+		"/org/mpris/MediaPlayer2",
+		map[string]map[string]*prop.Prop{
+			"org.mpris.MediaPlayer2":        mediaPlayer2Props,
+			"org.mpris.MediaPlayer2.Player": s.playerInterface.Props(),
+		},
+	)
+
+	reply, err := conn.RequestName("org.mpris.MediaPlayer2.go-librespot", dbus.NameFlagReplaceExisting)
+	if err != nil {
+		return nil, err
+	}
+	if reply != dbus.RequestNameReplyPrimaryOwner {
+		return s, errors.New("mpris name is already taken")
+	}
+
+	err = conn.Export(s.rootInterface, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2")
+	if err != nil {
+		return nil, err
+	}
+	err = conn.Export(s.playerInterface, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player")
+	if err != nil {
+		return nil, err
+	}
+
+	if dbusErr := s.executeStateUpdate(s.lastUploadedState); dbusErr != nil {
+		return nil, err
+	}
+	go s.waitOnChannel()
+
+	s.log.Debugf("created mpris server")
+
+	return s, nil
+}
+
+type DummyServer struct {
+}
+
+func (d DummyServer) EmitStateUpdate(_ MediaState) {
+}
+
+func (d DummyServer) EmitSeekUpdate(_ SeekState) {
+}
+
+func (d DummyServer) Receive() <-chan MediaPlayer2PlayerCommand {
+	return make(<-chan MediaPlayer2PlayerCommand)
+}
+
+func (d DummyServer) Close() {}

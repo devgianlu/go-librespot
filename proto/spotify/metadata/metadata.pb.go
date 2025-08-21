@@ -1108,6 +1108,7 @@ type Track struct {
 	OriginalTitle         *string                `protobuf:"bytes,27,opt,name=original_title,json=originalTitle" json:"original_title,omitempty"`
 	VersionTitle          *string                `protobuf:"bytes,28,opt,name=version_title,json=versionTitle" json:"version_title,omitempty"`
 	ArtistWithRole        []*ArtistWithRole      `protobuf:"bytes,32,rep,name=artist_with_role,json=artistWithRole" json:"artist_with_role,omitempty"`
+	TrackUri              *string                `protobuf:"bytes,36,opt,name=track_uri,json=trackUri" json:"track_uri,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1315,6 +1316,13 @@ func (x *Track) GetArtistWithRole() []*ArtistWithRole {
 		return x.ArtistWithRole
 	}
 	return nil
+}
+
+func (x *Track) GetTrackUri() string {
+	if x != nil && x.TrackUri != nil {
+		return *x.TrackUri
+	}
+	return ""
 }
 
 type ArtistWithRole struct {
@@ -2837,7 +2845,7 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\vCOMPILATION\x10\x03\x12\x06\n" +
 	"\x02EP\x10\x04\x12\r\n" +
 	"\tAUDIOBOOK\x10\x05\x12\v\n" +
-	"\aPODCAST\x10\x06\"\x80\t\n" +
+	"\aPODCAST\x10\x06\"\x9d\t\n" +
 	"\x05Track\x12\x10\n" +
 	"\x03gid\x18\x01 \x01(\fR\x03gid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12-\n" +
@@ -2870,7 +2878,8 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\x0econtent_rating\x18\x19 \x03(\v2\x1f.spotify.metadata.ContentRatingR\rcontentRating\x12%\n" +
 	"\x0eoriginal_title\x18\x1b \x01(\tR\roriginalTitle\x12#\n" +
 	"\rversion_title\x18\x1c \x01(\tR\fversionTitle\x12J\n" +
-	"\x10artist_with_role\x18  \x03(\v2 .spotify.metadata.ArtistWithRoleR\x0eartistWithRole\"\xf7\x02\n" +
+	"\x10artist_with_role\x18  \x03(\v2 .spotify.metadata.ArtistWithRoleR\x0eartistWithRole\x12\x1b\n" +
+	"\ttrack_uri\x18$ \x01(\tR\btrackUri\"\xf7\x02\n" +
 	"\x0eArtistWithRole\x12\x1d\n" +
 	"\n" +
 	"artist_gid\x18\x01 \x01(\fR\tartistGid\x12\x1f\n" +
