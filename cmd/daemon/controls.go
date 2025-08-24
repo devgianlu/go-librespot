@@ -19,6 +19,58 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, artist, album, trackID string, duration time.Duration) {
+	if stream == nil || stream.Media == nil {
+		return "", "", "", "", 0
+	}
+
+	media := stream.Media
+
+	// Handle tracks
+	if media.IsTrack() {
+		track := media.Track()
+		if track != nil {
+			if track.Name != nil {
+				title = *track.Name
+			}
+			trackID = fmt.Sprintf("%x", track.Gid)
+			if track.Duration != nil {
+				duration = time.Duration(*track.Duration) * time.Millisecond
+			}
+
+			// Get first artist
+			if len(track.Artist) > 0 && track.Artist[0].Name != nil {
+				artist = *track.Artist[0].Name
+			}
+
+			// Get album
+			if track.Album != nil && track.Album.Name != nil {
+				album = *track.Album.Name
+			}
+		}
+	} else if media.IsEpisode() {
+		// Handle podcast episodes
+		episode := media.Episode()
+		if episode != nil {
+			if episode.Name != nil {
+				title = *episode.Name
+			}
+			trackID = fmt.Sprintf("%x", episode.Gid)
+			if episode.Duration != nil {
+				duration = time.Duration(*episode.Duration) * time.Millisecond
+			}
+
+			// For episodes, use show name as artist
+			if episode.Show != nil && episode.Show.Name != nil {
+				artist = *episode.Show.Name
+			}
+			album = "Podcast" // Generic album name for episodes
+		}
+	}
+
+	return title, artist, album, trackID, duration
+}
+
 func (p *AppPlayer) prefetchNext() {
 	ctx := context.TODO()
 
@@ -93,6 +145,11 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.trackPosition(),
 		)
 
+		if p.primaryStream != nil {
+			title, artist, album, trackID, duration := p.extractMetadataFromStream(p.primaryStream)
+			p.UpdateTrack(title, artist, album, trackID, duration, true) // true = playing
+		}
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
@@ -108,6 +165,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.updateState(ctx)
 
 		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
+
+		p.UpdatePlayingState(true)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -132,6 +191,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.trackPosition(),
 		)
 
+		p.UpdatePlayingState(false)
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
 			Data: ApiEventDataPaused{
@@ -141,6 +202,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		})
 	case player.EventTypeNotPlaying:
 		p.sess.Events().OnPlayerEnd(p.primaryStream, p.state.trackPosition())
+
+		p.UpdatePlayingState(false)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
@@ -165,6 +228,9 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			})
 		}
 	case player.EventTypeStop:
+
+		p.UpdatePlayingState(false)
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeStopped,
 			Data: ApiEventDataStopped{
@@ -295,6 +361,12 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	}
 
 	p.sess.Events().PostPrimaryStreamLoad(p.primaryStream, paused)
+
+	if p.primaryStream != nil {
+		title, artist, album, trackID, duration := p.extractMetadataFromStream(p.primaryStream)
+		p.app.log.Debugf("Sending metadata: %s by %s (paused: %t)", title, artist, paused) // Debug log
+		p.UpdateTrack(title, artist, album, trackID, duration, !paused)
+	}
 
 	p.app.log.WithField("uri", spotId.Uri()).
 		Infof("loaded %s %s (paused: %t, position: %dms, duration: %dms, prefetched: %t)", spotId.Type(),
@@ -472,6 +544,8 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 	p.schedulePrefetchNext()
 
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
+
+	p.UpdatePosition(time.Duration(position) * time.Millisecond)
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
@@ -664,6 +738,9 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	}
 
 	p.volumeUpdate <- float32(newVal) / player.MaxStateVolume
+
+	volumePercent := int((float64(newVal) / player.MaxStateVolume) * 100)
+	p.UpdateVolume(volumePercent)
 }
 
 // Send notification that the volume changed.

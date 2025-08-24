@@ -20,6 +20,7 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/metadata"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
@@ -46,7 +47,8 @@ type AppPlayer struct {
 	primaryStream   *player.Stream
 	secondaryStream *player.Stream
 
-	prefetchTimer *time.Timer
+	prefetchTimer  *time.Timer
+	metadataPlayer *metadata.PlayerMetadata
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -619,5 +621,29 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 			// We've gone some time without update, send the new value now.
 			p.volumeUpdated(ctx)
 		}
+	}
+}
+
+func (p *AppPlayer) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool) {
+	if p.metadataPlayer != nil {
+		p.metadataPlayer.UpdateTrack(title, artist, album, trackID, duration, playing)
+	}
+}
+
+func (p *AppPlayer) UpdatePosition(position time.Duration) {
+	if p.metadataPlayer != nil {
+		p.metadataPlayer.UpdatePosition(position)
+	}
+}
+
+func (p *AppPlayer) UpdateVolume(volume int) {
+	if p.metadataPlayer != nil {
+		p.metadataPlayer.UpdateVolume(volume)
+	}
+}
+
+func (p *AppPlayer) UpdatePlayingState(playing bool) {
+	if p.metadataPlayer != nil {
+		p.metadataPlayer.UpdatePlayingState(playing)
 	}
 }

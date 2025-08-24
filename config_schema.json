@@ -256,6 +256,35 @@
           "type": "boolean",
           "description": "Whether autoplay of more songs should be disabled",
           "default": false
+        },
+        "metadata_pipe": {
+          "type": "object",
+          "description": "Metadata pipe configuration for DACP/forked-daapd integration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable metadata pipe output"
+            },
+            "path": {
+              "type": "string",
+              "default": "/tmp/go-librespot-metadata",
+              "description": "Path to the metadata FIFO pipe"
+            },
+            "format": {
+              "type": "string",
+              "enum": ["dacp", "json", "xml"],
+              "default": "dacp",
+              "description": "Output format for metadata (dacp for forked-daapd, json for custom applications)"
+            },
+            "buffer_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100,
+              "description": "Size of the metadata buffer"
+            }
+          }
         }
       },
       "required": [
