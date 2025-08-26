@@ -624,9 +624,10 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 	}
 }
 
-func (p *AppPlayer) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool) {
+// Update AppPlayer's UpdateTrack method:
+func (p *AppPlayer) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool, artworkURL string, artworkData []byte) {
 	if p.metadataPlayer != nil {
-		p.metadataPlayer.UpdateTrack(title, artist, album, trackID, duration, playing)
+		p.metadataPlayer.UpdateTrack(title, artist, album, trackID, duration, playing, artworkURL, artworkData)
 	}
 }
 

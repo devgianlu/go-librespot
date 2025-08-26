@@ -19,7 +19,7 @@ type TrackMetadata struct {
 	Playing     bool      `json:"playing"`
 	Timestamp   time.Time `json:"timestamp"`
 	ArtworkURL  string    `json:"artwork_url,omitempty"`
-	ArtworkData []byte    `json:"artwork_data,omitempty"`
+	ArtworkData []byte    `json:"artwork_data,omitempty"` // ADD THIS FIELD
 }
 
 // NewTrackMetadata creates a new TrackMetadata instance
@@ -30,6 +30,7 @@ func NewTrackMetadata() *TrackMetadata {
 }
 
 // ToDACPFormat converts metadata to DACP pipe format compatible with forked-daapd
+// Update the ToDACPFormat method to include artwork:
 func (tm *TrackMetadata) ToDACPFormat() []byte {
 	var result []byte
 
@@ -42,6 +43,11 @@ func (tm *TrackMetadata) ToDACPFormat() []byte {
 	}
 	if tm.Album != "" {
 		result = append(result, encodeDACPItem("asal", tm.Album)...)
+	}
+
+	// ADD ARTWORK URL:
+	if tm.ArtworkURL != "" {
+		result = append(result, encodeDACPItem("asul", tm.ArtworkURL)...)
 	}
 
 	// Volume (0-100)
@@ -73,22 +79,27 @@ func (tm *TrackMetadata) ToJSONFormat() []byte {
 	return append(data, '\n')
 }
 
-// ToXMLFormat converts metadata to shairport-sync XML-style format// ToXMLFormat converts metadata to shairport-sync XML-style format
+// Update ToXMLFormat method:
 func (tm *TrackMetadata) ToXMLFormat() []byte {
 	var result []byte
 
 	// Helper function to encode XML metadata item with hex-encoded type/code
 	encodeItem := func(itemType, code, data string) []byte {
-		// Convert 4-char codes to 8-digit hex (32-bit integers)
 		typeHex := fmt.Sprintf("%08x", stringToUint32(itemType))
 		codeHex := fmt.Sprintf("%08x", stringToUint32(code))
+
+		// Get original data length BEFORE encoding
+		originalLength := len(data)
 
 		// Encode data as base64
 		encodedData := base64.StdEncoding.EncodeToString([]byte(data))
 
-		// Create XML-style item with hex-encoded type/code
-		item := fmt.Sprintf("<item><type>%s</type><code>%s</code><length>%d</length><data>%s</data></item>\n",
-			typeHex, codeHex, len(encodedData), encodedData)
+		// Use hex format for length (matching the type/code format)
+		lengthHex := fmt.Sprintf("%x", originalLength)
+
+		// Create XML-style item with hex-encoded length
+		item := fmt.Sprintf("<item><type>%s</type><code>%s</code><length>%s</length><data>%s</data></item>\n",
+			typeHex, codeHex, lengthHex, encodedData)
 
 		return []byte(item)
 	}
@@ -106,6 +117,12 @@ func (tm *TrackMetadata) ToXMLFormat() []byte {
 	// Album
 	if tm.Album != "" {
 		result = append(result, encodeItem("core", "asal", tm.Album)...)
+	}
+
+	// ADD ARTWORK AS PICT:
+	if len(tm.ArtworkData) > 0 {
+		// Convert raw bytes to string (no encoding here!)
+		result = append(result, encodeItem("ssnc", "PICT", string(tm.ArtworkData))...)
 	}
 
 	// Playing state
@@ -138,7 +155,7 @@ func stringToUint32(s string) uint32 {
 }
 
 // Update updates the metadata with new values
-func (tm *TrackMetadata) Update(title, artist, album, trackID string, duration, position int64, volume int, playing bool) {
+func (tm *TrackMetadata) Update(title, artist, album, trackID string, duration, position int64, volume int, playing bool, artworkURL string, ArtworkData []byte) {
 	tm.Title = title
 	tm.Artist = artist
 	tm.Album = album
@@ -147,8 +164,8 @@ func (tm *TrackMetadata) Update(title, artist, album, trackID string, duration, 
 	tm.Position = position
 	tm.Volume = volume
 	tm.Playing = playing
-	//tm.ArtworkURL = artworkURL
-	//tm.ArtworkData = artworkData
+	tm.ArtworkURL = artworkURL
+	tm.ArtworkData = ArtworkData // ADD THIS LINE
 	tm.Timestamp = time.Now()
 }
 

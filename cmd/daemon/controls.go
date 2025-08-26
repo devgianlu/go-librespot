@@ -8,20 +8,23 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strconv"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
 	"github.com/devgianlu/go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
 )
 
-func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, artist, album, trackID string, duration time.Duration) {
+// Update extractMetadataFromStream method signature:
+func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, artist, album, trackID string, duration time.Duration, artworkURL string, artworkData []byte) {
 	if stream == nil || stream.Media == nil {
-		return "", "", "", "", 0
+		return "", "", "", "", 0, "", nil
 	}
 
 	media := stream.Media
@@ -43,9 +46,17 @@ func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, art
 				artist = *track.Artist[0].Name
 			}
 
-			// Get album
-			if track.Album != nil && track.Album.Name != nil {
-				album = *track.Album.Name
+			// Get album and artwork
+			if track.Album != nil {
+				if track.Album.Name != nil {
+					album = *track.Album.Name
+				}
+
+				// GET ALBUM ARTWORK URL AND DATA:
+				artworkURL = p.getAlbumArtworkURL(track.Album)
+				if artworkURL != "" {
+					artworkData = p.downloadArtwork(artworkURL)
+				}
 			}
 		}
 	} else if media.IsEpisode() {
@@ -61,14 +72,22 @@ func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, art
 			}
 
 			// For episodes, use show name as artist
-			if episode.Show != nil && episode.Show.Name != nil {
-				artist = *episode.Show.Name
+			if episode.Show != nil {
+				if episode.Show.Name != nil {
+					artist = *episode.Show.Name
+				}
+
+				// GET SHOW ARTWORK URL AND DATA:
+				artworkURL = p.getShowArtworkURL(episode.Show)
+				if artworkURL != "" {
+					artworkData = p.downloadArtwork(artworkURL)
+				}
 			}
 			album = "Podcast" // Generic album name for episodes
 		}
 	}
 
-	return title, artist, album, trackID, duration
+	return title, artist, album, trackID, duration, artworkURL, artworkData
 }
 
 func (p *AppPlayer) prefetchNext() {
@@ -144,11 +163,13 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.tracks.CurrentTrack(),
 			p.state.trackPosition(),
 		)
-
-		if p.primaryStream != nil {
-			title, artist, album, trackID, duration := p.extractMetadataFromStream(p.primaryStream)
-			p.UpdateTrack(title, artist, album, trackID, duration, true) // true = playing
-		}
+		/*
+			if p.primaryStream != nil {
+				title, artist, album, trackID, duration, artworkURL := p.extractMetadataFromStream(p.primaryStream)
+				p.app.log.Debugf("Sending metadata: %s by %s", title, artist)
+				p.UpdateTrack(title, artist, album, trackID, duration, true, artworkURL) // true = playing
+			}
+		*/
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -362,10 +383,12 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 
 	p.sess.Events().PostPrimaryStreamLoad(p.primaryStream, paused)
 
+	// Update loadCurrentTrack call:
+	// In loadCurrentTrack method, find and update this section:
 	if p.primaryStream != nil {
-		title, artist, album, trackID, duration := p.extractMetadataFromStream(p.primaryStream)
-		p.app.log.Debugf("Sending metadata: %s by %s (paused: %t)", title, artist, paused) // Debug log
-		p.UpdateTrack(title, artist, album, trackID, duration, !paused)
+		title, artist, album, trackID, duration, artworkURL, artworkData := p.extractMetadataFromStream(p.primaryStream)
+		p.app.log.Debugf("Sending metadata: %s by %s (artwork: %d bytes)", title, artist, len(artworkData))
+		p.UpdateTrack(title, artist, album, trackID, duration, !paused, artworkURL, artworkData)
 	}
 
 	p.app.log.WithField("uri", spotId.Uri()).
@@ -758,4 +781,67 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 			Max:   p.app.cfg.VolumeSteps,
 		},
 	})
+}
+
+func (p *AppPlayer) getAlbumArtworkURL(album *metadatapb.Album) string {
+	if album == nil || album.CoverGroup == nil || len(album.CoverGroup.Image) == 0 {
+		return ""
+	}
+
+	// Get the best quality artwork (usually the last image)
+	images := album.CoverGroup.Image
+	if len(images) > 0 {
+		bestImage := images[len(images)-1]
+		if bestImage != nil && len(bestImage.FileId) > 0 {
+			return fmt.Sprintf("https://i.scdn.co/image/%x", bestImage.FileId)
+		}
+	}
+
+	return ""
+}
+
+func (p *AppPlayer) getShowArtworkURL(show *metadatapb.Show) string {
+	if show == nil || show.CoverImage == nil || len(show.CoverImage.Image) == 0 {
+		return ""
+	}
+
+	// Get the best quality image (usually the last one)
+	images := show.CoverImage.Image
+	if len(images) > 0 {
+		bestImage := images[len(images)-1]
+		if bestImage != nil && len(bestImage.FileId) > 0 {
+			return fmt.Sprintf("https://i.scdn.co/image/%x", bestImage.FileId)
+		}
+	}
+
+	return ""
+}
+
+// Add downloadArtwork method:
+func (p *AppPlayer) downloadArtwork(url string) []byte {
+	if url == "" {
+		return nil
+	}
+
+	// Download with timeout
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		p.app.log.WithError(err).Debugf("failed downloading artwork")
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	// Limit artwork size (e.g., 1MB max)
+	data := make([]byte, 1024*1024)
+	n, _ := resp.Body.Read(data)
+
+	if n > 0 {
+		return data[:n]
+	}
+	return nil
 }

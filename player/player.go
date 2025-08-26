@@ -79,8 +79,9 @@ type playerCmdDataSet struct {
 	drop    bool
 }
 
+// Update MetadataCallback interface:
 type MetadataCallback interface {
-	UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool)
+	UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool, artworkURL string, artworkData []byte)
 	UpdatePosition(position time.Duration)
 	UpdateVolume(volume int)
 	UpdatePlayingState(playing bool)

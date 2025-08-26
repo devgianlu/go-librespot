@@ -47,14 +47,14 @@ func (pm *PlayerMetadata) Stop() {
 	pm.fifoManager.Stop()
 }
 
-// UpdateTrack updates track information
-func (pm *PlayerMetadata) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool) {
+// Update UpdateTrack method signature:
+func (pm *PlayerMetadata) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool, artworkURL string, artworkData []byte) {
 	if !pm.enabled {
 		return
 	}
 
 	pm.mutex.Lock()
-	pm.metadata.Update(title, artist, album, trackID, duration.Milliseconds(), 0, pm.metadata.Volume, playing)
+	pm.metadata.Update(title, artist, album, trackID, duration.Milliseconds(), 0, pm.metadata.Volume, playing, artworkURL, artworkData)
 	pm.mutex.Unlock()
 
 	pm.writeMetadata()
