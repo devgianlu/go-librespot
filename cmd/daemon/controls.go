@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"strconv"
@@ -188,6 +189,9 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
 
 		p.UpdatePlayingState(true)
+
+		// Add this line to update position on resume
+		p.UpdatePosition(time.Duration(p.player.PositionMs()) * time.Millisecond)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -383,12 +387,17 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 
 	p.sess.Events().PostPrimaryStreamLoad(p.primaryStream, paused)
 
-	// Update loadCurrentTrack call:
-	// In loadCurrentTrack method, find and update this section:
+	// In loadCurrentTrack method:
 	if p.primaryStream != nil {
+		trackPosition := p.state.trackPosition() // Get the current position
 		title, artist, album, trackID, duration, artworkURL, artworkData := p.extractMetadataFromStream(p.primaryStream)
-		p.app.log.Debugf("Sending metadata: %s by %s (artwork: %d bytes)", title, artist, len(artworkData))
+		p.app.log.Debugf("Sending metadata: %s by %s (artwork: %d bytes, position: %dms)", title, artist, len(artworkData), trackPosition)
+
+		// First update the track (without position to avoid breaking other callers)
 		p.UpdateTrack(title, artist, album, trackID, duration, !paused, artworkURL, artworkData)
+
+		// Then immediately update the position
+		p.UpdatePosition(time.Duration(trackPosition) * time.Millisecond)
 	}
 
 	p.app.log.WithField("uri", spotId.Uri()).
@@ -836,12 +845,12 @@ func (p *AppPlayer) downloadArtwork(url string) []byte {
 		return nil
 	}
 
-	// Limit artwork size (e.g., 1MB max)
-	data := make([]byte, 1024*1024)
-	n, _ := resp.Body.Read(data)
-
-	if n > 0 {
-		return data[:n]
+	// Read ALL the data using io.ReadAll (properly handles chunked reading)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // Still limit to 1MB
+	if err != nil {
+		p.app.log.WithError(err).Debugf("failed reading artwork data")
+		return nil
 	}
-	return nil
+
+	return data
 }

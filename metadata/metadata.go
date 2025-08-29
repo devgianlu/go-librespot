@@ -19,18 +19,19 @@ type TrackMetadata struct {
 	Playing     bool      `json:"playing"`
 	Timestamp   time.Time `json:"timestamp"`
 	ArtworkURL  string    `json:"artwork_url,omitempty"`
-	ArtworkData []byte    `json:"artwork_data,omitempty"` // ADD THIS FIELD
+	ArtworkData []byte    `json:"artwork_data,omitempty"`
+	SampleRate  float32   `json:"sample_rate,omitempty"` // ADD THIS for progress tracking
 }
 
 // NewTrackMetadata creates a new TrackMetadata instance
 func NewTrackMetadata() *TrackMetadata {
 	return &TrackMetadata{
-		Timestamp: time.Now(),
+		Timestamp:  time.Now(),
+		SampleRate: 44100, // Default sample rate
 	}
 }
 
 // ToDACPFormat converts metadata to DACP pipe format compatible with forked-daapd
-// Update the ToDACPFormat method to include artwork:
 func (tm *TrackMetadata) ToDACPFormat() []byte {
 	var result []byte
 
@@ -79,14 +80,14 @@ func (tm *TrackMetadata) ToJSONFormat() []byte {
 	return append(data, '\n')
 }
 
-// Update ToXMLFormat method:
+// ToXMLFormat method with debugging for artwork:
 func (tm *TrackMetadata) ToXMLFormat() []byte {
 	var result []byte
 
 	// Helper function to encode XML metadata item with hex-encoded type/code
 	encodeItem := func(itemType, code, data string) []byte {
-		typeHex := fmt.Sprintf("%08x", stringToUint32(itemType))
-		codeHex := fmt.Sprintf("%08x", stringToUint32(code))
+		typeHex := asciiToHex(itemType)
+		codeHex := asciiToHex(code)
 
 		// Get original data length BEFORE encoding
 		originalLength := len(data)
@@ -98,6 +99,28 @@ func (tm *TrackMetadata) ToXMLFormat() []byte {
 		lengthHex := fmt.Sprintf("%x", originalLength)
 
 		// Create XML-style item with hex-encoded length
+		item := fmt.Sprintf("<item><type>%s</type><code>%s</code><length>%s</length><data>%s</data></item>\n",
+			typeHex, codeHex, lengthHex, encodedData)
+
+		return []byte(item)
+	}
+
+	encodeRawData := func(itemType, code string, data []byte) []byte {
+		typeHex := asciiToHex(itemType)
+		codeHex := asciiToHex(code)
+
+		// Encode binary data as base64
+		encodedData := base64.StdEncoding.EncodeToString(data)
+
+		// DEBUG: Log artwork info
+		fmt.Printf("DEBUG Artwork: type=%s, code=%s, raw_len=%d, encoded_len=%d\n",
+			itemType, code, len(data), len(encodedData))
+		fmt.Printf("DEBUG First 100 chars of encoded: %.100s\n", encodedData)
+
+		// Use the ORIGINAL BINARY LENGTH, with 8-digit hex format
+		lengthHex := fmt.Sprintf("%08x", len(data))
+
+		// Create XML-style item
 		item := fmt.Sprintf("<item><type>%s</type><code>%s</code><length>%s</length><data>%s</data></item>\n",
 			typeHex, codeHex, lengthHex, encodedData)
 
@@ -119,10 +142,26 @@ func (tm *TrackMetadata) ToXMLFormat() []byte {
 		result = append(result, encodeItem("core", "asal", tm.Album)...)
 	}
 
-	// ADD ARTWORK AS PICT:
+	// ARTWORK - try different approaches:
 	if len(tm.ArtworkData) > 0 {
-		// Convert raw bytes to string (no encoding here!)
-		result = append(result, encodeItem("ssnc", "PICT", string(tm.ArtworkData))...)
+		// Try ssnc/PICT with encoded length
+		result = append(result, encodeRawData("ssnc", "PICT", tm.ArtworkData)...)
+
+		// ALSO try mper/PICT (another common type for artwork)
+		// Uncomment if needed: result = append(result, encodeRawData("mper", "PICT", tm.ArtworkData)...)
+	}
+
+	// Progress tracking (like librespot-java)
+	if tm.Duration > 0 && tm.SampleRate > 0 {
+		currentTime := float64(tm.Position)
+		duration := float64(tm.Duration)
+		sampleRate := float64(tm.SampleRate)
+
+		progressStr := fmt.Sprintf("1/%.0f/%.0f",
+			currentTime*sampleRate/1000.0+1,
+			duration*sampleRate/1000.0+1)
+
+		result = append(result, encodeItem("ssnc", "prgr", progressStr)...)
 	}
 
 	// Playing state
@@ -138,24 +177,27 @@ func (tm *TrackMetadata) ToXMLFormat() []byte {
 	volumeStr := fmt.Sprintf("%d", tm.Volume)
 	result = append(result, encodeItem("ssnc", "pvol", volumeStr)...)
 
-	// Position (in seconds)
+	// Position (in seconds) - make sure we're using the actual position
 	positionSec := tm.Position / 1000
 	positionStr := fmt.Sprintf("%d", positionSec)
 	result = append(result, encodeItem("ssnc", "ppos", positionStr)...)
 
+	// DEBUG: Log position info
+	fmt.Printf("DEBUG Position: tm.Position=%d ms, positionSec=%d s\n", tm.Position, positionSec)
+
 	return result
 }
 
-// Make sure you also have this helper function:
-func stringToUint32(s string) uint32 {
+// Helper function to convert 4-char ASCII string to hex
+func asciiToHex(s string) string {
 	if len(s) != 4 {
-		return 0
+		panic("Input must be 4 characters")
 	}
-	return uint32(s[0])<<24 | uint32(s[1])<<16 | uint32(s[2])<<8 | uint32(s[3])
+	return fmt.Sprintf("%02x%02x%02x%02x", s[0], s[1], s[2], s[3])
 }
 
 // Update updates the metadata with new values
-func (tm *TrackMetadata) Update(title, artist, album, trackID string, duration, position int64, volume int, playing bool, artworkURL string, ArtworkData []byte) {
+func (tm *TrackMetadata) Update(title, artist, album, trackID string, duration, position int64, volume int, playing bool, artworkURL string, artworkData []byte) {
 	tm.Title = title
 	tm.Artist = artist
 	tm.Album = album
@@ -165,7 +207,7 @@ func (tm *TrackMetadata) Update(title, artist, album, trackID string, duration, 
 	tm.Volume = volume
 	tm.Playing = playing
 	tm.ArtworkURL = artworkURL
-	tm.ArtworkData = ArtworkData // ADD THIS LINE
+	tm.ArtworkData = artworkData
 	tm.Timestamp = time.Now()
 }
 
@@ -184,6 +226,12 @@ func (tm *TrackMetadata) UpdateVolume(volume int) {
 // UpdatePlayingState updates only the playing state and timestamp
 func (tm *TrackMetadata) UpdatePlayingState(playing bool) {
 	tm.Playing = playing
+	tm.Timestamp = time.Now()
+}
+
+// UpdateSampleRate updates the sample rate for progress tracking
+func (tm *TrackMetadata) UpdateSampleRate(sampleRate float32) {
+	tm.SampleRate = sampleRate
 	tm.Timestamp = time.Now()
 }
 

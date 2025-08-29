@@ -96,12 +96,12 @@ func (fm *FIFOManager) WriteMetadata(metadata *TrackMetadata) {
 
 	var data []byte
 	switch fm.format {
-	case "json":
-		data = metadata.ToJSONFormat()
+	//	case "json":
+	//		data = metadata.ToJSONFormat()
 	case "xml": // ADD THIS CASE
 		data = metadata.ToXMLFormat()
-	default: // "dacp"
-		data = metadata.ToDACPFormat()
+		//default: // "dacp"
+		//	data = metadata.ToDACPFormat()
 	}
 
 	select {
