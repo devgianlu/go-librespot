@@ -175,6 +175,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
+				ContextUri: p.state.player.ContextUri,
 				Uri:        p.state.player.Track.Uri,
 				Resume:     false,
 				PlayOrigin: p.state.playOrigin(),
@@ -196,6 +197,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
+				ContextUri: p.state.player.ContextUri,
 				Uri:        p.state.player.Track.Uri,
 				Resume:     true,
 				PlayOrigin: p.state.playOrigin(),
@@ -221,6 +223,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
 			Data: ApiEventDataPaused{
+				ContextUri: p.state.player.ContextUri,
 				Uri:        p.state.player.Track.Uri,
 				PlayOrigin: p.state.playOrigin(),
 			},
@@ -233,6 +236,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
+				ContextUri: p.state.player.ContextUri,
 				Uri:        p.state.player.Track.Uri,
 				PlayOrigin: p.state.playOrigin(),
 			},
@@ -360,6 +364,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeWillPlay,
 		Data: ApiEventDataWillPlay{
+			ContextUri: p.state.player.ContextUri,
 			Uri:        spotId.Uri(),
 			PlayOrigin: p.state.playOrigin(),
 		},
@@ -582,6 +587,7 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
 		Data: ApiEventDataSeek{
+			ContextUri: p.state.player.ContextUri,
 			Uri:        p.state.player.Track.Uri,
 			Position:   int(position),
 			Duration:   int(p.primaryStream.Media.Duration()),

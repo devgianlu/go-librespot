@@ -13,6 +13,7 @@ The websocket endpoint is available at `/events`. The following events are emitt
 - `active`: The device has become active
 - `inactive`: The device has become inactive
 - `metadata`: A new track was loaded, the following metadata is available:
+    - `context_uri`: The context URI 
     - `uri`: Track URI
     - `name`: Track name
     - `artist_names`: List of track artist names
@@ -21,21 +22,26 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `position`: Track position in milliseconds
     - `duration`: Track duration in milliseconds
 - `will_play`: The player is about to play the specified track
+    - `context_uri`: The context URI
     - `uri`: The track URI
     - `play_origin`: Who started the playback
 - `playing`: The current track is playing
+    - `context_uri`: The context URI
     - `uri`: The track URI
     - `resume`: Was this resumed from paused playback?
     - `play_origin`: Who started the playback
 - `not_playing`: The current track has finished playing
+    - `context_uri`: The context URI
     - `uri`: The track URI
     - `play_origin`: Who started the playback
 - `paused`: The current track is paused
+    - `context_uri`: The context URI
     - `uri`: The track URI
     - `play_origin`: Who started the playback
 - `stopped`: The current context is empty, nothing more to play
     - `play_origin`: Who started the playback
 - `seek`: The current track was seeked, the following data is provided:
+    - `context_uri`: The context URI
     - `uri`: The track URI
     - `position`: Track position in milliseconds
     - `duration`: Track duration in milliseconds
