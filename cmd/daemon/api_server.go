@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -349,6 +350,19 @@ func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter)
 	}
 }
 
+func jsonDecode(r *http.Request, v any) error {
+	defer func() { _ = r.Body.Close() }()
+
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	} else if len(data) == 0 {
+		return nil
+	}
+
+	return json.Unmarshal(data, v)
+}
+
 func (s *ConcreteApiServer) serve() {
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -380,7 +394,7 @@ func (s *ConcreteApiServer) serve() {
 		}
 
 		var data ApiRequestDataPlay
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -423,7 +437,7 @@ func (s *ConcreteApiServer) serve() {
 		}
 
 		var data ApiRequestDataNext
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -445,7 +459,7 @@ func (s *ConcreteApiServer) serve() {
 		}
 
 		var data ApiRequestDataSeek
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -462,7 +476,7 @@ func (s *ConcreteApiServer) serve() {
 			s.handleRequest(ApiRequest{Type: ApiRequestTypeGetVolume}, w)
 		} else if r.Method == "POST" {
 			var data ApiRequestDataVolume
-			if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			if err := jsonDecode(r, &data); err != nil {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -485,7 +499,7 @@ func (s *ConcreteApiServer) serve() {
 		var data struct {
 			Repeat bool `json:"repeat_context"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -501,7 +515,7 @@ func (s *ConcreteApiServer) serve() {
 		var data struct {
 			Repeat bool `json:"repeat_track"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -517,7 +531,7 @@ func (s *ConcreteApiServer) serve() {
 		var data struct {
 			Shuffle bool `json:"shuffle_context"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -533,7 +547,7 @@ func (s *ConcreteApiServer) serve() {
 		var data struct {
 			Uri string `json:"uri"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		if err := jsonDecode(r, &data); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
