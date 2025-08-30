@@ -234,22 +234,26 @@ type ApiEventDataMetadata ApiResponseStatusTrack
 type ApiEventDataVolume ApiResponseVolume
 
 type ApiEventDataPlaying struct {
+	ContextUri string `json:"context_uri"`
 	Uri        string `json:"uri"`
 	Resume     bool   `json:"resume"`
 	PlayOrigin string `json:"play_origin"`
 }
 
 type ApiEventDataWillPlay struct {
+	ContextUri string `json:"context_uri"`
 	Uri        string `json:"uri"`
 	PlayOrigin string `json:"play_origin"`
 }
 
 type ApiEventDataNotPlaying struct {
+	ContextUri string `json:"context_uri"`
 	Uri        string `json:"uri"`
 	PlayOrigin string `json:"play_origin"`
 }
 
 type ApiEventDataPaused struct {
+	ContextUri string `json:"context_uri"`
 	Uri        string `json:"uri"`
 	PlayOrigin string `json:"play_origin"`
 }
@@ -259,6 +263,7 @@ type ApiEventDataStopped struct {
 }
 
 type ApiEventDataSeek struct {
+	ContextUri string `json:"context_uri"`
 	Uri        string `json:"uri"`
 	Position   int    `json:"position"`
 	Duration   int    `json:"duration"`
