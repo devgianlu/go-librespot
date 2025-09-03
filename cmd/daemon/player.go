@@ -86,7 +86,11 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		if !p.app.cfg.ExternalVolume && len(p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
 			p.initialVolumeOnce.Do(func() {
-				p.updateVolume(p.app.cfg.InitialVolume * player.MaxStateVolume / p.app.cfg.VolumeSteps)
+				if lastVolume := p.app.state.LastVolume; !p.app.cfg.IgnoreLastVolume && lastVolume != nil {
+					p.updateVolume(*lastVolume)
+				} else {
+					p.updateVolume(p.app.cfg.InitialVolume * player.MaxStateVolume / p.app.cfg.VolumeSteps)
+				}
 			})
 		}
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/volume") {

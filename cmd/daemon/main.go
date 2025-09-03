@@ -396,6 +396,7 @@ type Config struct {
 	Bitrate                       int       `koanf:"bitrate"`
 	VolumeSteps                   uint32    `koanf:"volume_steps"`
 	InitialVolume                 uint32    `koanf:"initial_volume"`
+	IgnoreLastVolume              bool      `koanf:"ignore_last_volume"`
 	NormalisationDisabled         bool      `koanf:"normalisation_disabled"`
 	NormalisationUseAlbumGain     bool      `koanf:"normalisation_use_album_gain"`
 	NormalisationPregain          float32   `koanf:"normalisation_pregain"`
