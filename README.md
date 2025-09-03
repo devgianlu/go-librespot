@@ -26,6 +26,15 @@ on the [GitHub Container Registry](https://github.com/devgianlu/go-librespot/pkg
 
 An example Docker Compose configuration for PulseAudio is available [here](/docker-compose.pulse.yml).
 
+### Using Brew
+
+You can also install go-librespot [using Brew](https://formulae.brew.sh/formula/go-librespot) 
+on macOS and Linux (thanks @kriive):
+
+```shell
+brew install go-librespot
+```
+
 ### Building from source
 
 To build from source the following prerequisites are necessary:
@@ -51,7 +60,8 @@ Details about cross-compiling go-librespot are described [here](/CROSS_COMPILE.m
 
 ## Configuration
 
-The default directory for configuration files is `~/.config/go-librespot`. On macOS devices, this is `~/Library/Application Support/go-librespot`. You can change this directory with the
+The default directory for configuration files is `~/.config/go-librespot`. On macOS devices, this is
+`~/Library/Application Support/go-librespot`. You can change this directory with the
 `-config_dir` flag. The configuration directory contains:
 
 - `config.yml`: The main configuration (does not exist by default)
@@ -79,7 +89,9 @@ credentials:
 If `persist_credentials` is `true`, after connecting to the device for the first time credentials will be stored locally
 and you can switch to interactive mode without having to authenticate manually.
 
-If `zeroconf_interfaces_to_advertise` is provided, you can limit interfaces that will be advertised. For example, if you have Docker installed on your host, you may want to disable advertising to its bridge interface, or you may want to disable interfaces that will not be reachable.
+If `zeroconf_interfaces_to_advertise` is provided, you can limit interfaces that will be advertised. For example, if you
+have Docker installed on your host, you may want to disable advertising to its bridge interface, or you may want to
+disable interfaces that will not be reachable.
 
 ### Interactive mode
 
