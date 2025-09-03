@@ -167,6 +167,7 @@ audio_output_pipe_format: s16le # Audio output pipe format (s16le, s32le, f32le)
 bitrate: 160 # Playback bitrate (96, 160, 320)
 volume_steps: 100 # Volume steps count
 initial_volume: 100 # Initial volume in steps (not applied to the mixer device)
+ignore_last_volume: false # Whether to ignore the last saved volume and always use initial_volume
 external_volume: false # Whether volume is controlled externally 
 disable_autoplay: false # Whether autoplay of more songs should be disabled
 ```

@@ -20,6 +20,7 @@ type AppState struct {
 		Username string `json:"username"`
 		Data     []byte `json:"data"`
 	} `json:"credentials"`
+	LastVolume *uint32 `json:"last_volume"`
 }
 
 func (s *AppState) SetLogger(log Logger) {
