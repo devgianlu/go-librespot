@@ -78,5 +78,5 @@ docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-armv6 go-libre
 ### Target Linux ARM64
 
 ```bash
-docker run --rm -u $(id -u):$(id -g) -v $PWD:/src g-e GOOUTSUFFIX=-arm64 go-librespot-build-arm64
+docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-arm64 go-librespot-build-arm64
 ```
