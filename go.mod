@@ -41,4 +41,5 @@ require (
 	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
+	github.com/godbus/dbus/v5 v5.1.0 // indirect
 )
