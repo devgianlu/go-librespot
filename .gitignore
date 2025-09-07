@@ -7,3 +7,5 @@
 /lockfile
 
 /dist
+/daemon
+/go-librespot
