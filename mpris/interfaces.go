@@ -233,7 +233,7 @@ func (p MediaPlayer2PlayerInterface) Play() *dbus.Error {
 	)
 }
 func (p MediaPlayer2PlayerInterface) Seek(x int64) *dbus.Error {
-	p.log.Tracef("PlayerInterface::Seek")
+	p.log.Tracef("PlayerInterface::Seek (%d)", x)
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -249,7 +249,7 @@ type MediaPlayer2CommandSetPositionPayload struct {
 }
 
 func (p MediaPlayer2PlayerInterface) SetPosition(o dbus.ObjectPath, x int64) *dbus.Error {
-	p.log.Tracef("PlayerInterface::SetPosition")
+	p.log.Tracef("PlayerInterface::SetPosition (%s, %d)", o, x)
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{
@@ -259,7 +259,7 @@ func (p MediaPlayer2PlayerInterface) SetPosition(o dbus.ObjectPath, x int64) *db
 	)
 }
 func (p MediaPlayer2PlayerInterface) OpenUri(s dbus.ObjectPath) *dbus.Error {
-	p.log.Tracef("PlayerInterface::OpenUri")
+	p.log.Tracef("PlayerInterface::OpenUri (%s)", s)
 
 	return p.enqueueCommand(
 		MediaPlayer2PlayerCommand{

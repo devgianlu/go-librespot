@@ -54,7 +54,7 @@ type Server interface {
 	EmitSeekUpdate(state SeekState)
 	Receive() <-chan MediaPlayer2PlayerCommand
 
-	Close()
+	Close() error
 }
 
 type ConcreteServer struct {
@@ -314,4 +314,4 @@ func (d DummyServer) Receive() <-chan MediaPlayer2PlayerCommand {
 	return make(<-chan MediaPlayer2PlayerCommand)
 }
 
-func (d DummyServer) Close() {}
+func (d DummyServer) Close() error { return nil }
