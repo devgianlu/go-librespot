@@ -88,15 +88,13 @@ func artistsNames(artists []*metadata.Artist) []*string {
 }
 
 func makeMetadata(uri *string, media *librespot.Media) map[string]any {
-	// uri and media can both be nil here
-	// todo: what should happen here if uri/media are nil, should the old values be retained or overridden with nil
-	// => cross-reference other implementations
-
 	m := make(map[string]any)
 
 	if uri != nil {
 		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(*uri, ":", "/", -1))
 		m["xesam:url"] = "https://open.spotify.com/track/" + last(strings.Split(*uri, ":"))
+	} else {
+		m["mpris:trackid"] = dbus.ObjectPath("/org/mpris/MediaPlayer2/TrackList/NoTrack")
 	}
 
 	if media != nil {
