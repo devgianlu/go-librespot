@@ -14,18 +14,25 @@ import (
 type DBusInstance struct {
 	props *prop.Properties
 	conn  *dbus.Conn
+
+	log librespot.Logger
 }
 
 func (d *DBusInstance) setProperty(interfaceName string, fieldName string, value interface{}) *dbus.Error {
+
 	err := d.props.Set(
 		interfaceName,
 		fieldName,
 		dbus.MakeVariant(value),
 	)
+
 	if err != nil {
-		return err
+		d.log.Warnf("error setting mpris property: %s", *err)
+	} else {
+		d.log.Tracef("set mpris property \"%s\" on interface \"%s\" to \"%s\"", fieldName, interfaceName, value)
 	}
-	return nil
+	// can be a ptr to some error or nil
+	return err
 }
 
 type MediaState struct {
@@ -64,23 +71,20 @@ type ConcreteServer struct {
 	seekChannel  chan SeekState
 }
 
-func last[T any](a []*T) *T {
-	return a[len(a)-1]
-}
-func last_[T any](a []T) T {
+func last[T any](a []T) T {
 	return a[len(a)-1]
 }
 
-func Map[T any, S any](a []*T, f func(*T) *S) []*S {
-	result := make([]*S, len(a))
-	for idx, it := range a {
-		result[idx] = f(it)
-	}
-	return result
-}
-
-func artUrl(fileId []uint8) string {
+func coverArtUrl(fileId []uint8) string {
 	return "https://i.scdn.co/image/" + hex.EncodeToString(fileId)
+}
+
+func artistsNames(artists []*metadata.Artist) []*string {
+	res := make([]*string, len(artists))
+	for idx, it := range artists {
+		res[idx] = it.Name
+	}
+	return res
 }
 
 func makeMetadata(uri *string, media *librespot.Media) map[string]any {
@@ -92,27 +96,40 @@ func makeMetadata(uri *string, media *librespot.Media) map[string]any {
 
 	if uri != nil {
 		m["mpris:trackid"] = dbus.ObjectPath("/org/go_librespot/" + strings.Replace(*uri, ":", "/", -1))
-		m["xesam:url"] = "https://open.spotify.com/track/" + last_(strings.Split(*uri, ":"))
+		m["xesam:url"] = "https://open.spotify.com/track/" + last(strings.Split(*uri, ":"))
 	}
 
 	if media != nil {
+		var coverArtFileId []byte = nil
 		if media.IsTrack() {
+			if coverGroupImages := media.Track().GetAlbum().GetCoverGroup().GetImage(); len(coverGroupImages) > 0 {
+				coverArtFileId = coverGroupImages[len(coverGroupImages)-1].FileId
+			}
+
 			m["mpris:length"] = media.Track().GetDuration() * 1000 // convert from ms to us
-			m["mpris:artUrl"] = artUrl(last(media.Track().GetAlbum().GetCoverGroup().GetImage()).FileId)
+			if coverArtFileId != nil {
+				m["mpris:artUrl"] = coverArtUrl(coverArtFileId)
+			}
 			m["xesam:album"] = media.Track().Album.Name
-			m["xesam:albumArtist"] = Map(media.Track().Album.Artist, func(f *metadata.Artist) *string { return f.Name })
-			m["xesam:artist"] = Map(media.Track().Artist, func(f *metadata.Artist) *string { return f.Name })
+			m["xesam:albumArtist"] = artistsNames(media.Track().Album.Artist)
+			m["xesam:artist"] = artistsNames(media.Track().Artist)
 			m["xesam:autoRating"] = float64(*media.Track().Popularity) / 100.0
 			m["xesam:discNumber"] = *media.Track().DiscNumber
 			m["xesam:title"] = *media.Track().Name
 			m["xesam:trackNumber"] = *media.Track().Number
 		}
 		if media.IsEpisode() {
+			if coverGroupImages := media.Episode().GetShow().GetCoverImage().GetImage(); len(coverGroupImages) > 0 {
+				coverArtFileId = coverGroupImages[len(coverGroupImages)-1].FileId
+			}
+
 			m["mpris:length"] = media.Episode().GetDuration() * 1000
-			m["mpris:artUrl"] = artUrl(last(media.Episode().GetCoverImage().GetImage()).FileId)
+			if coverArtFileId != nil {
+				m["mpris:artUrl"] = coverArtUrl(coverArtFileId)
+			}
 			m["xesam:album"] = media.Episode().GetShow().GetName()
-			m["xesam:albumArtist"] = [1]string{media.Episode().GetShow().GetName()}
-			m["xesam:artist"] = [1]string{media.Episode().GetShow().GetName()}
+			m["xesam:albumArtist"] = []string{media.Episode().GetShow().GetName()}
+			m["xesam:artist"] = []string{media.Episode().GetShow().GetName()}
 			m["xesam:autoRating"] = 1
 			m["xesam:discNumber"] = 1
 			m["xesam:title"] = media.Episode().GetName()
@@ -147,41 +164,34 @@ func (s *ConcreteServer) Receive() <-chan MediaPlayer2PlayerCommand {
 func (s *ConcreteServer) executeStateUpdate(state MediaState) *dbus.Error {
 	if state.PlaybackStatus != s.lastUploadedState.PlaybackStatus {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "PlaybackStatus", state.PlaybackStatus); err != nil {
-			s.log.Warnf("error executing mpris state update (playbackStatus) %s", err)
 			return err
 		}
 	}
 	if state.LoopStatus != s.lastUploadedState.LoopStatus {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "LoopStatus", state.LoopStatus); err != nil {
-			s.log.Warnf("error executing mpris state update (loopStatus) %s", err)
 			return err
 		}
 	}
 	if state.Shuffle != s.lastUploadedState.Shuffle {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Shuffle", state.Shuffle); err != nil {
-			s.log.Warnf("error executing mpris state update (shuffle) %s", err)
 			return err
 		}
 	}
 	if state.Volume != s.lastUploadedState.Volume {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Volume", state.Volume); err != nil {
-			s.log.Warnf("error executing mpris state update (volume) %s", err)
 			return err
 		}
 	}
 	if state.PositionMs != s.lastUploadedState.PositionMs {
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs); err != nil {
-			s.log.Warnf("error executing mpris state update (position) %s", err)
 			return err
 		}
 	}
 	if state.Media != s.lastUploadedState.Media {
 		mt := makeMetadata(state.Uri, state.Media)
 		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Metadata", mt); err != nil {
-			s.log.Warnf("error executing mpris state update (media) %s %s", err, mt)
 			return err
 		}
-		s.log.Tracef("successfully updated metadata %s", mt)
 	}
 	return nil
 }
@@ -212,12 +222,13 @@ func (s *ConcreteServer) waitOnChannel() {
 	}
 }
 
-func (s *ConcreteServer) Close() {
+func (s *ConcreteServer) Close() error {
 	s.closed = true
 
 	close(s.seekChannel)
 	close(s.stateChannel)
-	s.dbus.conn.Close()
+
+	return s.dbus.conn.Close()
 }
 
 // NewServer opens the dbus connection and registers everything important
