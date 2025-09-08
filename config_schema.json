@@ -232,6 +232,11 @@
           "min": 0,
           "default": 100
         },
+        "ignore_last_volume": {
+          "type": "boolean",
+          "description": "Whether the last saved volume should be ignored",
+          "default": false
+        },
         "normalisation_disabled": {
           "type": "boolean",
           "description": "Whether track/album normalisation should be disabled",
