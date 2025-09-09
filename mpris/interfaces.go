@@ -1,3 +1,5 @@
+//go:build linux
+
 package mpris
 
 import (
@@ -6,22 +8,6 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
-)
-
-type PlaybackStatus string
-
-const (
-	Playing PlaybackStatus = "Playing"
-	Paused  PlaybackStatus = "Paused"
-	Stopped PlaybackStatus = "Stopped"
-)
-
-type LoopStatus string
-
-const (
-	None     LoopStatus = "None"
-	Track    LoopStatus = "Track"
-	Playlist LoopStatus = "Playlist"
 )
 
 func newProp(value interface{}, cb func(*prop.Change) *dbus.Error) *prop.Prop {
@@ -57,38 +43,6 @@ func (r MediaPlayer2RootInterface) Quit() *dbus.Error {
 	// not yet implemented, because the web api also does not support it
 	r.log.Tracef("PlayerInterface::Quit")
 	return nil
-}
-
-type MediaPlayer2PlayerCommandType int32
-
-const (
-	MediaPlayer2PlayerCommandTypeNext MediaPlayer2PlayerCommandType = iota
-	MediaPlayer2PlayerCommandTypePrevious
-	MediaPlayer2PlayerCommandTypePause
-	MediaPlayer2PlayerCommandTypePlayPause
-	MediaPlayer2PlayerCommandTypeStop
-	MediaPlayer2PlayerCommandTypePlay
-	MediaPlayer2PlayerCommandTypeSeek
-	MediaPlayer2PlayerCommandTypeSetPosition
-	MediaPlayer2PlayerCommandTypeOpenUri
-	MediaPlayer2PlayerCommandLoopStatusChanged
-	MediaPlayer2PlayerCommandRateChanged
-	MediaPlayer2PlayerCommandShuffleChanged
-	MediaPlayer2PlayerCommandVolumeChanged
-)
-
-type MediaPlayer2PlayerCommandResponse struct {
-	Err *dbus.Error
-}
-type MediaPlayer2PlayerCommand struct {
-	Type     MediaPlayer2PlayerCommandType
-	Argument any
-
-	response chan MediaPlayer2PlayerCommandResponse
-}
-
-func (m *MediaPlayer2PlayerCommand) Reply(resp MediaPlayer2PlayerCommandResponse) {
-	m.response <- resp
 }
 
 type MediaPlayer2PlayerInterface struct {
@@ -241,11 +195,6 @@ func (p MediaPlayer2PlayerInterface) Seek(x int64) *dbus.Error {
 			Argument: x,
 		},
 	)
-}
-
-type MediaPlayer2CommandSetPositionPayload struct {
-	ObjectPath dbus.ObjectPath
-	PositionUs int64
 }
 
 func (p MediaPlayer2PlayerInterface) SetPosition(o dbus.ObjectPath, x int64) *dbus.Error {

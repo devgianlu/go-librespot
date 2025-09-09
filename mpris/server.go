@@ -1,3 +1,5 @@
+//go:build linux
+
 package mpris
 
 import (
@@ -33,28 +35,6 @@ func (d *DBusInstance) setProperty(interfaceName string, fieldName string, value
 	}
 	// can be a ptr to some error or nil
 	return err
-}
-
-type MediaState struct {
-	PlaybackStatus PlaybackStatus
-	LoopStatus     LoopStatus
-	Shuffle        bool
-	Volume         float64
-	PositionMs     int64
-	Uri            *string          // nilable
-	Media          *librespot.Media // nilable
-}
-
-type SeekState struct {
-	PositionMs int64
-}
-
-type Server interface {
-	EmitStateUpdate(state MediaState)
-	EmitSeekUpdate(state SeekState)
-	Receive() <-chan MediaPlayer2PlayerCommand
-
-	Close() error
 }
 
 type ConcreteServer struct {
@@ -135,16 +115,6 @@ func makeMetadata(uri *string, media *librespot.Media) map[string]any {
 		}
 	}
 	return m
-}
-
-func GetLoopStatus(repeatingContext bool, repeatingTrack bool) LoopStatus {
-	if repeatingTrack {
-		return Track
-	}
-	if repeatingContext {
-		return Playlist
-	}
-	return None
 }
 
 func (s *ConcreteServer) EmitStateUpdate(state MediaState) {
@@ -298,18 +268,3 @@ func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
 
 	return s, nil
 }
-
-type DummyServer struct {
-}
-
-func (d DummyServer) EmitStateUpdate(_ MediaState) {
-}
-
-func (d DummyServer) EmitSeekUpdate(_ SeekState) {
-}
-
-func (d DummyServer) Receive() <-chan MediaPlayer2PlayerCommand {
-	return make(<-chan MediaPlayer2PlayerCommand)
-}
-
-func (d DummyServer) Close() error { return nil }
