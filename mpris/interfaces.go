@@ -51,6 +51,18 @@ type MediaPlayer2PlayerInterface struct {
 	commands chan MediaPlayer2PlayerCommand
 }
 
+type MediaPlayer2PlayerInterfaceInterface interface {
+	Next() *dbus.Error
+	Previous() *dbus.Error
+	Pause() *dbus.Error
+	PlayPause() *dbus.Error
+	Stop() *dbus.Error
+	Play() *dbus.Error
+	Seek(int64) *dbus.Error
+	SetPosition(dbus.ObjectPath, int64) *dbus.Error
+	OpenUri(dbus.ObjectPath) *dbus.Error
+}
+
 func (p MediaPlayer2PlayerInterface) Props() map[string]*prop.Prop {
 	return map[string]*prop.Prop{
 		"PlaybackStatus": newProp(Playing, nil),
