@@ -373,7 +373,7 @@ type Config struct {
 
 	// We need to keep this object around, otherwise it gets GC'd and the
 	// finalizer will run, probably closing the lock.
-	configLock *flock.Flock
+	cacheLock *flock.Flock
 
 	LogLevel                      log.Level `koanf:"log_level"`
 	LogDisableTimestamp           bool      `koanf:"log_disable_timestamp"`
@@ -461,18 +461,18 @@ func loadConfig(cfg *Config) error {
 		return err
 	}
 
-	// Make config directory if needed.
+	// Make cache directory if needed.
 	err = os.MkdirAll(cfg.CacheDir, 0o700)
 	if err != nil {
-		return fmt.Errorf("failed creating config directory: %w", err)
+		return fmt.Errorf("failed creating cache directory: %w", err)
 	}
 
-	// Lock the config directory (to ensure multiple instances won't clobber
+	// Lock the cache directory (to ensure multiple instances won't clobber
 	// each others state).
 	lockFilePath := filepath.Join(cfg.CacheDir, "lockfile")
-	cfg.configLock = flock.New(lockFilePath)
-	if locked, err := cfg.configLock.TryLock(); err != nil {
-		return fmt.Errorf("could not lock config directory: %w", err)
+	cfg.cacheLock = flock.New(lockFilePath)
+	if locked, err := cfg.cacheLock.TryLock(); err != nil {
+		return fmt.Errorf("could not lock cache directory: %w", err)
 	} else if !locked {
 		// Lock already taken! Looks like go-librespot is already running.
 		return fmt.Errorf("%w (lockfile: %s)", errAlreadyRunning, lockFilePath)
