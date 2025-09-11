@@ -368,7 +368,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 }
 
 type Config struct {
-	CacheDir string `koanf:"cache"`
+	CacheDir   string `koanf:"cache"`
 	ConfigPath string `koanf:"config"`
 
 	// We need to keep this object around, otherwise it gets GC'd and the
