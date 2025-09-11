@@ -381,6 +381,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 
 type Config struct {
 	ConfigDir string `koanf:"config_dir"`
+	ConfigPath string `koanf:"config"`
 
 	// We need to keep this object around, otherwise it gets GC'd and the
 	// finalizer will run, probably closing the lock.
@@ -453,6 +454,9 @@ func loadConfig(cfg *Config) error {
 	defaultConfigDir := filepath.Join(userConfigDir, "go-librespot")
 	f.StringVar(&cfg.ConfigDir, "config_dir", defaultConfigDir, "the configuration directory")
 
+	defaultConfigPath := filepath.Join(defaultConfigDir, "config.yaml")
+	f.StringVar(&cfg.ConfigPath, "config", defaultConfigPath, "the configuration file")
+
 	var configOverrides []string
 	f.StringArrayVarP(&configOverrides, "conf", "c", nil, "override config values (format: field=value, use field1.field2=value for nested fields)")
 
@@ -505,10 +509,10 @@ func loadConfig(cfg *Config) error {
 
 	// load file configuration (if available)
 	var configPath string
-	if _, err := os.Stat(filepath.Join(cfg.ConfigDir, "config.yaml")); os.IsNotExist(err) {
+	if _, err := os.Stat(cfg.ConfigPath); os.IsNotExist(err) {
 		configPath = filepath.Join(cfg.ConfigDir, "config.yml")
 	} else {
-		configPath = filepath.Join(cfg.ConfigDir, "config.yaml")
+		configPath = cfg.ConfigPath
 	}
 
 	if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
