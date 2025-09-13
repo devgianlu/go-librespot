@@ -231,6 +231,7 @@ func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
 
 	s.dbus = &DBusInstance{
 		conn: conn,
+		log:  logger,
 	}
 
 	s.dbus.props, err = prop.Export(

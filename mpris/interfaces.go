@@ -85,7 +85,6 @@ func (p MediaPlayer2PlayerInterface) Props() map[string]*prop.Prop {
 	}
 }
 
-// enqueue command in channel,
 func (p MediaPlayer2PlayerInterface) enqueueCommand(command MediaPlayer2PlayerCommand) *dbus.Error {
 	command.response = make(chan MediaPlayer2PlayerCommandResponse)
 

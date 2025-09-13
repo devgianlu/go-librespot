@@ -5,6 +5,7 @@ go 1.22.2
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e
+	github.com/godbus/dbus/v5 v5.1.0
 	github.com/gofrs/flock v0.12.1
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/jfreymuth/pulse v0.1.2-0.20241102120944-4ffb35054b53
@@ -21,6 +22,7 @@ require (
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/net v0.26.0
 	golang.org/x/oauth2 v0.21.0
+	golang.org/x/sys v0.22.0
 	google.golang.org/protobuf v1.30.0
 	nhooyr.io/websocket v1.8.7
 )
@@ -38,8 +40,6 @@ require (
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/sync v0.7.0 // indirect
-	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/tools v0.22.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
 )

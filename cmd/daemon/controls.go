@@ -80,8 +80,8 @@ func (p *AppPlayer) schedulePrefetchNext() {
 func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 	// p.state, p.state.player, p.state.device, p.state.player.Options are assumed to always be non-nil here
 
-	var trackUri *string = nil
-	var media *librespot.Media = nil
+	var trackUri *string
+	var media *librespot.Media
 	if p.state.player.Track != nil {
 		trackUri = &p.state.player.Track.Uri
 	}
