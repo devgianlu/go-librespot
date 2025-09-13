@@ -261,6 +261,11 @@
           "type": "boolean",
           "description": "Whether autoplay of more songs should be disabled",
           "default": false
+        },
+        "mpris_enabled": {
+          "type": "boolean",
+          "description": "Enables MPRIS communication with D-Bus",
+          "default": false
         }
       },
       "required": [

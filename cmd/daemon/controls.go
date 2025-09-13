@@ -12,6 +12,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
@@ -76,6 +77,32 @@ func (p *AppPlayer) schedulePrefetchNext() {
 	}
 }
 
+func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
+	// p.state, p.state.player, p.state.device, p.state.player.Options are assumed to always be non-nil here
+
+	var trackUri *string
+	var media *librespot.Media
+	if p.state.player.Track != nil {
+		trackUri = &p.state.player.Track.Uri
+	}
+	if p.primaryStream != nil {
+		media = p.primaryStream.Media
+	}
+
+	p.app.mpris.EmitStateUpdate(
+		mpris.MediaState{
+			PlaybackStatus: playbackStatus,
+			LoopStatus: mpris.GetLoopStatus(
+				p.state.player.Options.RepeatingContext, p.state.player.Options.RepeatingTrack),
+			Shuffle:    p.state.player.Options.ShufflingContext,
+			Volume:     float64(p.state.device.Volume) / float64(player.MaxStateVolume),
+			PositionMs: p.state.player.Position,
+			Uri:        trackUri,
+			Media:      media,
+		},
+	)
+}
+
 func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlay:
@@ -93,6 +120,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.trackPosition(),
 		)
 
+		p.emitMprisUpdate(mpris.Playing)
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
@@ -109,6 +138,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.updateState(ctx)
 
 		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
+
+		p.emitMprisUpdate(mpris.Playing)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -133,6 +164,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.tracks.CurrentTrack(),
 			p.state.trackPosition(),
 		)
+
+		p.emitMprisUpdate(mpris.Paused)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
@@ -167,6 +200,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 					PlayOrigin: p.state.playOrigin(),
 				},
 			})
+			p.emitMprisUpdate(mpris.Stopped)
 		}
 	case player.EventTypeStop:
 		p.app.server.Emit(&ApiEvent{
@@ -175,6 +209,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 				PlayOrigin: p.state.playOrigin(),
 			},
 		})
+		p.emitMprisUpdate(mpris.Stopped)
 	default:
 		panic("unhandled player event")
 	}
@@ -478,6 +513,12 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
 
+	p.app.mpris.EmitSeekUpdate(
+		mpris.SeekState{
+			PositionMs: position,
+		},
+	)
+
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
 		Data: ApiEventDataSeek{
@@ -693,4 +734,27 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 			Max:   p.app.cfg.VolumeSteps,
 		},
 	})
+}
+
+func (p *AppPlayer) stopPlayback(ctx context.Context) error {
+	p.player.Stop()
+	p.primaryStream = nil
+	p.secondaryStream = nil
+
+	p.state.reset()
+	if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
+		return fmt.Errorf("failed inactive state put: %w", err)
+	}
+
+	p.schedulePrefetchNext()
+
+	if p.app.cfg.ZeroconfEnabled {
+		p.logout <- p
+	}
+
+	p.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeInactive,
+	})
+
+	return nil
 }
