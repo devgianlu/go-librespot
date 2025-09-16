@@ -221,7 +221,7 @@ func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
 	n = 0
 	for len(p) > 0 {
 		if chunkIdx >= len(r.chunks) {
-			return n, nil
+			return n, io.EOF
 		}
 
 		// get the chunk data
