@@ -65,7 +65,12 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
-	app.log = &LogrusAdapter{log.NewEntry(log.StandardLogger())}
+	logger := log.StandardLogger()
+	logger.SetFormatter(&log.TextFormatter{
+		DisableTimestamp: cfg.LogDisableTimestamp,
+	})
+
+	app.log = &LogrusAdapter{log.NewEntry(logger)}
 	app.client = &http.Client{Timeout: 30 * time.Second}
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
@@ -370,6 +375,7 @@ type Config struct {
 	configLock *flock.Flock
 
 	LogLevel                      log.Level `koanf:"log_level"`
+	LogDisableTimestamp           bool      `koanf:"log_disable_timestamp"`
 	DeviceId                      string    `koanf:"device_id"`
 	DeviceName                    string    `koanf:"device_name"`
 	DeviceType                    string    `koanf:"device_type"`

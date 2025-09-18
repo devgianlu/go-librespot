@@ -21,6 +21,11 @@
           ],
           "default": "info"
         },
+        "log_disable_timestamp": {
+          "type": "boolean",
+          "description": "Whether to disable timestamps in log output",
+          "default": false
+        },
         "device_id": {
           "type": "string",
           "description": "The device ID in hex",
