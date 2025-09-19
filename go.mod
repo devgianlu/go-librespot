@@ -19,6 +19,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/xlab/vorbis-go v0.0.0-20210911202351-b5b85f1ec645
+	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.24.0
 	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/net v0.26.0
