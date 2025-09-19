@@ -151,6 +151,7 @@ func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
 	}
 
 	chunk.fetching = true
+	chunk.err = nil
 	chunk.L.Unlock()
 
 	// download chunk
