@@ -1,0 +1,13 @@
+dir: '{{.InterfaceDir}}'
+structname: Mock{{.InterfaceName}}
+pkgname: '{{.SrcPackageName}}'
+filename: "mock_{{.InterfaceName}}.go"
+template: testify
+template-data:
+  mock-build-tags: test_unit || test_integration
+  unroll-variadic: true
+packages:
+  github.com/devgianlu/go-librespot:
+    interfaces:
+      Logger:
+      PageResolver:
