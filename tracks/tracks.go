@@ -111,7 +111,7 @@ func (tl *List) PrevTracks() []*connectpb.ProvidedTrack {
 	return tracks
 }
 
-func (tl *List) NextTracks(ctx context.Context) []*connectpb.ProvidedTrack {
+func (tl *List) NextTracks(ctx context.Context, nextHint []*connectpb.ContextTrack) []*connectpb.ProvidedTrack {
 	tracks := make([]*connectpb.ProvidedTrack, 0, MaxTracksInContext)
 
 	if len(tl.queue) > 0 {
@@ -125,14 +125,33 @@ func (tl *List) NextTracks(ctx context.Context) []*connectpb.ProvidedTrack {
 		}
 	}
 
-	iter := tl.tracks.iterHere()
-	for len(tracks) < MaxTracksInContext && iter.next(ctx) {
-		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
-	}
+	// when set_queue commands are called, the order of the queue is given by the "next hint"
+	if nextHint != nil {
+		queueLength := len(tl.queue)
+		for idx, curr := range nextHint {
+			// skip all the tracks that are already in the queue (green square icon inside spotify)
+			if idx < queueLength {
+				continue
+			}
+			if !(len(tracks) < MaxTracksInContext) {
+				break
+			}
 
-	if err := iter.error(); err != nil {
-		tl.log.WithError(err).Error("failed fetching next tracks")
+			// if one moves one track out of the queue into the "coming next" tracks, it is unqueued, because queued items
+			// are only the ones with the green symbol. if is_queued remains set, spotify will remove this track from the
+			// coming up section entirely
+			delete(curr.Metadata, "is_queued")
+			tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr))
+		}
+	} else {
+		iter := tl.tracks.iterHere()
+		for len(tracks) < MaxTracksInContext && iter.next(ctx) {
+			curr := iter.get()
+			tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
+		}
+		if err := iter.error(); err != nil {
+			tl.log.WithError(err).Error("failed fetching next tracks")
+		}
 	}
 
 	return tracks
@@ -246,8 +265,10 @@ func (tl *List) SetQueue(_ []*connectpb.ContextTrack, next []*connectpb.ContextT
 
 	// I don't know if this good enough, but it surely saves us a lot of complicated code
 	for _, track := range next {
-		if queued, ok := track.Metadata["is_queued"]; !ok || queued != "true" {
-			continue
+		// the queued tracks will always be the first tracks in the next list, so if we meet the first "non-queue",
+		// 	the queue definitely ended
+		if queued := track.Metadata["is_queued"]; queued != "true" {
+			break
 		}
 
 		tl.queue = append(tl.queue, track)
