@@ -128,6 +128,9 @@ func (tl *List) NextTracks(ctx context.Context, nextHint []*connectpb.ContextTra
 	// when set_queue commands are called, the order of the queue is given by the "next hint"
 	if nextHint != nil {
 		queueLength := len(tl.queue)
+		if tl.playingQueue {
+			queueLength -= 1
+		}
 		for idx, curr := range nextHint {
 			// skip all the tracks that are already in the queue (green square icon inside spotify)
 			if idx < queueLength {
