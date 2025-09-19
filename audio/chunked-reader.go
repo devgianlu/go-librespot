@@ -3,6 +3,7 @@ package audio
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -61,6 +62,8 @@ type HttpChunkedReader struct {
 
 	len int64
 	pos int64
+
+	prefetchWg sync.WaitGroup
 
 	initialLatency time.Duration
 	latencies      []time.Duration
@@ -203,7 +206,11 @@ func (r *HttpChunkedReader) prefetchChunks(curr int) {
 			break
 		}
 
-		go func(i int) { _, _ = r.fetchChunk(i) }(i)
+		r.prefetchWg.Add(1)
+		go func(i int) {
+			defer r.prefetchWg.Done()
+			_, _ = r.fetchChunk(i)
+		}(i)
 	}
 }
 
@@ -376,4 +383,19 @@ func (r *HttpChunkedReader) TotalTime() time.Duration {
 		sum += latency
 	}
 	return sum
+}
+
+func (r *HttpChunkedReader) Close() error {
+	for _, chunk := range r.chunks {
+		chunk.L.Lock()
+		if chunk.fetching {
+			chunk.err = net.ErrClosed
+			chunk.fetching = false
+			chunk.Broadcast()
+		}
+		chunk.L.Unlock()
+	}
+
+	r.prefetchWg.Wait()
+	return nil
 }
