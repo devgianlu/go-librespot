@@ -8,7 +8,10 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        runner: [ ubuntu-24.04, macos-15 ]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v3
 
@@ -17,8 +20,13 @@ jobs:
         with:
           go-version: '1.22.2'
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libvorbis-dev libogg-dev
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install libogg libvorbis
 
       - name: Build daemon
         run: go build -v ./cmd/daemon
