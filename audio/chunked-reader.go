@@ -117,7 +117,10 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 			URL:    r.url,
 			Header: http.Header{
 				"User-Agent": []string{librespot.UserAgent()},
-				"Range":      []string{fmt.Sprintf("bytes=%d-%d", idx*DefaultChunkSize, (idx+1)*DefaultChunkSize-1)},
+				"Range": []string{fmt.Sprintf("bytes=%d-%d",
+					idx*DefaultChunkSize,
+					min(max(r.len, DefaultChunkSize), int64((idx+1)*DefaultChunkSize))-1,
+				)},
 			},
 		})
 		if err != nil {
