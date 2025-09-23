@@ -153,6 +153,7 @@ The following options are also available:
 
 ```yaml
 log_level: info # Log level configuration (trace, debug, info, warn, error)
+log_disable_timestamp: false # Whether to disable timestamps in log output
 device_id: '' # Spotify device ID (auto-generated)
 device_name: '' # Spotify device name
 device_type: computer # Spotify device type (icon)

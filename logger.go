@@ -16,3 +16,20 @@ type Logger interface {
 	WithField(key string, value interface{}) Logger
 	WithError(err error) Logger
 }
+
+type NullLogger struct{}
+
+func (l *NullLogger) Tracef(string, ...interface{}) {}
+func (l *NullLogger) Debugf(string, ...interface{}) {}
+func (l *NullLogger) Infof(string, ...interface{})  {}
+func (l *NullLogger) Warnf(string, ...interface{})  {}
+func (l *NullLogger) Errorf(string, ...interface{}) {}
+
+func (l *NullLogger) Trace(...interface{}) {}
+func (l *NullLogger) Debug(...interface{}) {}
+func (l *NullLogger) Info(...interface{})  {}
+func (l *NullLogger) Warn(...interface{})  {}
+func (l *NullLogger) Error(...interface{}) {}
+
+func (l *NullLogger) WithField(string, interface{}) Logger { return l }
+func (l *NullLogger) WithError(error) Logger               { return l }
