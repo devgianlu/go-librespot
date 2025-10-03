@@ -165,6 +165,14 @@
           "description": "List of network interfaces that will be advertised through zeroconf (empty to advertise all present interfaces)",
           "default": []
         },
+        "zeroconf_implementation": {
+          "type": "string",
+          "description": "The Zeroconf implementation to use",
+          "enum": [
+            "builtin"
+          ],
+          "default": "builtin"
+        },
         "credentials": {
           "type": "object",
           "properties": {
