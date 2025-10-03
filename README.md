@@ -80,6 +80,7 @@ An example configuration (not required) looks like this:
 ```yaml
 zeroconf_enabled: false # Whether to keep the device discoverable at all times, even if authenticated via other means
 zeroconf_port: 0 # The port to use for Zeroconf, 0 for random
+zeroconf_implementation: builtin # Zeroconf implementation to use (builtin, avahi)
 credentials:
   type: zeroconf
   zeroconf:
@@ -92,6 +93,9 @@ and you can switch to interactive mode without having to authenticate manually.
 If `zeroconf_interfaces_to_advertise` is provided, you can limit interfaces that will be advertised. For example, if you
 have Docker installed on your host, you may want to disable advertising to its bridge interface, or you may want to
 disable interfaces that will not be reachable.
+
+If `zeroconf_implementation` is set to `avahi`, go-librespot will use Avahi through D-Bus to advertise the service. This
+is preferred if you already have Avahi running on your system. The default implementation may conflict with Avahi.
 
 ### Interactive mode
 
