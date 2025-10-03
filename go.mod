@@ -3,6 +3,7 @@ module github.com/devgianlu/go-librespot
 go 1.22.2
 
 require (
+	github.com/OpenPrinting/go-avahi v0.0.0-20250813163007-dd9db1c4a6e9
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e
 	github.com/godbus/dbus/v5 v5.1.0

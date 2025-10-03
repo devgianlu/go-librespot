@@ -169,7 +169,8 @@
           "type": "string",
           "description": "The Zeroconf implementation to use",
           "enum": [
-            "builtin"
+            "builtin",
+            "avahi"
           ],
           "default": "builtin"
         },
