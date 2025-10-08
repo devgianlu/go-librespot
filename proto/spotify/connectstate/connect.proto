@@ -2,18 +2,15 @@ syntax = "proto3";
 
 package spotify.connectstate;
 
-import "spotify/connectstate/connect_player.proto";
+import "spotify/common/media/media.proto";
 import "spotify/connectstate/devices/connect_devices.proto";
+import "spotify/connectstate/player.proto";
 
 message ClusterUpdate {
   Cluster cluster = 1;
   ClusterUpdateReason update_reason = 2;
   string ack_id = 3;
   repeated string devices_that_changed = 4;
-}
-
-message PostCommandResponse {
-  string ack_id = 1;
 }
 
 message Device {
@@ -30,11 +27,30 @@ message Cluster {
   map<string, DeviceInfo> device = 4;
   bytes transfer_data = 5;
   uint64 transfer_data_timestamp = 6;
-  int64 not_playing_since_timestamp = 7;
   bool need_full_player_state = 8;
   int64 server_timestamp_ms = 9;
+  repeated DodoDeviceInfo dodo_devices = 12;
   optional bool needs_state_updates = 10;
   optional uint64 started_playing_at_timestamp = 11;
+  optional bool needs_local_devices = 13;
+
+  reserved 7;
+}
+
+message DodoDeviceInfo {
+  string cs_id = 1;
+  DodoDeviceType dodo_device_type = 2;
+  optional PlayerStateSummary player_state_summary = 3;
+  optional uint64 started_playing_at_timestamp = 4;
+
+  message PlayerStateSummary {
+    bool is_playing = 1;
+    bool is_paused = 2;
+    bool disallow_pausing = 3;
+    bool disallow_resuming = 4;
+    bool disallow_skipping_prev = 5;
+    bool disallow_skipping_next = 6;
+  }
 }
 
 message PutStateRequest {
@@ -56,16 +72,11 @@ message PrivateDeviceInfo {
   string platform = 1;
 }
 
-message SubscribeRequest {
-  string callback_url = 1;
-}
-
 message DeviceInfo {
   bool can_play = 1;
   uint32 volume = 2;
   string name = 3;
   Capabilities capabilities = 4;
-  repeated DeviceMetadata metadata = 5;
   string device_software_version = 6;
   spotify.connectstate.devices.DeviceType device_type = 7;
   string spirc_version = 9;
@@ -83,22 +94,20 @@ message DeviceInfo {
   bool is_offline = 21;
   string public_ip = 22;
   string license = 23;
-  optional AudioOutputDeviceInfo audio_output_device_info = 24;
   bool is_group = 25;
   bool is_dynamic_device = 26;
   repeated string disallow_playback_reasons = 27;
   repeated string disallow_transfer_reasons = 28;
+  bool is_locally_discovered = 29;
+  optional AudioOutputDeviceInfo audio_output_device_info = 24;
+  optional spotify.connectstate.devices.GroupData group_data = 30;
+
+  reserved 5; // metadata
 }
 
 message AudioOutputDeviceInfo {
   optional AudioOutputDeviceType audio_output_device_type = 1;
   optional string device_name = 2;
-}
-
-message DeviceMetadata {
-  option deprecated = true;
-  string type = 1;
-  string metadata = 2;
 }
 
 message Capabilities {
@@ -128,9 +137,15 @@ message Capabilities {
   string connect_capabilities = 27;
   bool supports_rooms = 28;
   bool supports_dj = 29;
-  spotify.connectstate.BitrateLevel supported_audio_quality = 30;
+  spotify.common.media.AudioQuality supported_audio_quality = 30;
+  bool supports_smart_shuffle_mode = 33;
+  bool supports_remote_sleep_timer = 34;
+  bool supports_ping_request = 35;
+  bool supports_playlist_mixing = 36;
 
-  reserved 1, 4, 24; // "supported_contexts", "supports_lossless_audio"
+  reserved 1, 4, 24, 31, 32;
+
+  reserved "supported_contexts", "supports_lossless_audio", "supports_playback_speed", "play_token_lost_behavior";
 }
 
 message CapabilitySupportDetails {
@@ -144,6 +159,11 @@ message ConnectCommandOptions {
   uint32 target_alias_id = 3;
 }
 
+message ConnectLoggingParams {
+  repeated string interaction_ids = 1;
+  repeated string page_instance_ids = 2;
+}
+
 message LogoutCommand {
   ConnectCommandOptions command_options = 1;
 }
@@ -151,6 +171,9 @@ message LogoutCommand {
 message SetVolumeCommand {
   int32 volume = 1;
   ConnectCommandOptions command_options = 2;
+  ConnectLoggingParams logging_params = 3;
+  string connection_type = 4;
+  string sent_by_device_id = 5;
 }
 
 message RenameCommand {
@@ -158,27 +181,42 @@ message RenameCommand {
   ConnectCommandOptions command_options = 2;
 }
 
-message ConnectPlayerCommand {
+message ProxyTransferCommand {
   string player_command_json = 1;
   ConnectCommandOptions command_options = 2;
+  string target_device_id = 3;
+  ConnectLoggingParams logging_params = 4;
 }
 
 message SetBackendMetadataCommand {
   map<string, string> metadata = 1;
 }
 
-message CommandAndSourceDevice {
-  string command = 1;
-  DeviceInfo source_device_info = 2;
-}
-
-message ActiveDeviceUpdate {
+message LocalDevice {
   string device_id = 1;
+  string device_name = 2;
+  devices.DeviceType device_type = 3;
+  string client_id = 4;
+  string product_id = 5;
+  string brand = 6;
+  string model = 7;
+  string local_ip = 8;
+  repeated string supported_media_types = 11;
+  bool supports_dj = 12;
+  bool supports_on_demand = 13;
+  bool is_voice_enabled = 14;
+  string license = 15;
+  CapabilitySupportDetails supports_hifi = 16;
+  repeated string disallow_reasons = 17;
+  bool supports_external_episodes = 19;
+  optional uint32 alias_id = 9;
+  optional string connect_capabilities = 18;
 }
 
-message StartedPlayingEvent {
-  bytes user_info_header = 1;
-  string device_id = 2;
+enum DodoDeviceType {
+  UNKNOWN_DODO_DEVICE_TYPE = 0;
+  DODO1 = 1;
+  DODO2 = 2;
 }
 
 enum AudioOutputDeviceType {
@@ -187,7 +225,8 @@ enum AudioOutputDeviceType {
   LINE_OUT = 2;
   BLUETOOTH = 3;
   AIRPLAY = 4;
-  AUTOMOTIVE = 5;
+  AUTOMOTIVE = 5 [deprecated = true];
+  CAR_PROJECTED = 6;
 }
 
 enum PutStateReason {
@@ -224,15 +263,4 @@ enum ClusterUpdateReason {
   DEVICE_VOLUME_CHANGED = 4;
   DEVICE_ALIAS_CHANGED = 5;
   DEVICE_NEW_CONNECTION = 6;
-}
-
-enum SendCommandResult {
-  UNKNOWN_SEND_COMMAND_RESULT = 0;
-  SUCCESS = 1;
-  DEVICE_NOT_FOUND = 2;
-  CONTEXT_PLAYER_ERROR = 3;
-  DEVICE_DISAPPEARED = 4;
-  UPSTREAM_ERROR = 5;
-  DEVICE_DOES_NOT_SUPPORT_COMMAND = 6;
-  RATE_LIMITED = 7;
 }

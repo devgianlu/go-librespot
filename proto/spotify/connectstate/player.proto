@@ -31,8 +31,10 @@ message PlayerState {
   PlaybackQuality playback_quality = 32;
   repeated string signals = 33;
   string session_command_id = 35;
+  optional AdBreakContext ad_break_context = 37;
+  optional SleepTimer sleep_timer = 38;
 
-  reserved 26, 27, 28, 29, 30, 31, 34;
+  reserved 26, 27, 28, 29, 30, 31, 34, 36;
 }
 
 message ProvidedTrack {
@@ -46,7 +48,8 @@ message ProvidedTrack {
   string album_uri = 8;
   repeated string disallow_reasons = 9;
   string artist_uri = 10;
-  repeated string disallow_undecided = 11;
+
+  reserved 11;
 }
 
 message ContextIndex {
@@ -90,6 +93,14 @@ message Restrictions {
   repeated string disallow_setting_playback_speed_reasons = 25;
   map<string, ModeRestrictions> disallow_setting_modes = 28;
   map<string, RestrictionReasons> disallow_signals = 29;
+  repeated string disallow_add_to_queue_track_reasons = 30;
+  repeated string disallow_tap_to_play_track_in_next_tracks_reasons = 31;
+  repeated string disallow_reordering_track_in_next_tracks_reasons = 32;
+  repeated string disallow_reordering_episode_in_next_tracks_reasons = 33;
+  repeated string disallow_reordering_enqueued_track_in_next_tracks_reasons = 34;
+  repeated string disallow_reordering_enqueued_episode_in_next_tracks_reasons = 35;
+  repeated string disallow_viewing_queue_reasons = 36;
+  repeated string disallow_viewing_ordered_tracks_in_next_tracks_reasons = 37;
 
   reserved 26, 27;
 }
@@ -102,7 +113,7 @@ message PlayOrigin {
   string referrer_identifier = 5;
   string device_identifier = 6;
   repeated string feature_classes = 7;
-  optional string restriction_identifier = 8;
+  string restriction_identifier = 8;
 }
 
 message ContextPlayerOptions {
@@ -117,84 +128,34 @@ message Suppressions {
   repeated string providers = 1;
 }
 
-message InstrumentationParams {
-  repeated string interaction_ids = 6;
-  repeated string page_instance_ids = 7;
-}
-
-message Playback {
-  int64 timestamp = 1;
-  int32 position_as_of_timestamp = 2;
-  double playback_speed = 3;
-  bool is_paused = 4;
-  ContextTrack current_track = 5;
-  optional ContextTrack associated_current_track = 6;
-  optional int32 associated_position_as_of_timestamp = 7;
-}
-
-message Queue {
-  repeated ContextTrack tracks = 1;
-  bool is_playing_queue = 2;
-}
-
-message Session {
-  PlayOrigin play_origin = 1;
-  Context context = 2;
-  string current_uid = 3;
-  ContextPlayerOptionOverrides option_overrides = 4;
-  Suppressions suppressions = 5;
-  InstrumentationParams instrumentation_params = 6;
-  optional string shuffle_seed = 7;
-  optional Context main_context = 8;
-  optional string original_session_id = 9;
-}
-
-message TransferState {
-  ContextPlayerOptions options = 1;
-  Playback playback = 2;
-  Session current_session = 3;
-  Queue queue = 4;
-}
-
-message ContextTrack {
-  string uri = 1;
-  string uid = 2;
-  bytes gid = 3;
-  map<string, string> metadata = 4;
-}
-
-message ContextPlayerOptionOverrides {
-  bool shuffling_context = 1;
-  bool repeating_context = 2;
-  bool repeating_track = 3;
-  optional float playback_speed = 4;
-  map<string, string> modes = 5;
-}
-
-message Context {
-  string uri = 1;
-  string url = 2;
-  map<string, string> metadata = 3;
-  Restrictions restrictions = 4;
-  repeated ContextPage pages = 5;
-  bool loading = 6;
-}
-
-message ContextPage {
-  string page_url = 1;
-  string next_page_url = 2;
-  map<string, string> metadata = 3;
-  repeated ContextTrack tracks = 4;
-
-  reserved 5;
-}
-
 message PlaybackQuality {
   BitrateLevel bitrate_level = 1;
   BitrateStrategy strategy = 2;
   BitrateLevel target_bitrate_level = 3;
   bool target_bitrate_available = 4;
   HiFiStatus hifi_status = 5;
+}
+
+message AdBreakContext {
+  uint64 max_seconds_remaining = 1;
+  uint64 position_in_current_ad_break = 2;
+  uint64 total_ads_in_break_estimate = 3;
+}
+
+message SleepTimer {
+  oneof timer_type {
+    None none = 1;
+    Timestamp timestamp = 2;
+    EndOfTrack end_of_track = 3;
+  }
+
+  message None {}
+
+  message Timestamp {
+    int64 timestamp = 1;
+  }
+
+  message EndOfTrack {}
 }
 
 enum BitrateLevel {

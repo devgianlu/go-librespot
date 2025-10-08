@@ -809,7 +809,7 @@ var File_spotify_login5_v3_login5_proto protoreflect.FileDescriptor
 
 const file_spotify_login5_v3_login5_proto_rawDesc = "" +
 	"\n" +
-	"\x1espotify/login5/v3/login5.proto\x12\x11spotify.login5.v3\x1a*spotify/login5/v3/login5_client_info.proto\x1a(spotify/login5/v3/login5_user_info.proto\x1a9spotify/login5/v3/challenges/login5_challenges_code.proto\x1a=spotify/login5/v3/challenges/login5_challenges_hashcash.proto\x1a6spotify/login5/v3/credentials/login5_credentials.proto\x1a6spotify/login5/v3/identifiers/login5_identifiers.proto\"J\n" +
+	"\x1espotify/login5/v3/login5.proto\x12\x11spotify.login5.v3\x1a9spotify/login5/v3/challenges/login5_challenges_code.proto\x1a=spotify/login5/v3/challenges/login5_challenges_hashcash.proto\x1a6spotify/login5/v3/credentials/login5_credentials.proto\x1a6spotify/login5/v3/identifiers/login5_identifiers.proto\x1a*spotify/login5/v3/login5_client_info.proto\x1a(spotify/login5/v3/login5_user_info.proto\"J\n" +
 	"\n" +
 	"Challenges\x12<\n" +
 	"\n" +

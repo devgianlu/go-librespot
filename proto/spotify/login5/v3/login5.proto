@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package spotify.login5.v3;
 
-import "spotify/login5/v3/login5_client_info.proto";
-import "spotify/login5/v3/login5_user_info.proto";
 import "spotify/login5/v3/challenges/login5_challenges_code.proto";
 import "spotify/login5/v3/challenges/login5_challenges_hashcash.proto";
 import "spotify/login5/v3/credentials/login5_credentials.proto";
 import "spotify/login5/v3/identifiers/login5_identifiers.proto";
+import "spotify/login5/v3/login5_client_info.proto";
+import "spotify/login5/v3/login5_user_info.proto";
 
 message Challenges {
   repeated Challenge challenges = 1;
