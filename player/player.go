@@ -542,7 +542,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 	p.events.PostStreamRequestAudioKey(playbackId)
 
-	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, false)
+	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, file.Format, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed resolving track storage: %w", err)
 	}

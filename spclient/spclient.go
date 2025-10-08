@@ -18,6 +18,7 @@ import (
 	storagepb "github.com/devgianlu/go-librespot/proto/spotify/download"
 	eventsenderpb "github.com/devgianlu/go-librespot/proto/spotify/event_sender"
 	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	netfortunepb "github.com/devgianlu/go-librespot/proto/spotify/netfortune"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
 	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
@@ -193,12 +194,12 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 	return nil
 }
 
-func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte, prefetch bool) (*storagepb.StorageResolveResponse, error) {
+func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte, format *metadatapb.AudioFile_Format, prefetch bool) (*storagepb.StorageResolveResponse, error) {
 	var path string
 	if prefetch {
-		path = fmt.Sprintf("/storage-resolve/files/audio/interactive_prefetch/%s", hex.EncodeToString(fileId))
+		path = fmt.Sprintf("/storage-resolve/v2/files/audio/interactive_prefetch/%d/%s", format.Number(), hex.EncodeToString(fileId))
 	} else {
-		path = fmt.Sprintf("/storage-resolve/files/audio/interactive/%s", hex.EncodeToString(fileId))
+		path = fmt.Sprintf("/storage-resolve/v2/files/audio/interactive/%d/%s", format.Number(), hex.EncodeToString(fileId))
 	}
 
 	resp, err := c.Request(ctx, "GET", path, nil, nil, nil)
