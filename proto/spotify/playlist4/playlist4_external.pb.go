@@ -3260,7 +3260,7 @@ var File_spotify_playlist4_playlist4_external_proto protoreflect.FileDescriptor
 
 const file_spotify_playlist4_playlist4_external_proto_rawDesc = "" +
 	"\n" +
-	"*spotify/playlist4/playlist4_external.proto\x12\x11spotify.playlist4\x1a\x1dspotify/lens/lens_model.proto\x1a5spotify/playlist_permission/playlist_permission.proto\x1a*spotify/playlist/signal/signal_model.proto\"[\n" +
+	"*spotify/playlist4/playlist4_external.proto\x12\x11spotify.playlist4\x1a\x1dspotify/lens/lens_model.proto\x1a*spotify/playlist/signal/signal_model.proto\x1a5spotify/playlist_permission/playlist_permission.proto\"[\n" +
 	"\x04Item\x12\x10\n" +
 	"\x03uri\x18\x01 \x02(\tR\x03uri\x12A\n" +
 	"\n" +
@@ -3557,8 +3557,8 @@ const file_spotify_playlist4_playlist4_external_proto_rawDesc = "" +
 	"\"GEOBLOCK_BLOCKING_TYPE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cGEOBLOCK_BLOCKING_TYPE_TITLE\x10\x01\x12&\n" +
 	"\"GEOBLOCK_BLOCKING_TYPE_DESCRIPTION\x10\x02\x12 \n" +
-	"\x1cGEOBLOCK_BLOCKING_TYPE_IMAGE\x10\x03B\xd1\x01\n" +
-	"\x15com.spotify.playlist4B\x16Playlist4ExternalProtoH\x01P\x01Z9github.com/devgianlu/go-librespot/proto/spotify/playlist4\xa2\x02\x03SPX\xaa\x02\x11Spotify.Playlist4\xca\x02\x11Spotify\\Playlist4\xe2\x02\x1dSpotify\\Playlist4\\GPBMetadata\xea\x02\x12Spotify::Playlist4"
+	"\x1cGEOBLOCK_BLOCKING_TYPE_IMAGE\x10\x03B\xcf\x01\n" +
+	"\x15com.spotify.playlist4B\x16Playlist4ExternalProtoP\x01Z9github.com/devgianlu/go-librespot/proto/spotify/playlist4\xa2\x02\x03SPX\xaa\x02\x11Spotify.Playlist4\xca\x02\x11Spotify\\Playlist4\xe2\x02\x1dSpotify\\Playlist4\\GPBMetadata\xea\x02\x12Spotify::Playlist4"
 
 var (
 	file_spotify_playlist4_playlist4_external_proto_rawDescOnce sync.Once

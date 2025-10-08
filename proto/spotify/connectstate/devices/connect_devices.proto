@@ -6,6 +6,46 @@ message DeviceAlias {
   uint32 id = 1;
   string display_name = 2;
   bool is_group = 3;
+  optional GroupData group_data = 4;
+}
+
+message GroupData {
+  repeated GroupDevice devices = 1;
+  GroupCapabilities capabilities = 2;
+
+  GroupType type = 3;
+  enum GroupType {
+    UNKNOWN_GROUP_TYPE = 0;
+    STATIC = 1;
+    DYNAMIC = 2;
+  }
+}
+
+message GroupCapabilities {}
+
+message GroupDevice {
+  string group_device_identifier = 1;
+  string name = 2;
+  DeviceType device_type = 3;
+  string model = 5;
+  GroupDeviceCapabilities capabilities = 6;
+
+  GroupingStatus grouping_status = 7;
+  enum GroupingStatus {
+    UNKNOWN_GROUPING_STATUS = 0;
+    GROUPED = 1;
+    GROUPABLE = 2;
+  }
+
+  optional string spotify_connect_device_id = 4;
+  optional GroupDeviceVolume volume = 8;
+}
+
+message GroupDeviceCapabilities {}
+
+message GroupDeviceVolume {
+  uint32 volume = 1;
+  int32 volume_steps = 2;
 }
 
 enum DeviceType {

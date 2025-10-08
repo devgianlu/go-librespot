@@ -7,6 +7,7 @@
 package metadata
 
 import (
+	v1 "github.com/devgianlu/go-librespot/proto/spotify/metadata/contentratings/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -160,7 +161,7 @@ func (x *ArtistWithRole_ArtistRole) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use ArtistWithRole_ArtistRole.Descriptor instead.
 func (ArtistWithRole_ArtistRole) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{3, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{4, 0}
 }
 
 type Show_MediaType int32
@@ -219,7 +220,7 @@ func (x *Show_MediaType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Show_MediaType.Descriptor instead.
 func (Show_MediaType) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{4, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{5, 0}
 }
 
 type Show_ConsumptionOrder int32
@@ -278,7 +279,7 @@ func (x *Show_ConsumptionOrder) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Show_ConsumptionOrder.Descriptor instead.
 func (Show_ConsumptionOrder) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{4, 1}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{5, 1}
 }
 
 type Episode_EpisodeType int32
@@ -337,7 +338,66 @@ func (x *Episode_EpisodeType) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Episode_EpisodeType.Descriptor instead.
 func (Episode_EpisodeType) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{5, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{6, 0}
+}
+
+type Audio_Format int32
+
+const (
+	Audio_UNKNOWN Audio_Format = 0
+	Audio_DEFAULT Audio_Format = 1
+	Audio_PARROT  Audio_Format = 2
+)
+
+// Enum value maps for Audio_Format.
+var (
+	Audio_Format_name = map[int32]string{
+		0: "UNKNOWN",
+		1: "DEFAULT",
+		2: "PARROT",
+	}
+	Audio_Format_value = map[string]int32{
+		"UNKNOWN": 0,
+		"DEFAULT": 1,
+		"PARROT":  2,
+	}
+)
+
+func (x Audio_Format) Enum() *Audio_Format {
+	p := new(Audio_Format)
+	*p = x
+	return p
+}
+
+func (x Audio_Format) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Audio_Format) Descriptor() protoreflect.EnumDescriptor {
+	return file_spotify_metadata_metadata_proto_enumTypes[5].Descriptor()
+}
+
+func (Audio_Format) Type() protoreflect.EnumType {
+	return &file_spotify_metadata_metadata_proto_enumTypes[5]
+}
+
+func (x Audio_Format) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Do not use.
+func (x *Audio_Format) UnmarshalJSON(b []byte) error {
+	num, err := protoimpl.X.UnmarshalJSONEnum(x.Descriptor(), b)
+	if err != nil {
+		return err
+	}
+	*x = Audio_Format(num)
+	return nil
+}
+
+// Deprecated: Use Audio_Format.Descriptor instead.
+func (Audio_Format) EnumDescriptor() ([]byte, []int) {
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{8, 0}
 }
 
 type Image_Size int32
@@ -376,11 +436,11 @@ func (x Image_Size) String() string {
 }
 
 func (Image_Size) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_metadata_metadata_proto_enumTypes[5].Descriptor()
+	return file_spotify_metadata_metadata_proto_enumTypes[6].Descriptor()
 }
 
 func (Image_Size) Type() protoreflect.EnumType {
-	return &file_spotify_metadata_metadata_proto_enumTypes[5]
+	return &file_spotify_metadata_metadata_proto_enumTypes[6]
 }
 
 func (x Image_Size) Number() protoreflect.EnumNumber {
@@ -399,7 +459,7 @@ func (x *Image_Size) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Image_Size.Descriptor instead.
 func (Image_Size) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{11, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{13, 0}
 }
 
 type Copyright_Type int32
@@ -432,11 +492,11 @@ func (x Copyright_Type) String() string {
 }
 
 func (Copyright_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_metadata_metadata_proto_enumTypes[6].Descriptor()
+	return file_spotify_metadata_metadata_proto_enumTypes[7].Descriptor()
 }
 
 func (Copyright_Type) Type() protoreflect.EnumType {
-	return &file_spotify_metadata_metadata_proto_enumTypes[6]
+	return &file_spotify_metadata_metadata_proto_enumTypes[7]
 }
 
 func (x Copyright_Type) Number() protoreflect.EnumNumber {
@@ -455,7 +515,7 @@ func (x *Copyright_Type) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Copyright_Type.Descriptor instead.
 func (Copyright_Type) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{15, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{17, 0}
 }
 
 type Restriction_Catalogue int32
@@ -497,11 +557,11 @@ func (x Restriction_Catalogue) String() string {
 }
 
 func (Restriction_Catalogue) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_metadata_metadata_proto_enumTypes[7].Descriptor()
+	return file_spotify_metadata_metadata_proto_enumTypes[8].Descriptor()
 }
 
 func (Restriction_Catalogue) Type() protoreflect.EnumType {
-	return &file_spotify_metadata_metadata_proto_enumTypes[7]
+	return &file_spotify_metadata_metadata_proto_enumTypes[8]
 }
 
 func (x Restriction_Catalogue) Number() protoreflect.EnumNumber {
@@ -520,7 +580,7 @@ func (x *Restriction_Catalogue) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Restriction_Catalogue.Descriptor instead.
 func (Restriction_Catalogue) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{16, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{18, 0}
 }
 
 type Restriction_Type int32
@@ -550,11 +610,11 @@ func (x Restriction_Type) String() string {
 }
 
 func (Restriction_Type) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_metadata_metadata_proto_enumTypes[8].Descriptor()
+	return file_spotify_metadata_metadata_proto_enumTypes[9].Descriptor()
 }
 
 func (Restriction_Type) Type() protoreflect.EnumType {
-	return &file_spotify_metadata_metadata_proto_enumTypes[8]
+	return &file_spotify_metadata_metadata_proto_enumTypes[9]
 }
 
 func (x Restriction_Type) Number() protoreflect.EnumNumber {
@@ -573,7 +633,7 @@ func (x *Restriction_Type) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use Restriction_Type.Descriptor instead.
 func (Restriction_Type) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{16, 1}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{18, 1}
 }
 
 type AudioFile_Format int32
@@ -589,12 +649,6 @@ const (
 	AudioFile_MP3_160_ENC     AudioFile_Format = 7
 	AudioFile_AAC_24          AudioFile_Format = 8
 	AudioFile_AAC_48          AudioFile_Format = 9
-	AudioFile_MP4_128         AudioFile_Format = 10
-	AudioFile_MP4_128_DUAL    AudioFile_Format = 11
-	AudioFile_MP4_128_CBCS    AudioFile_Format = 12
-	AudioFile_MP4_256         AudioFile_Format = 13
-	AudioFile_MP4_256_DUAL    AudioFile_Format = 14
-	AudioFile_MP4_256_CBCS    AudioFile_Format = 15
 	AudioFile_FLAC_FLAC       AudioFile_Format = 16
 	AudioFile_XHE_AAC_24      AudioFile_Format = 18
 	AudioFile_XHE_AAC_16      AudioFile_Format = 19
@@ -615,12 +669,6 @@ var (
 		7:  "MP3_160_ENC",
 		8:  "AAC_24",
 		9:  "AAC_48",
-		10: "MP4_128",
-		11: "MP4_128_DUAL",
-		12: "MP4_128_CBCS",
-		13: "MP4_256",
-		14: "MP4_256_DUAL",
-		15: "MP4_256_CBCS",
 		16: "FLAC_FLAC",
 		18: "XHE_AAC_24",
 		19: "XHE_AAC_16",
@@ -638,12 +686,6 @@ var (
 		"MP3_160_ENC":     7,
 		"AAC_24":          8,
 		"AAC_48":          9,
-		"MP4_128":         10,
-		"MP4_128_DUAL":    11,
-		"MP4_128_CBCS":    12,
-		"MP4_256":         13,
-		"MP4_256_DUAL":    14,
-		"MP4_256_CBCS":    15,
 		"FLAC_FLAC":       16,
 		"XHE_AAC_24":      18,
 		"XHE_AAC_16":      19,
@@ -663,11 +705,11 @@ func (x AudioFile_Format) String() string {
 }
 
 func (AudioFile_Format) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_metadata_metadata_proto_enumTypes[9].Descriptor()
+	return file_spotify_metadata_metadata_proto_enumTypes[10].Descriptor()
 }
 
 func (AudioFile_Format) Type() protoreflect.EnumType {
-	return &file_spotify_metadata_metadata_proto_enumTypes[9]
+	return &file_spotify_metadata_metadata_proto_enumTypes[10]
 }
 
 func (x AudioFile_Format) Number() protoreflect.EnumNumber {
@@ -686,7 +728,7 @@ func (x *AudioFile_Format) UnmarshalJSON(b []byte) error {
 
 // Deprecated: Use AudioFile_Format.Descriptor instead.
 func (AudioFile_Format) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{20, 0}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{22, 0}
 }
 
 type Artist struct {
@@ -699,7 +741,6 @@ type Artist struct {
 	SingleGroup          []*AlbumGroup          `protobuf:"bytes,6,rep,name=single_group,json=singleGroup" json:"single_group,omitempty"`
 	CompilationGroup     []*AlbumGroup          `protobuf:"bytes,7,rep,name=compilation_group,json=compilationGroup" json:"compilation_group,omitempty"`
 	AppearsOnGroup       []*AlbumGroup          `protobuf:"bytes,8,rep,name=appears_on_group,json=appearsOnGroup" json:"appears_on_group,omitempty"`
-	Genre                []string               `protobuf:"bytes,9,rep,name=genre" json:"genre,omitempty"`
 	ExternalId           []*ExternalId          `protobuf:"bytes,10,rep,name=external_id,json=externalId" json:"external_id,omitempty"`
 	Portrait             []*Image               `protobuf:"bytes,11,rep,name=portrait" json:"portrait,omitempty"`
 	Biography            []*Biography           `protobuf:"bytes,12,rep,name=biography" json:"biography,omitempty"`
@@ -800,13 +841,6 @@ func (x *Artist) GetAppearsOnGroup() []*AlbumGroup {
 	return nil
 }
 
-func (x *Artist) GetGenre() []string {
-	if x != nil {
-		return x.Genre
-	}
-	return nil
-}
-
 func (x *Artist) GetExternalId() []*ExternalId {
 	if x != nil {
 		return x.ExternalId
@@ -878,30 +912,30 @@ func (x *Artist) GetAvailability() []*Availability {
 }
 
 type Album struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Gid           []byte                 `protobuf:"bytes,1,opt,name=gid" json:"gid,omitempty"`
-	Name          *string                `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
-	Artist        []*Artist              `protobuf:"bytes,3,rep,name=artist" json:"artist,omitempty"`
-	Type          *Album_Type            `protobuf:"varint,4,opt,name=type,enum=spotify.metadata.Album_Type" json:"type,omitempty"`
-	Label         *string                `protobuf:"bytes,5,opt,name=label" json:"label,omitempty"`
-	Date          *Date                  `protobuf:"bytes,6,opt,name=date" json:"date,omitempty"`
-	Popularity    *int32                 `protobuf:"zigzag32,7,opt,name=popularity" json:"popularity,omitempty"`
-	Genre         []string               `protobuf:"bytes,8,rep,name=genre" json:"genre,omitempty"`
-	Cover         []*Image               `protobuf:"bytes,9,rep,name=cover" json:"cover,omitempty"`
-	ExternalId    []*ExternalId          `protobuf:"bytes,10,rep,name=external_id,json=externalId" json:"external_id,omitempty"`
-	Disc          []*Disc                `protobuf:"bytes,11,rep,name=disc" json:"disc,omitempty"`
-	Review        []string               `protobuf:"bytes,12,rep,name=review" json:"review,omitempty"`
-	Copyright     []*Copyright           `protobuf:"bytes,13,rep,name=copyright" json:"copyright,omitempty"`
-	Restriction   []*Restriction         `protobuf:"bytes,14,rep,name=restriction" json:"restriction,omitempty"`
-	Related       []*Album               `protobuf:"bytes,15,rep,name=related" json:"related,omitempty"`
-	SalePeriod    []*SalePeriod          `protobuf:"bytes,16,rep,name=sale_period,json=salePeriod" json:"sale_period,omitempty"`
-	CoverGroup    *ImageGroup            `protobuf:"bytes,17,opt,name=cover_group,json=coverGroup" json:"cover_group,omitempty"`
-	OriginalTitle *string                `protobuf:"bytes,18,opt,name=original_title,json=originalTitle" json:"original_title,omitempty"`
-	VersionTitle  *string                `protobuf:"bytes,19,opt,name=version_title,json=versionTitle" json:"version_title,omitempty"`
-	TypeStr       *string                `protobuf:"bytes,20,opt,name=type_str,json=typeStr" json:"type_str,omitempty"`
-	Availability  []*Availability        `protobuf:"bytes,23,rep,name=availability" json:"availability,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Gid               []byte                 `protobuf:"bytes,1,opt,name=gid" json:"gid,omitempty"`
+	Name              *string                `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
+	Artist            []*Artist              `protobuf:"bytes,3,rep,name=artist" json:"artist,omitempty"`
+	Type              *Album_Type            `protobuf:"varint,4,opt,name=type,enum=spotify.metadata.Album_Type" json:"type,omitempty"`
+	Label             *string                `protobuf:"bytes,5,opt,name=label" json:"label,omitempty"`
+	Date              *Date                  `protobuf:"bytes,6,opt,name=date" json:"date,omitempty"`
+	Popularity        *int32                 `protobuf:"zigzag32,7,opt,name=popularity" json:"popularity,omitempty"`
+	Cover             []*Image               `protobuf:"bytes,9,rep,name=cover" json:"cover,omitempty"`
+	ExternalId        []*ExternalId          `protobuf:"bytes,10,rep,name=external_id,json=externalId" json:"external_id,omitempty"`
+	Disc              []*Disc                `protobuf:"bytes,11,rep,name=disc" json:"disc,omitempty"`
+	Review            []string               `protobuf:"bytes,12,rep,name=review" json:"review,omitempty"`
+	Copyright         []*Copyright           `protobuf:"bytes,13,rep,name=copyright" json:"copyright,omitempty"`
+	Restriction       []*Restriction         `protobuf:"bytes,14,rep,name=restriction" json:"restriction,omitempty"`
+	Related           []*Album               `protobuf:"bytes,15,rep,name=related" json:"related,omitempty"`
+	SalePeriod        []*SalePeriod          `protobuf:"bytes,16,rep,name=sale_period,json=salePeriod" json:"sale_period,omitempty"`
+	CoverGroup        *ImageGroup            `protobuf:"bytes,17,opt,name=cover_group,json=coverGroup" json:"cover_group,omitempty"`
+	OriginalTitle     *string                `protobuf:"bytes,18,opt,name=original_title,json=originalTitle" json:"original_title,omitempty"`
+	VersionTitle      *string                `protobuf:"bytes,19,opt,name=version_title,json=versionTitle" json:"version_title,omitempty"`
+	TypeStr           *string                `protobuf:"bytes,20,opt,name=type_str,json=typeStr" json:"type_str,omitempty"`
+	Availability      []*Availability        `protobuf:"bytes,23,rep,name=availability" json:"availability,omitempty"`
+	PrereleaseEndDate *int64                 `protobuf:"varint,42,opt,name=prerelease_end_date,json=prereleaseEndDate" json:"prerelease_end_date,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Album) Reset() {
@@ -981,13 +1015,6 @@ func (x *Album) GetPopularity() int32 {
 		return *x.Popularity
 	}
 	return 0
-}
-
-func (x *Album) GetGenre() []string {
-	if x != nil {
-		return x.Genre
-	}
-	return nil
 }
 
 func (x *Album) GetCover() []*Image {
@@ -1081,6 +1108,13 @@ func (x *Album) GetAvailability() []*Availability {
 	return nil
 }
 
+func (x *Album) GetPrereleaseEndDate() int64 {
+	if x != nil && x.PrereleaseEndDate != nil {
+		return *x.PrereleaseEndDate
+	}
+	return 0
+}
+
 type Track struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	Gid                   []byte                 `protobuf:"bytes,1,opt,name=gid" json:"gid,omitempty"`
@@ -1104,10 +1138,14 @@ type Track struct {
 	Availability          []*Availability        `protobuf:"bytes,19,rep,name=availability" json:"availability,omitempty"`
 	Licensor              *Licensor              `protobuf:"bytes,21,opt,name=licensor" json:"licensor,omitempty"`
 	LanguageOfPerformance []string               `protobuf:"bytes,22,rep,name=language_of_performance,json=languageOfPerformance" json:"language_of_performance,omitempty"`
+	OriginalAudio         *Audio                 `protobuf:"bytes,24,opt,name=original_audio,json=originalAudio" json:"original_audio,omitempty"`
 	ContentRating         []*ContentRating       `protobuf:"bytes,25,rep,name=content_rating,json=contentRating" json:"content_rating,omitempty"`
 	OriginalTitle         *string                `protobuf:"bytes,27,opt,name=original_title,json=originalTitle" json:"original_title,omitempty"`
 	VersionTitle          *string                `protobuf:"bytes,28,opt,name=version_title,json=versionTitle" json:"version_title,omitempty"`
 	ArtistWithRole        []*ArtistWithRole      `protobuf:"bytes,32,rep,name=artist_with_role,json=artistWithRole" json:"artist_with_role,omitempty"`
+	CanonicalUri          *string                `protobuf:"bytes,36,opt,name=canonical_uri,json=canonicalUri" json:"canonical_uri,omitempty"`
+	OriginalVideo         []*Video               `protobuf:"bytes,38,rep,name=original_video,json=originalVideo" json:"original_video,omitempty"`
+	AudioFormats          []*TrackAudioFormat    `protobuf:"bytes,41,rep,name=audio_formats,json=audioFormats" json:"audio_formats,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1289,6 +1327,13 @@ func (x *Track) GetLanguageOfPerformance() []string {
 	return nil
 }
 
+func (x *Track) GetOriginalAudio() *Audio {
+	if x != nil {
+		return x.OriginalAudio
+	}
+	return nil
+}
+
 func (x *Track) GetContentRating() []*ContentRating {
 	if x != nil {
 		return x.ContentRating
@@ -1317,6 +1362,71 @@ func (x *Track) GetArtistWithRole() []*ArtistWithRole {
 	return nil
 }
 
+func (x *Track) GetCanonicalUri() string {
+	if x != nil && x.CanonicalUri != nil {
+		return *x.CanonicalUri
+	}
+	return ""
+}
+
+func (x *Track) GetOriginalVideo() []*Video {
+	if x != nil {
+		return x.OriginalVideo
+	}
+	return nil
+}
+
+func (x *Track) GetAudioFormats() []*TrackAudioFormat {
+	if x != nil {
+		return x.AudioFormats
+	}
+	return nil
+}
+
+type TrackAudioFormat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OriginalAudio *Audio                 `protobuf:"bytes,1,opt,name=original_audio,json=originalAudio" json:"original_audio,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrackAudioFormat) Reset() {
+	*x = TrackAudioFormat{}
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrackAudioFormat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrackAudioFormat) ProtoMessage() {}
+
+func (x *TrackAudioFormat) ProtoReflect() protoreflect.Message {
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrackAudioFormat.ProtoReflect.Descriptor instead.
+func (*TrackAudioFormat) Descriptor() ([]byte, []int) {
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TrackAudioFormat) GetOriginalAudio() *Audio {
+	if x != nil {
+		return x.OriginalAudio
+	}
+	return nil
+}
+
 type ArtistWithRole struct {
 	state         protoimpl.MessageState     `protogen:"open.v1"`
 	ArtistGid     []byte                     `protobuf:"bytes,1,opt,name=artist_gid,json=artistGid" json:"artist_gid,omitempty"`
@@ -1328,7 +1438,7 @@ type ArtistWithRole struct {
 
 func (x *ArtistWithRole) Reset() {
 	*x = ArtistWithRole{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[3]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1340,7 +1450,7 @@ func (x *ArtistWithRole) String() string {
 func (*ArtistWithRole) ProtoMessage() {}
 
 func (x *ArtistWithRole) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[3]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1353,7 +1463,7 @@ func (x *ArtistWithRole) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArtistWithRole.ProtoReflect.Descriptor instead.
 func (*ArtistWithRole) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{3}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ArtistWithRole) GetArtistGid() []byte {
@@ -1397,13 +1507,14 @@ type Show struct {
 	TrailerUri           *string                `protobuf:"bytes,83,opt,name=trailer_uri,json=trailerUri" json:"trailer_uri,omitempty"`
 	MusicAndTalk         *bool                  `protobuf:"varint,85,opt,name=music_and_talk,json=musicAndTalk" json:"music_and_talk,omitempty"`
 	IsAudiobook          *bool                  `protobuf:"varint,89,opt,name=is_audiobook,json=isAudiobook" json:"is_audiobook,omitempty"`
+	IsCreatorChannel     *bool                  `protobuf:"varint,90,opt,name=is_creator_channel,json=isCreatorChannel" json:"is_creator_channel,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
 
 func (x *Show) Reset() {
 	*x = Show{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[4]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1415,7 +1526,7 @@ func (x *Show) String() string {
 func (*Show) ProtoMessage() {}
 
 func (x *Show) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[4]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1428,7 +1539,7 @@ func (x *Show) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Show.ProtoReflect.Descriptor instead.
 func (*Show) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{4}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Show) GetGid() []byte {
@@ -1557,40 +1668,50 @@ func (x *Show) GetIsAudiobook() bool {
 	return false
 }
 
+func (x *Show) GetIsCreatorChannel() bool {
+	if x != nil && x.IsCreatorChannel != nil {
+		return *x.IsCreatorChannel
+	}
+	return false
+}
+
 type Episode struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	Gid                     []byte                 `protobuf:"bytes,1,opt,name=gid" json:"gid,omitempty"`
-	Name                    *string                `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
-	Duration                *int32                 `protobuf:"zigzag32,7,opt,name=duration" json:"duration,omitempty"`
-	Audio                   []*AudioFile           `protobuf:"bytes,12,rep,name=audio" json:"audio,omitempty"`
-	Description             *string                `protobuf:"bytes,64,opt,name=description" json:"description,omitempty"`
-	Number                  *int32                 `protobuf:"zigzag32,65,opt,name=number" json:"number,omitempty"`
-	PublishTime             *Date                  `protobuf:"bytes,66,opt,name=publish_time,json=publishTime" json:"publish_time,omitempty"`
-	DeprecatedPopularity    *int32                 `protobuf:"zigzag32,67,opt,name=deprecated_popularity,json=deprecatedPopularity" json:"deprecated_popularity,omitempty"`
-	CoverImage              *ImageGroup            `protobuf:"bytes,68,opt,name=cover_image,json=coverImage" json:"cover_image,omitempty"`
-	Language                *string                `protobuf:"bytes,69,opt,name=language" json:"language,omitempty"`
-	Explicit                *bool                  `protobuf:"varint,70,opt,name=explicit" json:"explicit,omitempty"`
-	Show                    *Show                  `protobuf:"bytes,71,opt,name=show" json:"show,omitempty"`
-	Video                   []*VideoFile           `protobuf:"bytes,72,rep,name=video" json:"video,omitempty"`
-	VideoPreview            []*VideoFile           `protobuf:"bytes,73,rep,name=video_preview,json=videoPreview" json:"video_preview,omitempty"`
-	AudioPreview            []*AudioFile           `protobuf:"bytes,74,rep,name=audio_preview,json=audioPreview" json:"audio_preview,omitempty"`
-	Restriction             []*Restriction         `protobuf:"bytes,75,rep,name=restriction" json:"restriction,omitempty"`
-	FreezeFrame             *ImageGroup            `protobuf:"bytes,76,opt,name=freeze_frame,json=freezeFrame" json:"freeze_frame,omitempty"`
-	Keyword                 []string               `protobuf:"bytes,77,rep,name=keyword" json:"keyword,omitempty"`
-	AllowBackgroundPlayback *bool                  `protobuf:"varint,81,opt,name=allow_background_playback,json=allowBackgroundPlayback" json:"allow_background_playback,omitempty"`
-	Availability            []*Availability        `protobuf:"bytes,82,rep,name=availability" json:"availability,omitempty"`
-	ExternalUrl             *string                `protobuf:"bytes,83,opt,name=external_url,json=externalUrl" json:"external_url,omitempty"`
-	Type                    *Episode_EpisodeType   `protobuf:"varint,87,opt,name=type,enum=spotify.metadata.Episode_EpisodeType" json:"type,omitempty"`
-	MusicAndTalk            *bool                  `protobuf:"varint,91,opt,name=music_and_talk,json=musicAndTalk" json:"music_and_talk,omitempty"`
-	ContentRating           []*ContentRating       `protobuf:"bytes,95,rep,name=content_rating,json=contentRating" json:"content_rating,omitempty"`
-	IsAudiobookChapter      *bool                  `protobuf:"varint,96,opt,name=is_audiobook_chapter,json=isAudiobookChapter" json:"is_audiobook_chapter,omitempty"`
+	state                   protoimpl.MessageState            `protogen:"open.v1"`
+	Gid                     []byte                            `protobuf:"bytes,1,opt,name=gid" json:"gid,omitempty"`
+	Name                    *string                           `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
+	Duration                *int32                            `protobuf:"zigzag32,7,opt,name=duration" json:"duration,omitempty"`
+	Audio                   []*AudioFile                      `protobuf:"bytes,12,rep,name=audio" json:"audio,omitempty"`
+	Description             *string                           `protobuf:"bytes,64,opt,name=description" json:"description,omitempty"`
+	Number                  *int32                            `protobuf:"zigzag32,65,opt,name=number" json:"number,omitempty"`
+	PublishTime             *Date                             `protobuf:"bytes,66,opt,name=publish_time,json=publishTime" json:"publish_time,omitempty"`
+	DeprecatedPopularity    *int32                            `protobuf:"zigzag32,67,opt,name=deprecated_popularity,json=deprecatedPopularity" json:"deprecated_popularity,omitempty"`
+	CoverImage              *ImageGroup                       `protobuf:"bytes,68,opt,name=cover_image,json=coverImage" json:"cover_image,omitempty"`
+	Language                *string                           `protobuf:"bytes,69,opt,name=language" json:"language,omitempty"`
+	Explicit                *bool                             `protobuf:"varint,70,opt,name=explicit" json:"explicit,omitempty"`
+	Show                    *Show                             `protobuf:"bytes,71,opt,name=show" json:"show,omitempty"`
+	Video                   []*VideoFile                      `protobuf:"bytes,72,rep,name=video" json:"video,omitempty"`
+	VideoPreview            []*VideoFile                      `protobuf:"bytes,73,rep,name=video_preview,json=videoPreview" json:"video_preview,omitempty"`
+	AudioPreview            []*AudioFile                      `protobuf:"bytes,74,rep,name=audio_preview,json=audioPreview" json:"audio_preview,omitempty"`
+	Restriction             []*Restriction                    `protobuf:"bytes,75,rep,name=restriction" json:"restriction,omitempty"`
+	FreezeFrame             *ImageGroup                       `protobuf:"bytes,76,opt,name=freeze_frame,json=freezeFrame" json:"freeze_frame,omitempty"`
+	Keyword                 []string                          `protobuf:"bytes,77,rep,name=keyword" json:"keyword,omitempty"`
+	AllowBackgroundPlayback *bool                             `protobuf:"varint,81,opt,name=allow_background_playback,json=allowBackgroundPlayback" json:"allow_background_playback,omitempty"`
+	Availability            []*Availability                   `protobuf:"bytes,82,rep,name=availability" json:"availability,omitempty"`
+	ExternalUrl             *string                           `protobuf:"bytes,83,opt,name=external_url,json=externalUrl" json:"external_url,omitempty"`
+	OriginalAudio           *Audio                            `protobuf:"bytes,84,opt,name=original_audio,json=originalAudio" json:"original_audio,omitempty"`
+	Type                    *Episode_EpisodeType              `protobuf:"varint,87,opt,name=type,enum=spotify.metadata.Episode_EpisodeType" json:"type,omitempty"`
+	MusicAndTalk            *bool                             `protobuf:"varint,91,opt,name=music_and_talk,json=musicAndTalk" json:"music_and_talk,omitempty"`
+	ContentRating           []*ContentRating                  `protobuf:"bytes,95,rep,name=content_rating,json=contentRating" json:"content_rating,omitempty"`
+	IsAudiobookChapter      *bool                             `protobuf:"varint,96,opt,name=is_audiobook_chapter,json=isAudiobookChapter" json:"is_audiobook_chapter,omitempty"`
+	IsPodcastShort          *bool                             `protobuf:"varint,97,opt,name=is_podcast_short,json=isPodcastShort" json:"is_podcast_short,omitempty"`
+	EpisodeContentRating    []*v1.ContentRatingTagWithMarkets `protobuf:"bytes,102,rep,name=episode_content_rating,json=episodeContentRating" json:"episode_content_rating,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
 
 func (x *Episode) Reset() {
 	*x = Episode{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[5]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1602,7 +1723,7 @@ func (x *Episode) String() string {
 func (*Episode) ProtoMessage() {}
 
 func (x *Episode) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[5]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1615,7 +1736,7 @@ func (x *Episode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Episode.ProtoReflect.Descriptor instead.
 func (*Episode) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{5}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Episode) GetGid() []byte {
@@ -1765,6 +1886,13 @@ func (x *Episode) GetExternalUrl() string {
 	return ""
 }
 
+func (x *Episode) GetOriginalAudio() *Audio {
+	if x != nil {
+		return x.OriginalAudio
+	}
+	return nil
+}
+
 func (x *Episode) GetType() Episode_EpisodeType {
 	if x != nil && x.Type != nil {
 		return *x.Type
@@ -1793,6 +1921,20 @@ func (x *Episode) GetIsAudiobookChapter() bool {
 	return false
 }
 
+func (x *Episode) GetIsPodcastShort() bool {
+	if x != nil && x.IsPodcastShort != nil {
+		return *x.IsPodcastShort
+	}
+	return false
+}
+
+func (x *Episode) GetEpisodeContentRating() []*v1.ContentRatingTagWithMarkets {
+	if x != nil {
+		return x.EpisodeContentRating
+	}
+	return nil
+}
+
 type Licensor struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Uuid          []byte                 `protobuf:"bytes,1,opt,name=uuid" json:"uuid,omitempty"`
@@ -1802,7 +1944,7 @@ type Licensor struct {
 
 func (x *Licensor) Reset() {
 	*x = Licensor{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[6]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1814,7 +1956,7 @@ func (x *Licensor) String() string {
 func (*Licensor) ProtoMessage() {}
 
 func (x *Licensor) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[6]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1827,7 +1969,7 @@ func (x *Licensor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Licensor.ProtoReflect.Descriptor instead.
 func (*Licensor) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{6}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Licensor) GetUuid() []byte {
@@ -1835,6 +1977,58 @@ func (x *Licensor) GetUuid() []byte {
 		return x.Uuid
 	}
 	return nil
+}
+
+type Audio struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uuid          []byte                 `protobuf:"bytes,1,opt,name=uuid" json:"uuid,omitempty"`
+	Format        *Audio_Format          `protobuf:"varint,2,opt,name=format,enum=spotify.metadata.Audio_Format" json:"format,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Audio) Reset() {
+	*x = Audio{}
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Audio) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Audio) ProtoMessage() {}
+
+func (x *Audio) ProtoReflect() protoreflect.Message {
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Audio.ProtoReflect.Descriptor instead.
+func (*Audio) Descriptor() ([]byte, []int) {
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *Audio) GetUuid() []byte {
+	if x != nil {
+		return x.Uuid
+	}
+	return nil
+}
+
+func (x *Audio) GetFormat() Audio_Format {
+	if x != nil && x.Format != nil {
+		return *x.Format
+	}
+	return Audio_UNKNOWN
 }
 
 type TopTracks struct {
@@ -1847,7 +2041,7 @@ type TopTracks struct {
 
 func (x *TopTracks) Reset() {
 	*x = TopTracks{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[7]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1859,7 +2053,7 @@ func (x *TopTracks) String() string {
 func (*TopTracks) ProtoMessage() {}
 
 func (x *TopTracks) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[7]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1872,7 +2066,7 @@ func (x *TopTracks) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopTracks.ProtoReflect.Descriptor instead.
 func (*TopTracks) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{7}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TopTracks) GetCountry() string {
@@ -1900,7 +2094,7 @@ type ActivityPeriod struct {
 
 func (x *ActivityPeriod) Reset() {
 	*x = ActivityPeriod{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[8]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1912,7 +2106,7 @@ func (x *ActivityPeriod) String() string {
 func (*ActivityPeriod) ProtoMessage() {}
 
 func (x *ActivityPeriod) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[8]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1925,7 +2119,7 @@ func (x *ActivityPeriod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityPeriod.ProtoReflect.Descriptor instead.
 func (*ActivityPeriod) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{8}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ActivityPeriod) GetStartYear() int32 {
@@ -1958,7 +2152,7 @@ type AlbumGroup struct {
 
 func (x *AlbumGroup) Reset() {
 	*x = AlbumGroup{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[9]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1970,7 +2164,7 @@ func (x *AlbumGroup) String() string {
 func (*AlbumGroup) ProtoMessage() {}
 
 func (x *AlbumGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[9]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1983,7 +2177,7 @@ func (x *AlbumGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlbumGroup.ProtoReflect.Descriptor instead.
 func (*AlbumGroup) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{9}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *AlbumGroup) GetAlbum() []*Album {
@@ -2006,7 +2200,7 @@ type Date struct {
 
 func (x *Date) Reset() {
 	*x = Date{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[10]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2018,7 +2212,7 @@ func (x *Date) String() string {
 func (*Date) ProtoMessage() {}
 
 func (x *Date) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[10]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2031,7 +2225,7 @@ func (x *Date) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Date.ProtoReflect.Descriptor instead.
 func (*Date) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{10}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Date) GetYear() int32 {
@@ -2081,7 +2275,7 @@ type Image struct {
 
 func (x *Image) Reset() {
 	*x = Image{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[11]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2093,7 +2287,7 @@ func (x *Image) String() string {
 func (*Image) ProtoMessage() {}
 
 func (x *Image) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[11]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2106,7 +2300,7 @@ func (x *Image) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Image.ProtoReflect.Descriptor instead.
 func (*Image) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{11}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Image) GetFileId() []byte {
@@ -2146,7 +2340,7 @@ type ImageGroup struct {
 
 func (x *ImageGroup) Reset() {
 	*x = ImageGroup{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[12]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2158,7 +2352,7 @@ func (x *ImageGroup) String() string {
 func (*ImageGroup) ProtoMessage() {}
 
 func (x *ImageGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[12]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2171,7 +2365,7 @@ func (x *ImageGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImageGroup.ProtoReflect.Descriptor instead.
 func (*ImageGroup) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{12}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ImageGroup) GetImage() []*Image {
@@ -2192,7 +2386,7 @@ type Biography struct {
 
 func (x *Biography) Reset() {
 	*x = Biography{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[13]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2204,7 +2398,7 @@ func (x *Biography) String() string {
 func (*Biography) ProtoMessage() {}
 
 func (x *Biography) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[13]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2217,7 +2411,7 @@ func (x *Biography) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Biography.ProtoReflect.Descriptor instead.
 func (*Biography) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{13}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Biography) GetText() string {
@@ -2252,7 +2446,7 @@ type Disc struct {
 
 func (x *Disc) Reset() {
 	*x = Disc{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[14]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2264,7 +2458,7 @@ func (x *Disc) String() string {
 func (*Disc) ProtoMessage() {}
 
 func (x *Disc) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[14]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2277,7 +2471,7 @@ func (x *Disc) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Disc.ProtoReflect.Descriptor instead.
 func (*Disc) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{14}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Disc) GetNumber() int32 {
@@ -2311,7 +2505,7 @@ type Copyright struct {
 
 func (x *Copyright) Reset() {
 	*x = Copyright{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[15]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2323,7 +2517,7 @@ func (x *Copyright) String() string {
 func (*Copyright) ProtoMessage() {}
 
 func (x *Copyright) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[15]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2336,7 +2530,7 @@ func (x *Copyright) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Copyright.ProtoReflect.Descriptor instead.
 func (*Copyright) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{15}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *Copyright) GetType() Copyright_Type {
@@ -2369,7 +2563,7 @@ type Restriction struct {
 
 func (x *Restriction) Reset() {
 	*x = Restriction{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[16]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2381,7 +2575,7 @@ func (x *Restriction) String() string {
 func (*Restriction) ProtoMessage() {}
 
 func (x *Restriction) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[16]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2394,7 +2588,7 @@ func (x *Restriction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Restriction.ProtoReflect.Descriptor instead.
 func (*Restriction) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{16}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Restriction) GetCatalogue() []Restriction_Catalogue {
@@ -2469,7 +2663,7 @@ type Availability struct {
 
 func (x *Availability) Reset() {
 	*x = Availability{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[17]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2481,7 +2675,7 @@ func (x *Availability) String() string {
 func (*Availability) ProtoMessage() {}
 
 func (x *Availability) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[17]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2494,7 +2688,7 @@ func (x *Availability) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Availability.ProtoReflect.Descriptor instead.
 func (*Availability) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{17}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *Availability) GetCatalogueStr() []string {
@@ -2522,7 +2716,7 @@ type SalePeriod struct {
 
 func (x *SalePeriod) Reset() {
 	*x = SalePeriod{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[18]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2534,7 +2728,7 @@ func (x *SalePeriod) String() string {
 func (*SalePeriod) ProtoMessage() {}
 
 func (x *SalePeriod) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[18]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2547,7 +2741,7 @@ func (x *SalePeriod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SalePeriod.ProtoReflect.Descriptor instead.
 func (*SalePeriod) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{18}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SalePeriod) GetRestriction() []*Restriction {
@@ -2581,7 +2775,7 @@ type ExternalId struct {
 
 func (x *ExternalId) Reset() {
 	*x = ExternalId{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[19]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2593,7 +2787,7 @@ func (x *ExternalId) String() string {
 func (*ExternalId) ProtoMessage() {}
 
 func (x *ExternalId) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[19]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2606,7 +2800,7 @@ func (x *ExternalId) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExternalId.ProtoReflect.Descriptor instead.
 func (*ExternalId) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{19}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ExternalId) GetType() string {
@@ -2633,7 +2827,7 @@ type AudioFile struct {
 
 func (x *AudioFile) Reset() {
 	*x = AudioFile{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[20]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2645,7 +2839,7 @@ func (x *AudioFile) String() string {
 func (*AudioFile) ProtoMessage() {}
 
 func (x *AudioFile) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[20]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2658,7 +2852,7 @@ func (x *AudioFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AudioFile.ProtoReflect.Descriptor instead.
 func (*AudioFile) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{20}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AudioFile) GetFileId() []byte {
@@ -2675,6 +2869,50 @@ func (x *AudioFile) GetFormat() AudioFile_Format {
 	return AudioFile_OGG_VORBIS_96
 }
 
+type Video struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Gid           []byte                 `protobuf:"bytes,1,opt,name=gid" json:"gid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Video) Reset() {
+	*x = Video{}
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Video) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Video) ProtoMessage() {}
+
+func (x *Video) ProtoReflect() protoreflect.Message {
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Video.ProtoReflect.Descriptor instead.
+func (*Video) Descriptor() ([]byte, []int) {
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *Video) GetGid() []byte {
+	if x != nil {
+		return x.Gid
+	}
+	return nil
+}
+
 type VideoFile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	FileId        []byte                 `protobuf:"bytes,1,opt,name=file_id,json=fileId" json:"file_id,omitempty"`
@@ -2684,7 +2922,7 @@ type VideoFile struct {
 
 func (x *VideoFile) Reset() {
 	*x = VideoFile{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[21]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2696,7 +2934,7 @@ func (x *VideoFile) String() string {
 func (*VideoFile) ProtoMessage() {}
 
 func (x *VideoFile) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[21]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2709,7 +2947,7 @@ func (x *VideoFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VideoFile.ProtoReflect.Descriptor instead.
 func (*VideoFile) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{21}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *VideoFile) GetFileId() []byte {
@@ -2729,7 +2967,7 @@ type ContentRating struct {
 
 func (x *ContentRating) Reset() {
 	*x = ContentRating{}
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[22]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2741,7 +2979,7 @@ func (x *ContentRating) String() string {
 func (*ContentRating) ProtoMessage() {}
 
 func (x *ContentRating) ProtoReflect() protoreflect.Message {
-	mi := &file_spotify_metadata_metadata_proto_msgTypes[22]
+	mi := &file_spotify_metadata_metadata_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2754,7 +2992,7 @@ func (x *ContentRating) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ContentRating.ProtoReflect.Descriptor instead.
 func (*ContentRating) Descriptor() ([]byte, []int) {
-	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{22}
+	return file_spotify_metadata_metadata_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ContentRating) GetCountry() string {
@@ -2775,7 +3013,7 @@ var File_spotify_metadata_metadata_proto protoreflect.FileDescriptor
 
 const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\n" +
-	"\x1fspotify/metadata/metadata.proto\x12\x10spotify.metadata\"\x9f\b\n" +
+	"\x1fspotify/metadata/metadata.proto\x12\x10spotify.metadata\x1a8spotify/metadata/contentratings/v1/content_ratings.proto\"\x8f\b\n" +
 	"\x06Artist\x12\x10\n" +
 	"\x03gid\x18\x01 \x01(\fR\x03gid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
@@ -2787,8 +3025,7 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"albumGroup\x12?\n" +
 	"\fsingle_group\x18\x06 \x03(\v2\x1c.spotify.metadata.AlbumGroupR\vsingleGroup\x12I\n" +
 	"\x11compilation_group\x18\a \x03(\v2\x1c.spotify.metadata.AlbumGroupR\x10compilationGroup\x12F\n" +
-	"\x10appears_on_group\x18\b \x03(\v2\x1c.spotify.metadata.AlbumGroupR\x0eappearsOnGroup\x12\x14\n" +
-	"\x05genre\x18\t \x03(\tR\x05genre\x12=\n" +
+	"\x10appears_on_group\x18\b \x03(\v2\x1c.spotify.metadata.AlbumGroupR\x0eappearsOnGroup\x12=\n" +
 	"\vexternal_id\x18\n" +
 	" \x03(\v2\x1c.spotify.metadata.ExternalIdR\n" +
 	"externalId\x123\n" +
@@ -2801,7 +3038,8 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\x0eportrait_group\x18\x11 \x01(\v2\x1c.spotify.metadata.ImageGroupR\rportraitGroup\x12=\n" +
 	"\vsale_period\x18\x12 \x03(\v2\x1c.spotify.metadata.SalePeriodR\n" +
 	"salePeriod\x12B\n" +
-	"\favailability\x18\x14 \x03(\v2\x1e.spotify.metadata.AvailabilityR\favailability\"\xe7\a\n" +
+	"\favailability\x18\x14 \x03(\v2\x1e.spotify.metadata.AvailabilityR\favailabilityJ\x04\b\t\x10\n" +
+	"\"\x87\b\n" +
 	"\x05Album\x12\x10\n" +
 	"\x03gid\x18\x01 \x01(\fR\x03gid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x120\n" +
@@ -2811,8 +3049,7 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\x04date\x18\x06 \x01(\v2\x16.spotify.metadata.DateR\x04date\x12\x1e\n" +
 	"\n" +
 	"popularity\x18\a \x01(\x11R\n" +
-	"popularity\x12\x14\n" +
-	"\x05genre\x18\b \x03(\tR\x05genre\x12-\n" +
+	"popularity\x12-\n" +
 	"\x05cover\x18\t \x03(\v2\x17.spotify.metadata.ImageR\x05cover\x12=\n" +
 	"\vexternal_id\x18\n" +
 	" \x03(\v2\x1c.spotify.metadata.ExternalIdR\n" +
@@ -2829,7 +3066,8 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\x0eoriginal_title\x18\x12 \x01(\tR\roriginalTitle\x12#\n" +
 	"\rversion_title\x18\x13 \x01(\tR\fversionTitle\x12\x19\n" +
 	"\btype_str\x18\x14 \x01(\tR\atypeStr\x12B\n" +
-	"\favailability\x18\x17 \x03(\v2\x1e.spotify.metadata.AvailabilityR\favailability\"R\n" +
+	"\favailability\x18\x17 \x03(\v2\x1e.spotify.metadata.AvailabilityR\favailability\x12.\n" +
+	"\x13prerelease_end_date\x18* \x01(\x03R\x11prereleaseEndDate\"R\n" +
 	"\x04Type\x12\t\n" +
 	"\x05ALBUM\x10\x01\x12\n" +
 	"\n" +
@@ -2837,7 +3075,8 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\vCOMPILATION\x10\x03\x12\x06\n" +
 	"\x02EP\x10\x04\x12\r\n" +
 	"\tAUDIOBOOK\x10\x05\x12\v\n" +
-	"\aPODCAST\x10\x06\"\x80\t\n" +
+	"\aPODCAST\x10\x06J\x04\b\b\x10\t\"\xee\n" +
+	"\n" +
 	"\x05Track\x12\x10\n" +
 	"\x03gid\x18\x01 \x01(\fR\x03gid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12-\n" +
@@ -2866,11 +3105,17 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"has_lyrics\x18\x12 \x01(\bR\thasLyrics\x12B\n" +
 	"\favailability\x18\x13 \x03(\v2\x1e.spotify.metadata.AvailabilityR\favailability\x126\n" +
 	"\blicensor\x18\x15 \x01(\v2\x1a.spotify.metadata.LicensorR\blicensor\x126\n" +
-	"\x17language_of_performance\x18\x16 \x03(\tR\x15languageOfPerformance\x12F\n" +
+	"\x17language_of_performance\x18\x16 \x03(\tR\x15languageOfPerformance\x12>\n" +
+	"\x0eoriginal_audio\x18\x18 \x01(\v2\x17.spotify.metadata.AudioR\roriginalAudio\x12F\n" +
 	"\x0econtent_rating\x18\x19 \x03(\v2\x1f.spotify.metadata.ContentRatingR\rcontentRating\x12%\n" +
 	"\x0eoriginal_title\x18\x1b \x01(\tR\roriginalTitle\x12#\n" +
 	"\rversion_title\x18\x1c \x01(\tR\fversionTitle\x12J\n" +
-	"\x10artist_with_role\x18  \x03(\v2 .spotify.metadata.ArtistWithRoleR\x0eartistWithRole\"\xf7\x02\n" +
+	"\x10artist_with_role\x18  \x03(\v2 .spotify.metadata.ArtistWithRoleR\x0eartistWithRole\x12#\n" +
+	"\rcanonical_uri\x18$ \x01(\tR\fcanonicalUri\x12>\n" +
+	"\x0eoriginal_video\x18& \x03(\v2\x17.spotify.metadata.VideoR\roriginalVideo\x12G\n" +
+	"\raudio_formats\x18) \x03(\v2\".spotify.metadata.TrackAudioFormatR\faudioFormats\"R\n" +
+	"\x10TrackAudioFormat\x12>\n" +
+	"\x0eoriginal_audio\x18\x01 \x01(\v2\x17.spotify.metadata.AudioR\roriginalAudio\"\xf7\x02\n" +
 	"\x0eArtistWithRole\x12\x1d\n" +
 	"\n" +
 	"artist_gid\x18\x01 \x01(\fR\tartistGid\x12\x1f\n" +
@@ -2886,7 +3131,7 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\x11ARTIST_ROLE_ACTOR\x10\x04\x12\x18\n" +
 	"\x14ARTIST_ROLE_COMPOSER\x10\x05\x12\x19\n" +
 	"\x15ARTIST_ROLE_CONDUCTOR\x10\x06\x12\x19\n" +
-	"\x15ARTIST_ROLE_ORCHESTRA\x10\a\"\x94\a\n" +
+	"\x15ARTIST_ROLE_ORCHESTRA\x10\a\"\xc2\a\n" +
 	"\x04Show\x12\x10\n" +
 	"\x03gid\x18\x01 \x01(\fR\x03gid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -2908,7 +3153,8 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\vtrailer_uri\x18S \x01(\tR\n" +
 	"trailerUri\x12$\n" +
 	"\x0emusic_and_talk\x18U \x01(\bR\fmusicAndTalk\x12!\n" +
-	"\fis_audiobook\x18Y \x01(\bR\visAudiobook\",\n" +
+	"\fis_audiobook\x18Y \x01(\bR\visAudiobook\x12,\n" +
+	"\x12is_creator_channel\x18Z \x01(\bR\x10isCreatorChannel\",\n" +
 	"\tMediaType\x12\t\n" +
 	"\x05MIXED\x10\x00\x12\t\n" +
 	"\x05AUDIO\x10\x01\x12\t\n" +
@@ -2918,7 +3164,7 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"SEQUENTIAL\x10\x01\x12\f\n" +
 	"\bEPISODIC\x10\x02\x12\n" +
 	"\n" +
-	"\x06RECENT\x10\x03\"\xcd\t\n" +
+	"\x06RECENT\x10\x03\"\xae\v\n" +
 	"\aEpisode\x12\x10\n" +
 	"\x03gid\x18\x01 \x01(\fR\x03gid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -2941,17 +3187,28 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\akeyword\x18M \x03(\tR\akeyword\x12:\n" +
 	"\x19allow_background_playback\x18Q \x01(\bR\x17allowBackgroundPlayback\x12B\n" +
 	"\favailability\x18R \x03(\v2\x1e.spotify.metadata.AvailabilityR\favailability\x12!\n" +
-	"\fexternal_url\x18S \x01(\tR\vexternalUrl\x129\n" +
+	"\fexternal_url\x18S \x01(\tR\vexternalUrl\x12>\n" +
+	"\x0eoriginal_audio\x18T \x01(\v2\x17.spotify.metadata.AudioR\roriginalAudio\x129\n" +
 	"\x04type\x18W \x01(\x0e2%.spotify.metadata.Episode.EpisodeTypeR\x04type\x12$\n" +
 	"\x0emusic_and_talk\x18[ \x01(\bR\fmusicAndTalk\x12F\n" +
 	"\x0econtent_rating\x18_ \x03(\v2\x1f.spotify.metadata.ContentRatingR\rcontentRating\x120\n" +
-	"\x14is_audiobook_chapter\x18` \x01(\bR\x12isAudiobookChapter\"/\n" +
+	"\x14is_audiobook_chapter\x18` \x01(\bR\x12isAudiobookChapter\x12(\n" +
+	"\x10is_podcast_short\x18a \x01(\bR\x0eisPodcastShort\x12u\n" +
+	"\x16episode_content_rating\x18f \x03(\v2?.spotify.metadata.contentratings.v1.ContentRatingTagWithMarketsR\x14episodeContentRating\"/\n" +
 	"\vEpisodeType\x12\b\n" +
 	"\x04FULL\x10\x00\x12\v\n" +
 	"\aTRAILER\x10\x01\x12\t\n" +
 	"\x05BONUS\x10\x02\"\x1e\n" +
 	"\bLicensor\x12\x12\n" +
-	"\x04uuid\x18\x01 \x01(\fR\x04uuid\"T\n" +
+	"\x04uuid\x18\x01 \x01(\fR\x04uuid\"\x83\x01\n" +
+	"\x05Audio\x12\x12\n" +
+	"\x04uuid\x18\x01 \x01(\fR\x04uuid\x126\n" +
+	"\x06format\x18\x02 \x01(\x0e2\x1e.spotify.metadata.Audio.FormatR\x06format\".\n" +
+	"\x06Format\x12\v\n" +
+	"\aUNKNOWN\x10\x00\x12\v\n" +
+	"\aDEFAULT\x10\x01\x12\n" +
+	"\n" +
+	"\x06PARROT\x10\x02\"T\n" +
 	"\tTopTracks\x12\x18\n" +
 	"\acountry\x18\x01 \x01(\tR\acountry\x12-\n" +
 	"\x05track\x18\x02 \x03(\v2\x17.spotify.metadata.TrackR\x05track\"b\n" +
@@ -3024,10 +3281,10 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\n" +
 	"ExternalId\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
-	"\x02id\x18\x02 \x01(\tR\x02id\"\xb8\x03\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xd6\x02\n" +
 	"\tAudioFile\x12\x17\n" +
 	"\afile_id\x18\x01 \x01(\fR\x06fileId\x12:\n" +
-	"\x06format\x18\x02 \x01(\x0e2\".spotify.metadata.AudioFile.FormatR\x06format\"\xd5\x02\n" +
+	"\x06format\x18\x02 \x01(\x0e2\".spotify.metadata.AudioFile.FormatR\x06format\"\xf3\x01\n" +
 	"\x06Format\x12\x11\n" +
 	"\rOGG_VORBIS_96\x10\x00\x12\x12\n" +
 	"\x0eOGG_VORBIS_160\x10\x01\x12\x12\n" +
@@ -3041,14 +3298,7 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"\n" +
 	"\x06AAC_24\x10\b\x12\n" +
 	"\n" +
-	"\x06AAC_48\x10\t\x12\v\n" +
-	"\aMP4_128\x10\n" +
-	"\x12\x10\n" +
-	"\fMP4_128_DUAL\x10\v\x12\x10\n" +
-	"\fMP4_128_CBCS\x10\f\x12\v\n" +
-	"\aMP4_256\x10\r\x12\x10\n" +
-	"\fMP4_256_DUAL\x10\x0e\x12\x10\n" +
-	"\fMP4_256_CBCS\x10\x0f\x12\r\n" +
+	"\x06AAC_48\x10\t\x12\r\n" +
 	"\tFLAC_FLAC\x10\x10\x12\x0e\n" +
 	"\n" +
 	"XHE_AAC_24\x10\x12\x12\x0e\n" +
@@ -3056,7 +3306,9 @@ const file_spotify_metadata_metadata_proto_rawDesc = "" +
 	"XHE_AAC_16\x10\x13\x12\x0e\n" +
 	"\n" +
 	"XHE_AAC_12\x10\x14\x12\x13\n" +
-	"\x0fFLAC_FLAC_24BIT\x10\x16\"$\n" +
+	"\x0fFLAC_FLAC_24BIT\x10\x16\"\x19\n" +
+	"\x05Video\x12\x10\n" +
+	"\x03gid\x18\x01 \x01(\fR\x03gid\"$\n" +
 	"\tVideoFile\x12\x17\n" +
 	"\afile_id\x18\x01 \x01(\fR\x06fileId\";\n" +
 	"\rContentRating\x12\x18\n" +
@@ -3076,122 +3328,134 @@ func file_spotify_metadata_metadata_proto_rawDescGZIP() []byte {
 	return file_spotify_metadata_metadata_proto_rawDescData
 }
 
-var file_spotify_metadata_metadata_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_spotify_metadata_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_spotify_metadata_metadata_proto_enumTypes = make([]protoimpl.EnumInfo, 11)
+var file_spotify_metadata_metadata_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_spotify_metadata_metadata_proto_goTypes = []any{
-	(Album_Type)(0),                // 0: spotify.metadata.Album.Type
-	(ArtistWithRole_ArtistRole)(0), // 1: spotify.metadata.ArtistWithRole.ArtistRole
-	(Show_MediaType)(0),            // 2: spotify.metadata.Show.MediaType
-	(Show_ConsumptionOrder)(0),     // 3: spotify.metadata.Show.ConsumptionOrder
-	(Episode_EpisodeType)(0),       // 4: spotify.metadata.Episode.EpisodeType
-	(Image_Size)(0),                // 5: spotify.metadata.Image.Size
-	(Copyright_Type)(0),            // 6: spotify.metadata.Copyright.Type
-	(Restriction_Catalogue)(0),     // 7: spotify.metadata.Restriction.Catalogue
-	(Restriction_Type)(0),          // 8: spotify.metadata.Restriction.Type
-	(AudioFile_Format)(0),          // 9: spotify.metadata.AudioFile.Format
-	(*Artist)(nil),                 // 10: spotify.metadata.Artist
-	(*Album)(nil),                  // 11: spotify.metadata.Album
-	(*Track)(nil),                  // 12: spotify.metadata.Track
-	(*ArtistWithRole)(nil),         // 13: spotify.metadata.ArtistWithRole
-	(*Show)(nil),                   // 14: spotify.metadata.Show
-	(*Episode)(nil),                // 15: spotify.metadata.Episode
-	(*Licensor)(nil),               // 16: spotify.metadata.Licensor
-	(*TopTracks)(nil),              // 17: spotify.metadata.TopTracks
-	(*ActivityPeriod)(nil),         // 18: spotify.metadata.ActivityPeriod
-	(*AlbumGroup)(nil),             // 19: spotify.metadata.AlbumGroup
-	(*Date)(nil),                   // 20: spotify.metadata.Date
-	(*Image)(nil),                  // 21: spotify.metadata.Image
-	(*ImageGroup)(nil),             // 22: spotify.metadata.ImageGroup
-	(*Biography)(nil),              // 23: spotify.metadata.Biography
-	(*Disc)(nil),                   // 24: spotify.metadata.Disc
-	(*Copyright)(nil),              // 25: spotify.metadata.Copyright
-	(*Restriction)(nil),            // 26: spotify.metadata.Restriction
-	(*Availability)(nil),           // 27: spotify.metadata.Availability
-	(*SalePeriod)(nil),             // 28: spotify.metadata.SalePeriod
-	(*ExternalId)(nil),             // 29: spotify.metadata.ExternalId
-	(*AudioFile)(nil),              // 30: spotify.metadata.AudioFile
-	(*VideoFile)(nil),              // 31: spotify.metadata.VideoFile
-	(*ContentRating)(nil),          // 32: spotify.metadata.ContentRating
+	(Album_Type)(0),                        // 0: spotify.metadata.Album.Type
+	(ArtistWithRole_ArtistRole)(0),         // 1: spotify.metadata.ArtistWithRole.ArtistRole
+	(Show_MediaType)(0),                    // 2: spotify.metadata.Show.MediaType
+	(Show_ConsumptionOrder)(0),             // 3: spotify.metadata.Show.ConsumptionOrder
+	(Episode_EpisodeType)(0),               // 4: spotify.metadata.Episode.EpisodeType
+	(Audio_Format)(0),                      // 5: spotify.metadata.Audio.Format
+	(Image_Size)(0),                        // 6: spotify.metadata.Image.Size
+	(Copyright_Type)(0),                    // 7: spotify.metadata.Copyright.Type
+	(Restriction_Catalogue)(0),             // 8: spotify.metadata.Restriction.Catalogue
+	(Restriction_Type)(0),                  // 9: spotify.metadata.Restriction.Type
+	(AudioFile_Format)(0),                  // 10: spotify.metadata.AudioFile.Format
+	(*Artist)(nil),                         // 11: spotify.metadata.Artist
+	(*Album)(nil),                          // 12: spotify.metadata.Album
+	(*Track)(nil),                          // 13: spotify.metadata.Track
+	(*TrackAudioFormat)(nil),               // 14: spotify.metadata.TrackAudioFormat
+	(*ArtistWithRole)(nil),                 // 15: spotify.metadata.ArtistWithRole
+	(*Show)(nil),                           // 16: spotify.metadata.Show
+	(*Episode)(nil),                        // 17: spotify.metadata.Episode
+	(*Licensor)(nil),                       // 18: spotify.metadata.Licensor
+	(*Audio)(nil),                          // 19: spotify.metadata.Audio
+	(*TopTracks)(nil),                      // 20: spotify.metadata.TopTracks
+	(*ActivityPeriod)(nil),                 // 21: spotify.metadata.ActivityPeriod
+	(*AlbumGroup)(nil),                     // 22: spotify.metadata.AlbumGroup
+	(*Date)(nil),                           // 23: spotify.metadata.Date
+	(*Image)(nil),                          // 24: spotify.metadata.Image
+	(*ImageGroup)(nil),                     // 25: spotify.metadata.ImageGroup
+	(*Biography)(nil),                      // 26: spotify.metadata.Biography
+	(*Disc)(nil),                           // 27: spotify.metadata.Disc
+	(*Copyright)(nil),                      // 28: spotify.metadata.Copyright
+	(*Restriction)(nil),                    // 29: spotify.metadata.Restriction
+	(*Availability)(nil),                   // 30: spotify.metadata.Availability
+	(*SalePeriod)(nil),                     // 31: spotify.metadata.SalePeriod
+	(*ExternalId)(nil),                     // 32: spotify.metadata.ExternalId
+	(*AudioFile)(nil),                      // 33: spotify.metadata.AudioFile
+	(*Video)(nil),                          // 34: spotify.metadata.Video
+	(*VideoFile)(nil),                      // 35: spotify.metadata.VideoFile
+	(*ContentRating)(nil),                  // 36: spotify.metadata.ContentRating
+	(*v1.ContentRatingTagWithMarkets)(nil), // 37: spotify.metadata.contentratings.v1.ContentRatingTagWithMarkets
 }
 var file_spotify_metadata_metadata_proto_depIdxs = []int32{
-	17, // 0: spotify.metadata.Artist.top_track:type_name -> spotify.metadata.TopTracks
-	19, // 1: spotify.metadata.Artist.album_group:type_name -> spotify.metadata.AlbumGroup
-	19, // 2: spotify.metadata.Artist.single_group:type_name -> spotify.metadata.AlbumGroup
-	19, // 3: spotify.metadata.Artist.compilation_group:type_name -> spotify.metadata.AlbumGroup
-	19, // 4: spotify.metadata.Artist.appears_on_group:type_name -> spotify.metadata.AlbumGroup
-	29, // 5: spotify.metadata.Artist.external_id:type_name -> spotify.metadata.ExternalId
-	21, // 6: spotify.metadata.Artist.portrait:type_name -> spotify.metadata.Image
-	23, // 7: spotify.metadata.Artist.biography:type_name -> spotify.metadata.Biography
-	18, // 8: spotify.metadata.Artist.activity_period:type_name -> spotify.metadata.ActivityPeriod
-	26, // 9: spotify.metadata.Artist.restriction:type_name -> spotify.metadata.Restriction
-	10, // 10: spotify.metadata.Artist.related:type_name -> spotify.metadata.Artist
-	22, // 11: spotify.metadata.Artist.portrait_group:type_name -> spotify.metadata.ImageGroup
-	28, // 12: spotify.metadata.Artist.sale_period:type_name -> spotify.metadata.SalePeriod
-	27, // 13: spotify.metadata.Artist.availability:type_name -> spotify.metadata.Availability
-	10, // 14: spotify.metadata.Album.artist:type_name -> spotify.metadata.Artist
+	20, // 0: spotify.metadata.Artist.top_track:type_name -> spotify.metadata.TopTracks
+	22, // 1: spotify.metadata.Artist.album_group:type_name -> spotify.metadata.AlbumGroup
+	22, // 2: spotify.metadata.Artist.single_group:type_name -> spotify.metadata.AlbumGroup
+	22, // 3: spotify.metadata.Artist.compilation_group:type_name -> spotify.metadata.AlbumGroup
+	22, // 4: spotify.metadata.Artist.appears_on_group:type_name -> spotify.metadata.AlbumGroup
+	32, // 5: spotify.metadata.Artist.external_id:type_name -> spotify.metadata.ExternalId
+	24, // 6: spotify.metadata.Artist.portrait:type_name -> spotify.metadata.Image
+	26, // 7: spotify.metadata.Artist.biography:type_name -> spotify.metadata.Biography
+	21, // 8: spotify.metadata.Artist.activity_period:type_name -> spotify.metadata.ActivityPeriod
+	29, // 9: spotify.metadata.Artist.restriction:type_name -> spotify.metadata.Restriction
+	11, // 10: spotify.metadata.Artist.related:type_name -> spotify.metadata.Artist
+	25, // 11: spotify.metadata.Artist.portrait_group:type_name -> spotify.metadata.ImageGroup
+	31, // 12: spotify.metadata.Artist.sale_period:type_name -> spotify.metadata.SalePeriod
+	30, // 13: spotify.metadata.Artist.availability:type_name -> spotify.metadata.Availability
+	11, // 14: spotify.metadata.Album.artist:type_name -> spotify.metadata.Artist
 	0,  // 15: spotify.metadata.Album.type:type_name -> spotify.metadata.Album.Type
-	20, // 16: spotify.metadata.Album.date:type_name -> spotify.metadata.Date
-	21, // 17: spotify.metadata.Album.cover:type_name -> spotify.metadata.Image
-	29, // 18: spotify.metadata.Album.external_id:type_name -> spotify.metadata.ExternalId
-	24, // 19: spotify.metadata.Album.disc:type_name -> spotify.metadata.Disc
-	25, // 20: spotify.metadata.Album.copyright:type_name -> spotify.metadata.Copyright
-	26, // 21: spotify.metadata.Album.restriction:type_name -> spotify.metadata.Restriction
-	11, // 22: spotify.metadata.Album.related:type_name -> spotify.metadata.Album
-	28, // 23: spotify.metadata.Album.sale_period:type_name -> spotify.metadata.SalePeriod
-	22, // 24: spotify.metadata.Album.cover_group:type_name -> spotify.metadata.ImageGroup
-	27, // 25: spotify.metadata.Album.availability:type_name -> spotify.metadata.Availability
-	11, // 26: spotify.metadata.Track.album:type_name -> spotify.metadata.Album
-	10, // 27: spotify.metadata.Track.artist:type_name -> spotify.metadata.Artist
-	29, // 28: spotify.metadata.Track.external_id:type_name -> spotify.metadata.ExternalId
-	26, // 29: spotify.metadata.Track.restriction:type_name -> spotify.metadata.Restriction
-	30, // 30: spotify.metadata.Track.file:type_name -> spotify.metadata.AudioFile
-	12, // 31: spotify.metadata.Track.alternative:type_name -> spotify.metadata.Track
-	28, // 32: spotify.metadata.Track.sale_period:type_name -> spotify.metadata.SalePeriod
-	30, // 33: spotify.metadata.Track.preview:type_name -> spotify.metadata.AudioFile
-	27, // 34: spotify.metadata.Track.availability:type_name -> spotify.metadata.Availability
-	16, // 35: spotify.metadata.Track.licensor:type_name -> spotify.metadata.Licensor
-	32, // 36: spotify.metadata.Track.content_rating:type_name -> spotify.metadata.ContentRating
-	13, // 37: spotify.metadata.Track.artist_with_role:type_name -> spotify.metadata.ArtistWithRole
-	1,  // 38: spotify.metadata.ArtistWithRole.role:type_name -> spotify.metadata.ArtistWithRole.ArtistRole
-	22, // 39: spotify.metadata.Show.cover_image:type_name -> spotify.metadata.ImageGroup
-	15, // 40: spotify.metadata.Show.episode:type_name -> spotify.metadata.Episode
-	25, // 41: spotify.metadata.Show.copyright:type_name -> spotify.metadata.Copyright
-	26, // 42: spotify.metadata.Show.restriction:type_name -> spotify.metadata.Restriction
-	2,  // 43: spotify.metadata.Show.media_type:type_name -> spotify.metadata.Show.MediaType
-	3,  // 44: spotify.metadata.Show.consumption_order:type_name -> spotify.metadata.Show.ConsumptionOrder
-	27, // 45: spotify.metadata.Show.availability:type_name -> spotify.metadata.Availability
-	30, // 46: spotify.metadata.Episode.audio:type_name -> spotify.metadata.AudioFile
-	20, // 47: spotify.metadata.Episode.publish_time:type_name -> spotify.metadata.Date
-	22, // 48: spotify.metadata.Episode.cover_image:type_name -> spotify.metadata.ImageGroup
-	14, // 49: spotify.metadata.Episode.show:type_name -> spotify.metadata.Show
-	31, // 50: spotify.metadata.Episode.video:type_name -> spotify.metadata.VideoFile
-	31, // 51: spotify.metadata.Episode.video_preview:type_name -> spotify.metadata.VideoFile
-	30, // 52: spotify.metadata.Episode.audio_preview:type_name -> spotify.metadata.AudioFile
-	26, // 53: spotify.metadata.Episode.restriction:type_name -> spotify.metadata.Restriction
-	22, // 54: spotify.metadata.Episode.freeze_frame:type_name -> spotify.metadata.ImageGroup
-	27, // 55: spotify.metadata.Episode.availability:type_name -> spotify.metadata.Availability
-	4,  // 56: spotify.metadata.Episode.type:type_name -> spotify.metadata.Episode.EpisodeType
-	32, // 57: spotify.metadata.Episode.content_rating:type_name -> spotify.metadata.ContentRating
-	12, // 58: spotify.metadata.TopTracks.track:type_name -> spotify.metadata.Track
-	11, // 59: spotify.metadata.AlbumGroup.album:type_name -> spotify.metadata.Album
-	5,  // 60: spotify.metadata.Image.size:type_name -> spotify.metadata.Image.Size
-	21, // 61: spotify.metadata.ImageGroup.image:type_name -> spotify.metadata.Image
-	21, // 62: spotify.metadata.Biography.portrait:type_name -> spotify.metadata.Image
-	22, // 63: spotify.metadata.Biography.portrait_group:type_name -> spotify.metadata.ImageGroup
-	12, // 64: spotify.metadata.Disc.track:type_name -> spotify.metadata.Track
-	6,  // 65: spotify.metadata.Copyright.type:type_name -> spotify.metadata.Copyright.Type
-	7,  // 66: spotify.metadata.Restriction.catalogue:type_name -> spotify.metadata.Restriction.Catalogue
-	8,  // 67: spotify.metadata.Restriction.type:type_name -> spotify.metadata.Restriction.Type
-	20, // 68: spotify.metadata.Availability.start:type_name -> spotify.metadata.Date
-	26, // 69: spotify.metadata.SalePeriod.restriction:type_name -> spotify.metadata.Restriction
-	20, // 70: spotify.metadata.SalePeriod.start:type_name -> spotify.metadata.Date
-	20, // 71: spotify.metadata.SalePeriod.end:type_name -> spotify.metadata.Date
-	9,  // 72: spotify.metadata.AudioFile.format:type_name -> spotify.metadata.AudioFile.Format
-	73, // [73:73] is the sub-list for method output_type
-	73, // [73:73] is the sub-list for method input_type
-	73, // [73:73] is the sub-list for extension type_name
-	73, // [73:73] is the sub-list for extension extendee
-	0,  // [0:73] is the sub-list for field type_name
+	23, // 16: spotify.metadata.Album.date:type_name -> spotify.metadata.Date
+	24, // 17: spotify.metadata.Album.cover:type_name -> spotify.metadata.Image
+	32, // 18: spotify.metadata.Album.external_id:type_name -> spotify.metadata.ExternalId
+	27, // 19: spotify.metadata.Album.disc:type_name -> spotify.metadata.Disc
+	28, // 20: spotify.metadata.Album.copyright:type_name -> spotify.metadata.Copyright
+	29, // 21: spotify.metadata.Album.restriction:type_name -> spotify.metadata.Restriction
+	12, // 22: spotify.metadata.Album.related:type_name -> spotify.metadata.Album
+	31, // 23: spotify.metadata.Album.sale_period:type_name -> spotify.metadata.SalePeriod
+	25, // 24: spotify.metadata.Album.cover_group:type_name -> spotify.metadata.ImageGroup
+	30, // 25: spotify.metadata.Album.availability:type_name -> spotify.metadata.Availability
+	12, // 26: spotify.metadata.Track.album:type_name -> spotify.metadata.Album
+	11, // 27: spotify.metadata.Track.artist:type_name -> spotify.metadata.Artist
+	32, // 28: spotify.metadata.Track.external_id:type_name -> spotify.metadata.ExternalId
+	29, // 29: spotify.metadata.Track.restriction:type_name -> spotify.metadata.Restriction
+	33, // 30: spotify.metadata.Track.file:type_name -> spotify.metadata.AudioFile
+	13, // 31: spotify.metadata.Track.alternative:type_name -> spotify.metadata.Track
+	31, // 32: spotify.metadata.Track.sale_period:type_name -> spotify.metadata.SalePeriod
+	33, // 33: spotify.metadata.Track.preview:type_name -> spotify.metadata.AudioFile
+	30, // 34: spotify.metadata.Track.availability:type_name -> spotify.metadata.Availability
+	18, // 35: spotify.metadata.Track.licensor:type_name -> spotify.metadata.Licensor
+	19, // 36: spotify.metadata.Track.original_audio:type_name -> spotify.metadata.Audio
+	36, // 37: spotify.metadata.Track.content_rating:type_name -> spotify.metadata.ContentRating
+	15, // 38: spotify.metadata.Track.artist_with_role:type_name -> spotify.metadata.ArtistWithRole
+	34, // 39: spotify.metadata.Track.original_video:type_name -> spotify.metadata.Video
+	14, // 40: spotify.metadata.Track.audio_formats:type_name -> spotify.metadata.TrackAudioFormat
+	19, // 41: spotify.metadata.TrackAudioFormat.original_audio:type_name -> spotify.metadata.Audio
+	1,  // 42: spotify.metadata.ArtistWithRole.role:type_name -> spotify.metadata.ArtistWithRole.ArtistRole
+	25, // 43: spotify.metadata.Show.cover_image:type_name -> spotify.metadata.ImageGroup
+	17, // 44: spotify.metadata.Show.episode:type_name -> spotify.metadata.Episode
+	28, // 45: spotify.metadata.Show.copyright:type_name -> spotify.metadata.Copyright
+	29, // 46: spotify.metadata.Show.restriction:type_name -> spotify.metadata.Restriction
+	2,  // 47: spotify.metadata.Show.media_type:type_name -> spotify.metadata.Show.MediaType
+	3,  // 48: spotify.metadata.Show.consumption_order:type_name -> spotify.metadata.Show.ConsumptionOrder
+	30, // 49: spotify.metadata.Show.availability:type_name -> spotify.metadata.Availability
+	33, // 50: spotify.metadata.Episode.audio:type_name -> spotify.metadata.AudioFile
+	23, // 51: spotify.metadata.Episode.publish_time:type_name -> spotify.metadata.Date
+	25, // 52: spotify.metadata.Episode.cover_image:type_name -> spotify.metadata.ImageGroup
+	16, // 53: spotify.metadata.Episode.show:type_name -> spotify.metadata.Show
+	35, // 54: spotify.metadata.Episode.video:type_name -> spotify.metadata.VideoFile
+	35, // 55: spotify.metadata.Episode.video_preview:type_name -> spotify.metadata.VideoFile
+	33, // 56: spotify.metadata.Episode.audio_preview:type_name -> spotify.metadata.AudioFile
+	29, // 57: spotify.metadata.Episode.restriction:type_name -> spotify.metadata.Restriction
+	25, // 58: spotify.metadata.Episode.freeze_frame:type_name -> spotify.metadata.ImageGroup
+	30, // 59: spotify.metadata.Episode.availability:type_name -> spotify.metadata.Availability
+	19, // 60: spotify.metadata.Episode.original_audio:type_name -> spotify.metadata.Audio
+	4,  // 61: spotify.metadata.Episode.type:type_name -> spotify.metadata.Episode.EpisodeType
+	36, // 62: spotify.metadata.Episode.content_rating:type_name -> spotify.metadata.ContentRating
+	37, // 63: spotify.metadata.Episode.episode_content_rating:type_name -> spotify.metadata.contentratings.v1.ContentRatingTagWithMarkets
+	5,  // 64: spotify.metadata.Audio.format:type_name -> spotify.metadata.Audio.Format
+	13, // 65: spotify.metadata.TopTracks.track:type_name -> spotify.metadata.Track
+	12, // 66: spotify.metadata.AlbumGroup.album:type_name -> spotify.metadata.Album
+	6,  // 67: spotify.metadata.Image.size:type_name -> spotify.metadata.Image.Size
+	24, // 68: spotify.metadata.ImageGroup.image:type_name -> spotify.metadata.Image
+	24, // 69: spotify.metadata.Biography.portrait:type_name -> spotify.metadata.Image
+	25, // 70: spotify.metadata.Biography.portrait_group:type_name -> spotify.metadata.ImageGroup
+	13, // 71: spotify.metadata.Disc.track:type_name -> spotify.metadata.Track
+	7,  // 72: spotify.metadata.Copyright.type:type_name -> spotify.metadata.Copyright.Type
+	8,  // 73: spotify.metadata.Restriction.catalogue:type_name -> spotify.metadata.Restriction.Catalogue
+	9,  // 74: spotify.metadata.Restriction.type:type_name -> spotify.metadata.Restriction.Type
+	23, // 75: spotify.metadata.Availability.start:type_name -> spotify.metadata.Date
+	29, // 76: spotify.metadata.SalePeriod.restriction:type_name -> spotify.metadata.Restriction
+	23, // 77: spotify.metadata.SalePeriod.start:type_name -> spotify.metadata.Date
+	23, // 78: spotify.metadata.SalePeriod.end:type_name -> spotify.metadata.Date
+	10, // 79: spotify.metadata.AudioFile.format:type_name -> spotify.metadata.AudioFile.Format
+	80, // [80:80] is the sub-list for method output_type
+	80, // [80:80] is the sub-list for method input_type
+	80, // [80:80] is the sub-list for extension type_name
+	80, // [80:80] is the sub-list for extension extendee
+	0,  // [0:80] is the sub-list for field type_name
 }
 
 func init() { file_spotify_metadata_metadata_proto_init() }
@@ -3199,7 +3463,7 @@ func file_spotify_metadata_metadata_proto_init() {
 	if File_spotify_metadata_metadata_proto != nil {
 		return
 	}
-	file_spotify_metadata_metadata_proto_msgTypes[16].OneofWrappers = []any{
+	file_spotify_metadata_metadata_proto_msgTypes[18].OneofWrappers = []any{
 		(*Restriction_CountriesAllowed)(nil),
 		(*Restriction_CountriesForbidden)(nil),
 	}
@@ -3208,8 +3472,8 @@ func file_spotify_metadata_metadata_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spotify_metadata_metadata_proto_rawDesc), len(file_spotify_metadata_metadata_proto_rawDesc)),
-			NumEnums:      10,
-			NumMessages:   23,
+			NumEnums:      11,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
