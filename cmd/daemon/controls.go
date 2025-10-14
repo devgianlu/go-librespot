@@ -20,8 +20,10 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (p *AppPlayer) prefetchNext() {
-	ctx := context.TODO()
+func (p *AppPlayer) prefetchNext(ctx context.Context) {
+	// Limit ourselves to 30 seconds for prefetching
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 
 	next := p.state.tracks.PeekNext(ctx)
 	if next == nil {
@@ -61,16 +63,15 @@ func (p *AppPlayer) prefetchNext() {
 
 func (p *AppPlayer) schedulePrefetchNext() {
 	if p.state.player.IsPaused || p.primaryStream == nil {
-		p.prefetchTimer.Reset(time.Duration(math.MaxInt64))
+		p.prefetchTimer.Stop()
 		return
 	}
 
 	untilTrackEnd := time.Duration(p.primaryStream.Media.Duration()-int32(p.player.PositionMs())) * time.Millisecond
 	untilTrackEnd -= 30 * time.Second
 	if untilTrackEnd < 10*time.Second {
-		p.prefetchTimer.Reset(time.Duration(math.MaxInt64))
-
-		go p.prefetchNext()
+		p.prefetchTimer.Reset(0)
+		p.app.log.Tracef("prefetch as soon as possible")
 	} else {
 		p.prefetchTimer.Reset(untilTrackEnd)
 		p.app.log.Tracef("scheduling prefetch in %.0fs", untilTrackEnd.Seconds())

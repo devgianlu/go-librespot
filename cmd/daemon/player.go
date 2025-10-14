@@ -718,6 +718,8 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			}
 
 			p.handlePlayerEvent(ctx, &ev)
+		case <-p.prefetchTimer.C:
+			p.prefetchNext(ctx)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.
