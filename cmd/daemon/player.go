@@ -645,15 +645,27 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 		select {
 		case <-p.stop:
 			return
-		case pkt := <-apRecv:
+		case pkt, ok := <-apRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
 				p.app.log.WithError(err).Warn("failed handling accesspoint packet")
 			}
-		case msg := <-msgRecv:
+		case msg, ok := <-msgRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleDealerMessage(ctx, msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
-		case req := <-reqRecv:
+		case req, ok := <-reqRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleDealerRequest(ctx, req); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
@@ -661,10 +673,18 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				p.app.log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
-		case req := <-apiRecv:
+		case req, ok := <-apiRecv:
+			if !ok {
+				continue
+			}
+
 			data, err := p.handleApiRequest(ctx, req)
 			req.Reply(data, err)
-		case mprisReq := <-mprisRecv:
+		case mprisReq, ok := <-mprisRecv:
+			if !ok {
+				continue
+			}
+
 			p.app.log.Tracef("new mpris message %v", mprisReq)
 			err := p.handleMprisEvent(ctx, mprisReq)
 			dbusError := mpris.MediaPlayer2PlayerCommandResponse{
@@ -676,7 +696,11 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				dbusError.Err = nil
 			}
 			mprisReq.Reply(dbusError)
-		case ev := <-playerRecv:
+		case ev, ok := <-playerRecv:
+			if !ok {
+				continue
+			}
+
 			p.handlePlayerEvent(ctx, &ev)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
