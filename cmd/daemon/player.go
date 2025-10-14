@@ -74,6 +74,10 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 }
 
 func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
+	// Limit ourselves to 30 seconds for handling dealer messages
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
@@ -354,6 +358,10 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 }
 
 func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request) error {
+	// Limit ourselves to 30 seconds for handling dealer requests
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.MessageIdent {
 	case "hm://connect-state/v1/player/command":
 		return p.handlePlayerCommand(ctx, req.Payload)
@@ -364,6 +372,10 @@ func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request)
 }
 
 func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, error) {
+	// Limit ourselves to 30 seconds for handling API requests
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.Type {
 	case ApiRequestTypeWebApi:
 		data := req.Data.(ApiRequestDataWebApi)
@@ -554,6 +566,10 @@ func pointer[T any](d T) *T {
 }
 
 func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
+	// Limit ourselves to 30 seconds for handling mpris commands
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.Type {
 	case mpris.MediaPlayer2PlayerCommandTypeNext:
 		return p.skipNext(ctx, nil)

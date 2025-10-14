@@ -104,6 +104,10 @@ func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 }
 
 func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
+	// Limit ourselves to 30 seconds for handling player events
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch ev.Type {
 	case player.EventTypePlay:
 		p.state.player.IsPlaying = true
@@ -723,6 +727,10 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 // The original change can come from anywhere: from Spotify Connect, from the
 // REST API, or from a volume mixer.
 func (p *AppPlayer) volumeUpdated(ctx context.Context) {
+	// Limit ourselves to 5 seconds for handling volume updates
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	if err := p.putConnectState(ctx, connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
 		p.app.log.WithError(err).Error("failed put state after volume change")
 	}
