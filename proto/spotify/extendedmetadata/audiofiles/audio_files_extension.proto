@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package spotify.extendedmetadata.audiofiles;
+
+import "spotify/metadata/metadata.proto";
+
+message NormalizationParams {
+  float loudness_db = 1;
+  float true_peak_db = 2;
+}
+
+message ExtendedAudioFile {
+  spotify.metadata.AudioFile file = 1;
+  int32 average_bitrate = 4;
+
+  reserved 2, 3;
+}
+
+message AudioFilesExtensionResponse {
+  repeated ExtendedAudioFile files = 1;
+  NormalizationParams default_file_normalization_params = 2;
+  NormalizationParams default_album_normalization_params = 3;
+  bytes audio_id = 4;
+}
