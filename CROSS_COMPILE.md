@@ -1,82 +1,26 @@
 # Cross Compiling
 
-Cross compilation is currently described for Linux only. All the commands below rely on the host platform being
-`linux/amd64`: this is currently enforced by the Dockerfile. If you are not on a `linux/amd64` system, have a look
-at [Multi-platform builds](https://docs.docker.com/build/building/multi-platform/).
+The cross compilation helper script uses Docker to build the project for different architectures with the respective
+toolchains.
 
-## Create Docker images for (cross-)compiling
+Currently, cross compilation is available only for Linux x64 hosts. This is enforced by Docker with the `--platform`
+flag set to `linux/amd64`. You can still use this helper on other platforms, but you will need to set up
+[Multi-platform builds](https://docs.docker.com/build/building/multi-platform/).
 
-### Target Linux x86_64
+## How To
 
-```bash
-docker build \
-  --build-arg TARGET=x86-64-linux-gnu \
-  --build-arg GOARCH=amd64 \
-  --build-arg GOAMD64=v1 \
-  --build-arg CC=gcc \
-  -f Dockerfile.build \
-  -t go-librespot-build-x86_64 .
-```
-
-### Target Linux on Raspberry Pi 1 / Zero
+A handy script to build the project for multiple platforms is provided [here](./crosscompile.sh). To use it simply
+specify the target variant you want to build for.
 
 ```bash
-docker build \
-  --build-arg TARGET=arm-rpi-linux-gnueabihf \
-  --build-arg GOARCH=arm \
-  --build-arg GOARM=6 \
-  --build-arg CC=arm-rpi-linux-gnueabihf-gcc \
-  -f Dockerfile.build \
-  -t go-librespot-build-armv6_rpi .
+./crosscompile.sh <variant>
 ```
 
-### Target Linux ARM32 (Raspberry Pi 2 and above)
+The currently supported variants are `x86_64`, `armv6`, `armv6_rpi` and `arm64`.
 
-```bash
-docker build \
-  --build-arg TARGET=arm-linux-gnueabihf \
-  --build-arg GOARCH=arm \
-  --build-arg GOARM=6 \
-  --build-arg CC=arm-linux-gnueabihf-gcc \
-  -f Dockerfile.build \
-  -t go-librespot-build-armv6 .
-```
+## `armv6` vs `armv6_rpi`
 
-### Target Linux ARM64
+The `armv6` variant is a generic armv6 build. It should work on most armv6 devices that support thumb instructions.
 
-```bash
-docker build \
-  --build-arg TARGET=aarch64-linux-gnu \
-  --build-arg GOARCH=arm64 \
-  --build-arg CC=aarch64-linux-gnu-gcc \
-  -f Dockerfile.build \
-  -t go-librespot-build-arm64 .
-```
-
-## Use the images built above to (cross-)compile
-
-`cd` into the root of the `go-librespot` source code and run on of the following statements.
-
-### Target Linux x86_64
-
-```bash
-docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-x86_64 go-librespot-build-x86_64
-```
-
-### Target Linux on Raspberry Pi 1 / Zero
-
-```bash
-docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-armv6_rpi go-librespot-build-armv6_rpi
-```
-
-### Target Linux ARM32 (Raspberry Pi 2 and above)
-
-```bash
-docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-armv6 go-librespot-build-armv6
-```
-
-### Target Linux ARM64
-
-```bash
-docker run --rm -u $(id -u):$(id -g) -v $PWD:/src -e GOOUTSUFFIX=-arm64 go-librespot-build-arm64
-```
+The `armv6_rpi` variant is specifically built for the Raspberry Pi 1 and Zero, which do not support thumb instructions.
+The toolchain used for this build can be found [here](https://github.com/devgianlu/rpi-toolchain).

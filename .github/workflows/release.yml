@@ -15,59 +15,22 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        include:
-          - target: x86-64-linux-gnu
-            goarch: amd64
-            goamd64: v1
-            cc: gcc
-            tar: linux_x86_64
-          - target: arm-rpi-linux-gnueabihf
-            goarch: arm
-            goarm: 6
-            cc: arm-rpi-linux-gnueabihf-gcc
-            tar: linux_armv6_rpi
-          - target: arm-linux-gnueabihf
-            goarch: arm
-            goarm: 6
-            cc: arm-linux-gnueabihf-gcc
-            tar: linux_armv6
-          - target: aarch64-linux-gnu
-            goarch: arm64
-            cc: aarch64-linux-gnu-gcc
-            tar: linux_arm64
+        variant: [ 'x86_64', 'arm64', 'armv6', 'armv6_rpi' ]
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - run: git fetch --force --tags
-
-      - name: Build image
-        run: |
-          docker build \
-            --build-arg TARGET=${{ matrix.target }} \
-            --build-arg GOARCH=${{ matrix.goarch }} \
-            --build-arg GOARM=${{ matrix.goarm }} \
-            --build-arg GOAMD64=${{ matrix.goamd64 }} \
-            --build-arg CC=${{ matrix.cc }} \
-            -t go-librespot-build-${{ matrix.target }} \
-            -f Dockerfile.build \
-            .
+      - name: Checkout
+        uses: actions/checkout@v3
 
       - name: Compile binary
         run: |
           mkdir -p /tmp/out
-          docker run --rm \
-            --env COMMIT=${{ github.sha }} \
-            --env VERSION=${{ startsWith(github.ref_name, 'v') && github.ref_name || '' }} \
-            -v $PWD:/src \
-            go-librespot-build-${{ matrix.target }}
-          tar -zcvf /tmp/out/go-librespot_${{ matrix.tar }}.tar.gz go-librespot README.md
+          ./crosscompile.sh ${{ matrix.variant }}
+          mv go-librespot-${{ matrix.variant }} go-librespot
+          tar -zcvf /tmp/out/go-librespot_${{ matrix.variant }}.tar.gz go-librespot README.md
 
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.target }}
+          name: binaries-${{ matrix.variant }}
           path: /tmp/out
           retention-days: 7
 
