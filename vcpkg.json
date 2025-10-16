@@ -1,6 +1,11 @@
 {
   "dependencies": [
     "alsa",
+    "avahi",
+    {
+      "name": "dbus",
+      "default-features": false
+    },
     "libvorbis"
   ]
 }

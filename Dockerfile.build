@@ -26,6 +26,7 @@ ENV PATH="$VCPKG_ROOT:$PATH"
 ARG TRIPLET
 COPY vcpkg.json vcpkg-configuration.json ./
 COPY vcpkg-triplets ./vcpkg-triplets
+COPY vcpkg-ports ./vcpkg-ports
 RUN --mount=type=cache,target=/build/vcpkg/downloads \
     --mount=type=cache,target=/build/vcpkg/buildtrees \
     vcpkg install --triplet "$TRIPLET"
