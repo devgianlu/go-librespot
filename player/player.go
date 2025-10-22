@@ -12,6 +12,7 @@ import (
 	"github.com/devgianlu/go-librespot/output"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
 	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
+	audiofilespb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata/audiofiles"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
@@ -495,19 +496,18 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 			return nil, librespot.ErrMediaRestricted
 		}
 
-		if len(trackMeta.File) == 0 {
-			for _, alt := range trackMeta.Alternative {
-				if len(alt.File) == 0 {
-					continue
-				}
-
-				trackMeta.File = append(trackMeta.File, alt.File...)
-			}
-
-			log.Warnf("original track has no formats, alternatives have a total of %d", len(trackMeta.File))
+		var audioFilesResp audiofilespb.AudioFilesExtensionResponse
+		err = p.sp.ExtendedMetadataSimple(ctx, spotId, extmetadatapb.ExtensionKind_AUDIO_FILES, &audioFilesResp)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting audio files metadata: %w", err)
 		}
 
-		file = selectBestMediaFormat(trackMeta.File, bitrate)
+		var audioFiles []*metadatapb.AudioFile
+		for _, f := range audioFilesResp.Files {
+			audioFiles = append(audioFiles, f.File)
+		}
+
+		file = selectBestMediaFormat(audioFiles, bitrate)
 		if file == nil {
 			return nil, librespot.ErrNoSupportedFormats
 		}
@@ -542,7 +542,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 	p.events.PostStreamRequestAudioKey(playbackId)
 
-	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, false)
+	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, file.Format, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed resolving track storage: %w", err)
 	}

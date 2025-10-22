@@ -127,7 +127,7 @@ func GetPlatformSpecificData() *clienttokenpb.PlatformSpecificData {
 				Ios: &clienttokenpb.NativeIOSData{},
 			},
 		}
-	case "linux":
+	case "linux", "freebsd":
 		return &clienttokenpb.PlatformSpecificData{
 			Data: &clienttokenpb.PlatformSpecificData_DesktopLinux{
 				DesktopLinux: &clienttokenpb.NativeDesktopLinuxData{},

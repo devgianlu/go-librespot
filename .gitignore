@@ -1,9 +1,15 @@
+# IDE files
 *.iml
 /.idea
 
+# Configuration files
 /config.yml
 /credentials.json
 /state.json
 /lockfile
 
+# Build files
+/.gocache
+/vcpkg
+/vcpkg_installed
 /dist

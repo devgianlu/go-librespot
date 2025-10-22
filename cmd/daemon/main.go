@@ -122,8 +122,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		volumeUpdate: make(chan float32, 1),
 	}
 
-	// start a dummy timer for prefetching next media
-	appPlayer.prefetchTimer = time.AfterFunc(time.Duration(math.MaxInt64), appPlayer.prefetchNext)
+	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
+	appPlayer.prefetchTimer.Stop()
 
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,

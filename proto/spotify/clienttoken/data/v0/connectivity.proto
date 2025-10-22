@@ -52,10 +52,10 @@ message NativeDesktopWindowsData {
 }
 
 message NativeDesktopLinuxData {
-  string system_name = 1;         //  uname -s
-  string system_release = 2;      //  -r
-  string system_version = 3;      //  -v
-  string hardware = 4;            //  -i
+  string system_name = 1; //  uname -s
+  string system_release = 2; //  -r
+  string system_version = 3; //  -v
+  string hardware = 4; //  -i
 }
 
 message NativeDesktopMacOSData {

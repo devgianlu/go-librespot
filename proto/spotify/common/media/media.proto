@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package spotify.common.media;
+
+enum AudioQuality {
+  DEFAULT = 0;
+  LOW = 1;
+  NORMAL = 2;
+  HIGH = 3;
+  VERY_HIGH = 4;
+  HIFI = 5;
+  HIFI_24 = 6;
+}

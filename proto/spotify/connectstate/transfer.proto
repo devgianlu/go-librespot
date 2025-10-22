@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package spotify.connectstate;
+
+import "spotify/connectstate/player.proto";
+
+message InstrumentationParams {
+  repeated string interaction_ids = 6;
+  repeated string page_instance_ids = 7;
+}
+
+message Playback {
+  int64 timestamp = 1;
+  int32 position_as_of_timestamp = 2;
+  double playback_speed = 3;
+  bool is_paused = 4;
+  ContextTrack current_track = 5;
+  optional ContextTrack associated_current_track = 6;
+  optional int32 associated_position_as_of_timestamp = 7;
+}
+
+message Queue {
+  repeated ContextTrack tracks = 1;
+  bool is_playing_queue = 2;
+}
+
+message Session {
+  PlayOrigin play_origin = 1;
+  Context context = 2;
+  string current_uid = 3;
+  ContextPlayerOptionOverrides option_overrides = 4;
+  Suppressions suppressions = 5;
+  InstrumentationParams instrumentation_params = 6;
+  optional string shuffle_seed = 7;
+  optional Context main_context = 8;
+  optional string original_session_id = 9;
+}
+
+message TransferState {
+  ContextPlayerOptions options = 1;
+  Playback playback = 2;
+  Session current_session = 3;
+  Queue queue = 4;
+}
+
+message ContextTrack {
+  string uri = 1;
+  string uid = 2;
+  bytes gid = 3;
+  map<string, string> metadata = 4;
+}
+
+message ContextPlayerOptionOverrides {
+  bool shuffling_context = 1;
+  bool repeating_context = 2;
+  bool repeating_track = 3;
+  optional float playback_speed = 4;
+  map<string, string> modes = 5;
+}
+
+message Context {
+  string uri = 1;
+  string url = 2;
+  map<string, string> metadata = 3;
+  Restrictions restrictions = 4;
+  repeated ContextPage pages = 5;
+  bool loading = 6;
+}
+
+message ContextPage {
+  string page_url = 1;
+  string next_page_url = 2;
+  map<string, string> metadata = 3;
+  repeated ContextTrack tracks = 4;
+
+  reserved 5;
+}

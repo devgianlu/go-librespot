@@ -74,6 +74,10 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 }
 
 func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
+	// Limit ourselves to 30 seconds for handling dealer messages
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
@@ -354,6 +358,10 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 }
 
 func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request) error {
+	// Limit ourselves to 30 seconds for handling dealer requests
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.MessageIdent {
 	case "hm://connect-state/v1/player/command":
 		return p.handlePlayerCommand(ctx, req.Payload)
@@ -364,6 +372,10 @@ func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request)
 }
 
 func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, error) {
+	// Limit ourselves to 30 seconds for handling API requests
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.Type {
 	case ApiRequestTypeWebApi:
 		data := req.Data.(ApiRequestDataWebApi)
@@ -554,6 +566,10 @@ func pointer[T any](d T) *T {
 }
 
 func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
+	// Limit ourselves to 30 seconds for handling mpris commands
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.Type {
 	case mpris.MediaPlayer2PlayerCommandTypeNext:
 		return p.skipNext(ctx, nil)
@@ -645,15 +661,27 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 		select {
 		case <-p.stop:
 			return
-		case pkt := <-apRecv:
+		case pkt, ok := <-apRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
 				p.app.log.WithError(err).Warn("failed handling accesspoint packet")
 			}
-		case msg := <-msgRecv:
+		case msg, ok := <-msgRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleDealerMessage(ctx, msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
-		case req := <-reqRecv:
+		case req, ok := <-reqRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleDealerRequest(ctx, req); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
@@ -661,10 +689,18 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				p.app.log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
-		case req := <-apiRecv:
+		case req, ok := <-apiRecv:
+			if !ok {
+				continue
+			}
+
 			data, err := p.handleApiRequest(ctx, req)
 			req.Reply(data, err)
-		case mprisReq := <-mprisRecv:
+		case mprisReq, ok := <-mprisRecv:
+			if !ok {
+				continue
+			}
+
 			p.app.log.Tracef("new mpris message %v", mprisReq)
 			err := p.handleMprisEvent(ctx, mprisReq)
 			dbusError := mpris.MediaPlayer2PlayerCommandResponse{
@@ -676,8 +712,14 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				dbusError.Err = nil
 			}
 			mprisReq.Reply(dbusError)
-		case ev := <-playerRecv:
+		case ev, ok := <-playerRecv:
+			if !ok {
+				continue
+			}
+
 			p.handlePlayerEvent(ctx, &ev)
+		case <-p.prefetchTimer.C:
+			p.prefetchNext(ctx)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.
