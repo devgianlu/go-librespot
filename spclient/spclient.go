@@ -96,6 +96,8 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 		if err != nil {
 			return nil, err
 		} else if resp.StatusCode == 401 {
+			_ = resp.Body.Close()
+
 			forceNewToken = true
 			return nil, fmt.Errorf("unauthorized")
 		}
