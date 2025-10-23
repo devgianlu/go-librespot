@@ -100,6 +100,11 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 
 			forceNewToken = true
 			return nil, fmt.Errorf("unauthorized")
+		} else if resp.StatusCode == 502 {
+			_ = resp.Body.Close()
+
+			c.log.Debugf("spclient request returned bad gateway, retrying...")
+			return nil, fmt.Errorf("bad gateway")
 		}
 
 		return resp, nil
