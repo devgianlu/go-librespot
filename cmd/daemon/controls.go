@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -642,7 +643,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
-	if !hasNextTrack && !p.app.cfg.DisableAutoplay {
+	if !hasNextTrack && !p.app.cfg.DisableAutoplay && !strings.HasPrefix(p.state.player.ContextUri, "spotify:station:") {
 		p.state.player.Suppressions = &connectpb.Suppressions{}
 
 		// Consider all tracks as recent because we got here by reaching the end of the context
