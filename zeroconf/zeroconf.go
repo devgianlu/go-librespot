@@ -16,7 +16,8 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dh"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
-	"github.com/grandcat/zeroconf"
+	"github.com/devgianlu/go-librespot/zeroconf/discovery"
+	log "github.com/sirupsen/logrus"
 )
 
 type Zeroconf struct {
@@ -26,8 +27,8 @@ type Zeroconf struct {
 	deviceId   string
 	deviceType devicespb.DeviceType
 
-	listener net.Listener
-	server   *zeroconf.Server
+	listener  net.Listener
+	discovery discovery.Service
 
 	dh *dh.DiffieHellman
 
@@ -46,8 +47,21 @@ type NewUserRequest struct {
 	result chan bool
 }
 
-func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, deviceType devicespb.DeviceType, interfacesToAdvertise []string) (_ *Zeroconf, err error) {
-	z := &Zeroconf{log: log, deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
+type Options struct {
+	Log librespot.Logger
+
+	Port int
+
+	DeviceName string
+	DeviceId   string
+	DeviceType devicespb.DeviceType
+
+	DiscoveryImplementation string
+	InterfacesToAdvertise   []string
+}
+
+func NewZeroconf(opts Options) (_ *Zeroconf, err error) {
+	z := &Zeroconf{log: opts.Log, deviceId: opts.DeviceId, deviceName: opts.DeviceName, deviceType: opts.DeviceType}
 	z.reqsChan = make(chan NewUserRequest)
 
 	z.dh, err = dh.NewDiffieHellman()
@@ -55,7 +69,7 @@ func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, de
 		return nil, fmt.Errorf("failed initializing diffiehellman: %w", err)
 	}
 
-	z.listener, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", port))
+	z.listener, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", opts.Port))
 	if err != nil {
 		return nil, fmt.Errorf("failed starting zeroconf listener: %w", err)
 	}
@@ -64,7 +78,7 @@ func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, de
 	log.Infof("zeroconf server listening on port %d", listenPort)
 
 	var ifaces []net.Interface
-	for _, ifaceName := range interfacesToAdvertise {
+	for _, ifaceName := range opts.InterfacesToAdvertise {
 		liface, err := net.InterfaceByName(ifaceName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get info for network interface %s: %w", ifaceName, err)
@@ -74,9 +88,18 @@ func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, de
 		log.Info(fmt.Sprintf("advertising on network interface %s", ifaceName))
 	}
 
-	z.server, err = zeroconf.Register(deviceName, "_spotify-connect._tcp", "local.", listenPort, []string{"CPath=/", "VERSION=1.0", "Stack=SP"}, ifaces)
-	if err != nil {
-		return nil, fmt.Errorf("failed registering zeroconf server: %w", err)
+	discoveryImpl := opts.DiscoveryImplementation
+	if discoveryImpl == "" {
+		discoveryImpl = "builtin"
+	}
+
+	z.discovery = discovery.GetService(discoveryImpl)
+	if z.discovery == nil {
+		return nil, fmt.Errorf("unknown discovery implementation: %s", discoveryImpl)
+	}
+
+	if err := z.discovery.Register(z.deviceName, "_spotify-connect._tcp", "local.", listenPort, []string{"CPath=/", "VERSION=1.0", "Stack=SP"}, ifaces); err != nil {
+		return nil, fmt.Errorf("failed registering zeroconf service: %w", err)
 	}
 
 	return z, nil
@@ -91,7 +114,7 @@ func (z *Zeroconf) SetCurrentUser(username string) {
 // Close stops the zeroconf responder and HTTP listener,
 // but does not close the last opened session.
 func (z *Zeroconf) Close() {
-	z.server.Shutdown()
+	z.discovery.Shutdown()
 	_ = z.listener.Close()
 }
 
@@ -246,7 +269,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 type HandleNewRequestFunc func(req NewUserRequest) bool
 
 func (z *Zeroconf) Serve(handler HandleNewRequestFunc) error {
-	defer z.server.Shutdown()
+	defer z.discovery.Shutdown()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {

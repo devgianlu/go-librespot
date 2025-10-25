@@ -1,0 +1,14 @@
+{
+  "name": "avahi",
+  "version": "0.8",
+  "description": "Service Discovery for Linux using mDNS/DNS-SD",
+  "homepage": "www.avahi.org",
+  "license": "LGPL-2.1-or-later",
+  "supports": "linux",
+  "dependencies": [
+    {
+      "name": "dbus",
+      "default-features": false
+    }
+  ]
+}
