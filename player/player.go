@@ -10,10 +10,12 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/output"
+	"github.com/devgianlu/go-librespot/playplay"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
 	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
 	audiofilespb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata/audiofiles"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	streamingpb "github.com/devgianlu/go-librespot/proto/spotify/streaming"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
@@ -29,6 +31,10 @@ const MaxStateVolume = 65535
 const DisableCheckMediaRestricted = true
 
 const CdnUrlQuarantineDuration = 15 * time.Minute
+
+func ptr[T any](v T) *T {
+	return &v
+}
 
 type Player struct {
 	log librespot.Logger
@@ -474,6 +480,30 @@ func (p *Player) httpChunkedReaderFromStorageResolve(log librespot.Logger, clien
 	}
 }
 
+func (p *Player) retrieveAudioKey(ctx context.Context, spotId librespot.SpotifyId, fileId []byte) ([]byte, error) {
+	if playplay.Plugin.IsSupported() {
+		resp, err := p.sp.PlayPlayRequest(ctx, fileId, &streamingpb.PlayPlayLicenseRequest{
+			Version:       ptr(playplay.Plugin.GetVersion()),
+			Token:         playplay.Plugin.GetToken(),
+			ContentType:   ptr(streamingpb.ContentType_AUDIO_TRACK),
+			Interactivity: ptr(streamingpb.Interactivity_INTERACTIVE),
+			Timestamp:     ptr(time.Now().Unix()),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed requesting playplay license: %w", err)
+		}
+
+		key, err := playplay.Plugin.Deobfuscate(resp.ObfuscatedKey, fileId)
+		if err != nil {
+			return nil, fmt.Errorf("failed deobfuscating playplay key: %w", err)
+		}
+
+		return key, nil
+	}
+
+	return p.audioKey.Request(ctx, spotId.Id(), fileId)
+}
+
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := p.log.WithField("uri", spotId.Uri())
 
@@ -535,7 +565,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 	log.Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
 
-	audioKey, err := p.audioKey.Request(ctx, spotId.Id(), file.FileId)
+	audioKey, err := p.retrieveAudioKey(ctx, spotId, file.FileId)
 	if err != nil {
 		return nil, fmt.Errorf("failed retrieving audio key: %w", err)
 	}
