@@ -271,6 +271,11 @@
           "type": "boolean",
           "description": "Enables MPRIS communication with D-Bus",
           "default": false
+        },
+        "flac_enabled": {
+          "type": "boolean",
+          "description": "Whether FLAC files should be preferred over other formats when available",
+          "default": false
         }
       },
       "required": [
