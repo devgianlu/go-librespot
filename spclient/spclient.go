@@ -22,6 +22,7 @@ import (
 	netfortunepb "github.com/devgianlu/go-librespot/proto/spotify/netfortune"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
 	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
+	streamingpb "github.com/devgianlu/go-librespot/proto/spotify/streaming"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -96,8 +97,15 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 		if err != nil {
 			return nil, err
 		} else if resp.StatusCode == 401 {
+			_ = resp.Body.Close()
+
 			forceNewToken = true
 			return nil, fmt.Errorf("unauthorized")
+		} else if resp.StatusCode == 502 {
+			_ = resp.Body.Close()
+
+			c.log.Debugf("spclient request returned bad gateway, retrying...")
+			return nil, fmt.Errorf("bad gateway")
 		}
 
 		return resp, nil
@@ -451,6 +459,36 @@ func (c *Spclient) PublishEvents(ctx context.Context, reqProto *eventsenderpb.Pu
 	var respProto eventsenderpb.PublishEventsResponse
 	if err := proto.Unmarshal(respBytes, &respProto); err != nil {
 		return nil, fmt.Errorf("failed json unmarshalling PublishEventsResponse: %w", err)
+	}
+
+	return &respProto, nil
+}
+
+func (c *Spclient) PlayPlayRequest(ctx context.Context, fileId []byte, reqProto *streamingpb.PlayPlayLicenseRequest) (*streamingpb.PlayPlayLicenseResponse, error) {
+	reqBody, err := proto.Marshal(reqProto)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling PlayPlayLicenseRequest: %w", err)
+	}
+
+	resp, err := c.Request(ctx, "POST", fmt.Sprintf("/playplay/v1/key/%x", fileId), nil, nil, reqBody)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from playplay license request: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var respProto streamingpb.PlayPlayLicenseResponse
+	if err := proto.Unmarshal(respBytes, &respProto); err != nil {
+		return nil, fmt.Errorf("failed json unmarshalling PlayPlayLicenseResponse: %w", err)
 	}
 
 	return &respProto, nil

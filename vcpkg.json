@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "alsa",
-    "libvorbis"
+    "libvorbis",
+    "libflac"
   ]
 }
