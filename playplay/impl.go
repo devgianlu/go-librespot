@@ -1,5 +1,3 @@
-//go:build playplay
-
 package playplay
 
 import (

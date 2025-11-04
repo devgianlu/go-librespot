@@ -1,5 +1,3 @@
-//go:build events
-
 package events
 
 import (
