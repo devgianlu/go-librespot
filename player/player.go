@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"time"
@@ -512,6 +513,14 @@ func (p *Player) retrieveAudioKey(ctx context.Context, spotId librespot.SpotifyI
 	return p.audioKey.Request(ctx, spotId.Id(), fileId)
 }
 
+func calculateNormalisationFactor(params *audiofilespb.NormalizationParams, pregain float32) float32 {
+	normalisationFactor := float32(math.Pow(10, float64((params.LoudnessDb+pregain)/20)))
+	if normalisationFactor*params.TruePeakDb > 1 {
+		normalisationFactor = 1 / params.TruePeakDb
+	}
+	return normalisationFactor
+}
+
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := p.log.WithField("uri", spotId.Uri())
 
@@ -520,6 +529,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 	p.events.PreStreamLoadNew(playbackId, spotId, mediaPosition)
 
+	var normalisationFactor float32
 	var media *librespot.Media
 	var file *metadatapb.AudioFile
 	if spotId.Type() == librespot.SpotifyIdTypeTrack {
@@ -549,6 +559,22 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		if file == nil {
 			return nil, librespot.ErrNoSupportedFormats
 		}
+
+		if p.normalisationEnabled {
+			if p.normalisationUseAlbumGain {
+				normalisationFactor = calculateNormalisationFactor(
+					audioFilesResp.DefaultAlbumNormalizationParams,
+					p.normalisationPregain,
+				)
+			} else {
+				normalisationFactor = calculateNormalisationFactor(
+					audioFilesResp.DefaultFileNormalizationParams,
+					p.normalisationPregain,
+				)
+			}
+		} else {
+			normalisationFactor = 1
+		}
 	} else if spotId.Type() == librespot.SpotifyIdTypeEpisode {
 		var episodeMeta metadatapb.Episode
 		err := p.sp.ExtendedMetadataSimple(ctx, spotId, extmetadatapb.ExtensionKind_EPISODE_V4, &episodeMeta)
@@ -565,6 +591,8 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		if file == nil {
 			return nil, librespot.ErrNoSupportedFormats
 		}
+
+		normalisationFactor = 1
 	} else {
 		return nil, fmt.Errorf("unsupported spotify type: %s", spotId.Type())
 	}
@@ -608,17 +636,6 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 			return nil, fmt.Errorf("failed reading metadata page: %w", err)
 		}
 
-		var normalisationFactor float32
-		if p.normalisationEnabled {
-			if p.normalisationUseAlbumGain {
-				normalisationFactor = meta.GetAlbumFactor(p.normalisationPregain)
-			} else {
-				normalisationFactor = meta.GetTrackFactor(p.normalisationPregain)
-			}
-		} else {
-			normalisationFactor = 1
-		}
-
 		vorbisStream, err := vorbis.New(log, audioStream, meta, normalisationFactor)
 		if err != nil {
 			return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
@@ -632,11 +649,8 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 		stream = vorbisStream
 	} else if audioFormat == AudioFormatFLAC {
-		// FIXME: implement normalisation for FLAC by looking at AudioFilesExtensionResponse
-		const flacNormalisationFactor = 1
-
 		audioStream := io.NewSectionReader(decryptedStream, 0, rawStream.Size())
-		flacStream, err := flac.New(log, audioStream, flacNormalisationFactor)
+		flacStream, err := flac.New(log, audioStream, normalisationFactor)
 		if err != nil {
 			return nil, fmt.Errorf("failed initializing flac stream: %w", err)
 		}
