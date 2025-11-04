@@ -10,10 +10,10 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 )
 
-type dummyPlugin struct {
+type Impl struct {
 }
 
-func (p dummyPlugin) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
+func (p Impl) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
 	return dummyEventManager{}, nil
 }
 
