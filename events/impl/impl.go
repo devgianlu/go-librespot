@@ -10,26 +10,57 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 )
 
-func (p Impl) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
-	return Impl{}, nil
+type dummyPlugin struct {
 }
 
-type Impl struct{}
+func (p dummyPlugin) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
+	return dummyEventManager{}, nil
+}
 
-func (d Impl) PreStreamLoadNew([]byte, librespot.SpotifyId, int64)                               {}
-func (d Impl) PostStreamResolveAudioFile([]byte, int32, *librespot.Media, *metadatapb.AudioFile) {}
-func (d Impl) PostStreamRequestAudioKey([]byte)                                                  {}
-func (d Impl) PostStreamResolveStorage([]byte)                                                   {}
-func (d Impl) PostStreamInitHttpChunkReader([]byte, *audio.HttpChunkedReader)                    {}
-func (d Impl) OnPrimaryStreamUnload(*player.Stream, int64)                                       {}
-func (d Impl) PostPrimaryStreamLoad(*player.Stream, bool)                                        {}
-func (d Impl) OnPlayerPlay(*player.Stream, string, bool, *connectpb.PlayOrigin, *connectpb.ProvidedTrack, int64) {
+type dummyEventManager struct {
 }
-func (d Impl) OnPlayerResume(*player.Stream, int64) {}
-func (d Impl) OnPlayerPause(*player.Stream, string, bool, *connectpb.PlayOrigin, *connectpb.ProvidedTrack, int64) {
+
+func (d dummyEventManager) PreStreamLoadNew([]byte, librespot.SpotifyId, int64) {
 }
-func (d Impl) OnPlayerSeek(*player.Stream, int64, int64)       {}
-func (d Impl) OnPlayerSkipForward(*player.Stream, int64, bool) {}
-func (d Impl) OnPlayerSkipBackward(*player.Stream, int64)      {}
-func (d Impl) OnPlayerEnd(*player.Stream, int64)               {}
-func (d Impl) Close()                                          {}
+
+func (d dummyEventManager) PostStreamResolveAudioFile([]byte, int32, *librespot.Media, *metadatapb.AudioFile) {
+}
+
+func (d dummyEventManager) PostStreamRequestAudioKey([]byte) {
+}
+
+func (d dummyEventManager) PostStreamResolveStorage([]byte) {
+}
+
+func (d dummyEventManager) PostStreamInitHttpChunkReader([]byte, *audio.HttpChunkedReader) {
+}
+
+func (d dummyEventManager) OnPrimaryStreamUnload(*player.Stream, int64) {
+}
+
+func (d dummyEventManager) PostPrimaryStreamLoad(*player.Stream, bool) {
+}
+
+func (d dummyEventManager) OnPlayerPlay(*player.Stream, string, bool, *connectpb.PlayOrigin, *connectpb.ProvidedTrack, int64) {
+}
+
+func (d dummyEventManager) OnPlayerResume(*player.Stream, int64) {
+}
+
+func (d dummyEventManager) OnPlayerPause(*player.Stream, string, bool, *connectpb.PlayOrigin, *connectpb.ProvidedTrack, int64) {
+}
+
+func (d dummyEventManager) OnPlayerSeek(*player.Stream, int64, int64) {
+}
+
+func (d dummyEventManager) OnPlayerSkipForward(*player.Stream, int64, bool) {
+}
+
+func (d dummyEventManager) OnPlayerSkipBackward(*player.Stream, int64) {
+}
+
+func (d dummyEventManager) OnPlayerEnd(*player.Stream, int64) {
+}
+
+func (d dummyEventManager) Close() {
+}
