@@ -22,11 +22,11 @@ jobs:
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libvorbis-dev libogg-dev
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libvorbis-dev libogg-dev libflac-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install libogg libvorbis
+        run: brew install libogg libvorbis flac
 
       - name: Build daemon
         run: go build -v ./cmd/daemon

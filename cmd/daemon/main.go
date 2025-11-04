@@ -146,6 +146,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		Events:   appPlayer.sess.Events(),
 		Log:      app.log,
 
+		FlacEnabled: app.cfg.FlacEnabled,
+
 		NormalisationEnabled:      !app.cfg.NormalisationDisabled,
 		NormalisationUseAlbumGain: app.cfg.NormalisationUseAlbumGain,
 		NormalisationPregain:      app.cfg.NormalisationPregain,
@@ -401,6 +403,7 @@ type Config struct {
 	DisableAutoplay               bool      `koanf:"disable_autoplay"`
 	ZeroconfInterfacesToAdvertise []string  `koanf:"zeroconf_interfaces_to_advertise"`
 	MprisEnabled                  bool      `koanf:"mpris_enabled"`
+	FlacEnabled                   bool      `koanf:"flac_enabled"`
 	Server                        struct {
 		Enabled     bool   `koanf:"enabled"`
 		Address     string `koanf:"address"`

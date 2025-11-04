@@ -3,12 +3,14 @@ package player
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
+	"github.com/devgianlu/go-librespot/flac"
 	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/playplay"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
@@ -39,6 +41,7 @@ func ptr[T any](v T) *T {
 type Player struct {
 	log librespot.Logger
 
+	flacEnabled               bool
 	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
 	normalisationPregain      float32
@@ -92,6 +95,10 @@ type Options struct {
 	Events   EventManager
 
 	Log librespot.Logger
+
+	// FlacEnabled specifies if FLAC files should be preferred when available.
+	// When setting this to true, it is assumed that the PlayPlay plugin is provided.
+	FlacEnabled bool
 
 	// NormalisationEnabled specifies if the volume should be normalised according
 	// to Spotify parameters. Only track normalization is supported.
@@ -159,6 +166,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		audioKey:                  opts.AudioKey,
 		events:                    opts.Events,
 		cdnQuarantine:             make(map[string]time.Time),
+		flacEnabled:               opts.FlacEnabled,
 		normalisationEnabled:      opts.NormalisationEnabled,
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain:      opts.NormalisationPregain,
@@ -537,7 +545,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 			audioFiles = append(audioFiles, f.File)
 		}
 
-		file = selectBestMediaFormat(audioFiles, bitrate)
+		file = selectBestMediaFormat(audioFiles, bitrate, p.flacEnabled)
 		if file == nil {
 			return nil, librespot.ErrNoSupportedFormats
 		}
@@ -553,7 +561,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 			return nil, librespot.ErrMediaRestricted
 		}
 
-		file = selectBestMediaFormat(episodeMeta.Audio, bitrate)
+		file = selectBestMediaFormat(episodeMeta.Audio, bitrate, p.flacEnabled)
 		if file == nil {
 			return nil, librespot.ErrNoSupportedFormats
 		}
@@ -591,31 +599,57 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		return nil, fmt.Errorf("failed intializing audio decryptor: %w", err)
 	}
 
-	audioStream, meta, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
-	if err != nil {
-		return nil, fmt.Errorf("failed reading metadata page: %w", err)
-	}
+	var stream librespot.AudioSource
 
-	var normalisationFactor float32
-	if p.normalisationEnabled {
-		if p.normalisationUseAlbumGain {
-			normalisationFactor = meta.GetAlbumFactor(p.normalisationPregain)
-		} else {
-			normalisationFactor = meta.GetTrackFactor(p.normalisationPregain)
+	audioFormat := GetAudioFileFormatAudioFormat(*file.Format)
+	if audioFormat == AudioFormatOGGVorbis {
+		audioStream, meta, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
+		if err != nil {
+			return nil, fmt.Errorf("failed reading metadata page: %w", err)
 		}
+
+		var normalisationFactor float32
+		if p.normalisationEnabled {
+			if p.normalisationUseAlbumGain {
+				normalisationFactor = meta.GetAlbumFactor(p.normalisationPregain)
+			} else {
+				normalisationFactor = meta.GetTrackFactor(p.normalisationPregain)
+			}
+		} else {
+			normalisationFactor = 1
+		}
+
+		vorbisStream, err := vorbis.New(log, audioStream, meta, normalisationFactor)
+		if err != nil {
+			return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
+		}
+
+		if vorbisStream.SampleRate != SampleRate {
+			return nil, fmt.Errorf("unsupported sample rate: %d", vorbisStream.SampleRate)
+		} else if vorbisStream.Channels != Channels {
+			return nil, fmt.Errorf("unsupported channels: %d", vorbisStream.Channels)
+		}
+
+		stream = vorbisStream
+	} else if audioFormat == AudioFormatFLAC {
+		// FIXME: implement normalisation for FLAC by looking at AudioFilesExtensionResponse
+		const flacNormalisationFactor = 1
+
+		audioStream := io.NewSectionReader(decryptedStream, 0, rawStream.Size())
+		flacStream, err := flac.New(log, audioStream, flacNormalisationFactor)
+		if err != nil {
+			return nil, fmt.Errorf("failed initializing flac stream: %w", err)
+		}
+
+		if flacStream.SampleRate != SampleRate {
+			return nil, fmt.Errorf("unsupported sample rate: %d", flacStream.SampleRate)
+		} else if flacStream.Channels != Channels {
+			return nil, fmt.Errorf("unsupported channels: %d", flacStream.Channels)
+		}
+
+		stream = flacStream
 	} else {
-		normalisationFactor = 1
-	}
-
-	stream, err := vorbis.New(log, audioStream, meta, normalisationFactor)
-	if err != nil {
-		return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
-	}
-
-	if stream.SampleRate != SampleRate {
-		return nil, fmt.Errorf("unsupported sample rate: %d", stream.SampleRate)
-	} else if stream.Channels != Channels {
-		return nil, fmt.Errorf("unsupported channels: %d", stream.Channels)
+		return nil, fmt.Errorf("unsupported audio format: %s", *file.Format)
 	}
 
 	// Seek to the correct position if needed.
