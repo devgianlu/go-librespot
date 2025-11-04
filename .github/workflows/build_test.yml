@@ -28,11 +28,16 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install libogg libvorbis flac
 
-      - name: Build daemon
-        run: go build -v ./cmd/daemon
+      - name: Check dependencies
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
 
       - name: Format
         run: test -z "$(gofmt -l .)"
+
+      - name: Build daemon
+        run: go build -v ./cmd/daemon
 
       - name: Test
         run: go test -v -tags "test_unit test_integration" ./...
