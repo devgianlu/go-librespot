@@ -40,14 +40,14 @@ brew install go-librespot
 To build from source the following prerequisites are necessary:
 
 - Go 1.22 or higher
-- Libraries: `libogg`, `libvorbis`, `libasound2`
+- Libraries: `libogg`, `libvorbis`, 'flac', `libasound2`
 
 To install Go, download it from the [Go website](https://go.dev/dl/).
 
 To install the required libraries on Debian-based systems (Debian, Ubuntu, Raspbian), use:
 
 ```shell
-sudo apt-get install libogg-dev libvorbis-dev libasound2-dev
+sudo apt-get install libogg-dev libvorbis-dev libflac-dev libasound2-dev
 ```
 
 Once prerequisites are installed you can clone the repository and run the daemon with:
