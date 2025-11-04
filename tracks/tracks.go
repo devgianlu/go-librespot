@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -147,6 +148,11 @@ func (tl *List) NextTracks(ctx context.Context, nextHint []*connectpb.ContextTra
 			tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr))
 		}
 	} else {
+		// Do not waste too much time fetching next tracks. Even if we do not fetch everything in time,
+		// the playback will continue anyway.
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
 		iter := tl.tracks.iterHere()
 		for len(tracks) < MaxTracksInContext && iter.next(ctx) {
 			curr := iter.get()
