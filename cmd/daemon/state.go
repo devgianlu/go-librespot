@@ -64,11 +64,29 @@ func (s *State) reset() {
 }
 
 func (s *State) trackPosition() int64 {
-	if s.player.IsPaused {
+	// If paused or not actually playing, use raw position value
+	if s.player.IsPaused || !s.player.IsPlaying {
 		return s.player.PositionAsOfTimestamp
-	} else {
-		return time.Now().UnixMilli() - s.player.Timestamp + s.player.PositionAsOfTimestamp
 	}
+
+	// Calculate dynamic position only if playback is actually active
+	now := time.Now().UnixMilli()
+	elapsed := now - s.player.Timestamp
+
+	// Validate timestamp freshness: if elapsed time exceeds 10 minutes (600000ms),
+	// timestamp is likely stale (e.g., from a previous session), use raw position
+	const maxReasonableElapsed = 10 * 60 * 1000 // 10 minutes in milliseconds
+	if elapsed > maxReasonableElapsed || elapsed < 0 {
+		return s.player.PositionAsOfTimestamp
+	}
+
+	calculated := s.player.PositionAsOfTimestamp + elapsed
+	// Ensure position is non-negative (shouldn't happen, but defensive)
+	if calculated < 0 {
+		return s.player.PositionAsOfTimestamp
+	}
+
+	return calculated
 }
 
 // Update timestamp, and updating the player position timestamp according to how
