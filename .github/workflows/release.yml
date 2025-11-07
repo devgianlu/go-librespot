@@ -25,7 +25,7 @@ jobs:
           mkdir -p /tmp/out
           ./crosscompile.sh ${{ matrix.variant }}
           mv go-librespot-${{ matrix.variant }} go-librespot
-          tar -zcvf /tmp/out/go-librespot_${{ matrix.variant }}.tar.gz go-librespot README.md
+          tar -zcvf /tmp/out/go-librespot_linux_${{ matrix.variant }}.tar.gz go-librespot README.md
 
       - name: Upload compiled binary
         uses: actions/upload-artifact@v4
