@@ -121,6 +121,10 @@ func (fm *FIFOManager) createFIFO() error {
 	// Create new FIFO
 	err := syscall.Mkfifo(fm.path, 0666)
 	if err != nil {
+		// If FIFO already exists, that is acceptable
+		if err == syscall.EEXIST {
+			return nil
+		}
 		return fmt.Errorf("mkfifo failed: %w", err)
 	}
 

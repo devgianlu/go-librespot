@@ -25,6 +25,11 @@ import (
 )
 
 func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) player.TrackUpdateInfo {
+	var title, artist, album, trackID string
+	var duration time.Duration
+	var artworkURL string
+	var artworkData []byte
+
 	if stream == nil || stream.Media == nil {
 		return player.TrackUpdateInfo{}
 	}
@@ -54,7 +59,6 @@ func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) player.Trac
 					album = *track.Album.Name
 				}
 
-				// GET ALBUM ARTWORK URL AND DATA:
 				artworkURL = p.getAlbumArtworkURL(track.Album)
 				if artworkURL != "" {
 					artworkData = p.downloadArtwork(artworkURL)
@@ -79,7 +83,6 @@ func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) player.Trac
 					artist = *episode.Show.Name
 				}
 
-				// GET SHOW ARTWORK URL AND DATA:
 				artworkURL = p.getShowArtworkURL(episode.Show)
 				if artworkURL != "" {
 					artworkData = p.downloadArtwork(artworkURL)
@@ -439,7 +442,8 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 		p.app.log.Debugf("Sending metadata: %s by %s (artwork: %d bytes, position: %dms)", trackInfo.Title, trackInfo.Artist, len(trackInfo.ArtworkData), trackPosition)
 
 		// First update the track (without position to avoid breaking other callers)
-		p.UpdateTrack(trackInfo.Title, trackInfo.Artist, trackInfo.Album, trackInfo.TrackID, trackInfo.Duration, !paused, trackInfo.ArtworkURL, trackInfo.ArtworkData)
+		trackInfo.Playing = !paused
+		p.UpdateTrack(trackInfo)
 
 		// Then immediately update the position
 		p.UpdatePosition(time.Duration(trackPosition) * time.Millisecond)

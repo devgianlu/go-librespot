@@ -131,7 +131,6 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	})
 
 	// start a dummy timer for prefetching next media
-	appPlayer.prefetchTimer = time.AfterFunc(time.Duration(math.MaxInt64), appPlayer.prefetchNext)
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.prefetchTimer.Stop()
 
@@ -184,7 +183,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	}
 
 	if err := appPlayer.metadataPlayer.Start(); err != nil {
-		app.log.WithError(err).Errorf("failed to start metadata system")
+		app.log.WithError(err).Warnf("failed to start metadata system")
 	}
 
 	return appPlayer, nil
