@@ -24,10 +24,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Update extractMetadataFromStream method signature:
-func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, artist, album, trackID string, duration time.Duration, artworkURL string, artworkData []byte) {
+func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) player.TrackUpdateInfo {
 	if stream == nil || stream.Media == nil {
-		return "", "", "", "", 0, "", nil
+		return player.TrackUpdateInfo{}
 	}
 
 	media := stream.Media
@@ -90,11 +89,16 @@ func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, art
 		}
 	}
 
-	return title, artist, album, trackID, duration, artworkURL, artworkData
+	return player.TrackUpdateInfo{
+		Title:       title,
+		Artist:      artist,
+		Album:       album,
+		TrackID:     trackID,
+		Duration:    duration,
+		ArtworkURL:  artworkURL,
+		ArtworkData: artworkData,
+	}
 }
-
-func (p *AppPlayer) prefetchNext() {
-	ctx := context.TODO()
 
 func (p *AppPlayer) prefetchNext(ctx context.Context) {
 	// Limit ourselves to 30 seconds for prefetching
@@ -220,14 +224,12 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 
 		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
 
-
 		p.UpdatePlayingState(true)
 
 		// Add this line to update position on resume
 		p.UpdatePosition(time.Duration(p.player.PositionMs()) * time.Millisecond)
 
 		p.emitMprisUpdate(mpris.Playing)
-
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -253,11 +255,9 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.trackPosition(),
 		)
 
-
 		p.UpdatePlayingState(false)
 
 		p.emitMprisUpdate(mpris.Paused)
-
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
@@ -433,14 +433,13 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 
 	p.sess.Events().PostPrimaryStreamLoad(p.primaryStream, paused)
 
-	// In loadCurrentTrack method:
 	if p.primaryStream != nil {
 		trackPosition := p.state.trackPosition() // Get the current position
-		title, artist, album, trackID, duration, artworkURL, artworkData := p.extractMetadataFromStream(p.primaryStream)
-		p.app.log.Debugf("Sending metadata: %s by %s (artwork: %d bytes, position: %dms)", title, artist, len(artworkData), trackPosition)
+		trackInfo := p.extractMetadataFromStream(p.primaryStream)
+		p.app.log.Debugf("Sending metadata: %s by %s (artwork: %d bytes, position: %dms)", trackInfo.Title, trackInfo.Artist, len(trackInfo.ArtworkData), trackPosition)
 
 		// First update the track (without position to avoid breaking other callers)
-		p.UpdateTrack(title, artist, album, trackID, duration, !paused, artworkURL, artworkData)
+		p.UpdateTrack(trackInfo.Title, trackInfo.Artist, trackInfo.Album, trackInfo.TrackID, trackInfo.Duration, !paused, trackInfo.ArtworkURL, trackInfo.ArtworkData)
 
 		// Then immediately update the position
 		p.UpdatePosition(time.Duration(trackPosition) * time.Millisecond)
@@ -623,7 +622,6 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
 
-
 	p.UpdatePosition(time.Duration(position) * time.Millisecond)
 
 	p.app.mpris.EmitSeekUpdate(
@@ -631,7 +629,6 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 			PositionMs: position,
 		},
 	)
-
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
@@ -857,7 +854,6 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 	})
 }
 
-
 func (p *AppPlayer) getAlbumArtworkURL(album *metadatapb.Album) string {
 	if album == nil || album.CoverGroup == nil || len(album.CoverGroup.Image) == 0 {
 		return ""
@@ -917,9 +913,8 @@ func (p *AppPlayer) downloadArtwork(url string) []byte {
 		p.app.log.WithError(err).Debugf("failed reading artwork data")
 		return nil
 	}
-
 	return data
-
+}
 func (p *AppPlayer) stopPlayback(ctx context.Context) error {
 	p.player.Stop()
 	p.primaryStream = nil

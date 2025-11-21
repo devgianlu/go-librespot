@@ -91,8 +91,20 @@ type playerCmdDataSet struct {
 }
 
 // Update MetadataCallback interface:
+// TrackUpdateInfo contains information for updating track metadata
+type TrackUpdateInfo struct {
+	Title       string
+	Artist      string
+	Album       string
+	TrackID     string
+	Duration    time.Duration
+	Playing     bool
+	ArtworkURL  string
+	ArtworkData []byte
+}
+
 type MetadataCallback interface {
-	UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool, artworkURL string, artworkData []byte)
+	UpdateTrack(info TrackUpdateInfo)
 	UpdatePosition(position time.Duration)
 	UpdateVolume(volume int)
 	UpdatePlayingState(playing bool)

@@ -737,10 +737,18 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 	}
 }
 
-// Update AppPlayer's UpdateTrack method:
 func (p *AppPlayer) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool, artworkURL string, artworkData []byte) {
 	if p.metadataPlayer != nil {
-		p.metadataPlayer.UpdateTrack(title, artist, album, trackID, duration, playing, artworkURL, artworkData)
+		p.metadataPlayer.UpdateTrack(player.TrackUpdateInfo{
+			Title:       title,
+			Artist:      artist,
+			Album:       album,
+			TrackID:     trackID,
+			Duration:    duration,
+			Playing:     playing,
+			ArtworkURL:  artworkURL,
+			ArtworkData: artworkData,
+		})
 	}
 }
 

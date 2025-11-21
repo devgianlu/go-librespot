@@ -96,12 +96,12 @@ func (fm *FIFOManager) WriteMetadata(metadata *TrackMetadata) {
 
 	var data []byte
 	switch fm.format {
-	//	case "json":
-	//		data = metadata.ToJSONFormat()
-	case "xml": // ADD THIS CASE
+	case "json":
+		data = metadata.ToJSONFormat()
+	case "xml":
 		data = metadata.ToXMLFormat()
-		//default: // "dacp"
-		//	data = metadata.ToDACPFormat()
+	default: // "dacp"
+		data = metadata.ToDACPFormat()
 	}
 
 	select {
@@ -179,7 +179,7 @@ func (fm *FIFOManager) writeToFIFO(data []byte) error {
 
 	_, err := fm.pipe.Write(data)
 	if err != nil {
-		// Close and attempt to reopen on error
+		// Close pipe on error, will reconnect on next write
 		fm.pipe.Close()
 		fm.pipe = nil
 		return err

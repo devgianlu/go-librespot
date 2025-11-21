@@ -499,8 +499,8 @@ func loadConfig(cfg *Config) error {
 		"volume_steps":   100,
 		"initial_volume": 100,
 
-		"credentials.type": "zeroconf",
-		"server.address":   "localhost",
+		"credentials.type":          "zeroconf",
+		"server.address":            "localhost",
 		"metadata_pipe.enabled":     false,
 		"metadata_pipe.path":        "/tmp/go-librespot-metadata",
 		"metadata_pipe.format":      "dacp",

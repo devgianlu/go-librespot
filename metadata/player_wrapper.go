@@ -5,6 +5,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 )
 
 // PlayerMetadata wraps metadata functionality for a player
@@ -47,14 +48,13 @@ func (pm *PlayerMetadata) Stop() {
 	pm.fifoManager.Stop()
 }
 
-// Update UpdateTrack method signature:
-func (pm *PlayerMetadata) UpdateTrack(title, artist, album, trackID string, duration time.Duration, playing bool, artworkURL string, artworkData []byte) {
+func (pm *PlayerMetadata) UpdateTrack(info player.TrackUpdateInfo) {
 	if !pm.enabled {
 		return
 	}
 
 	pm.mutex.Lock()
-	pm.metadata.Update(title, artist, album, trackID, duration.Milliseconds(), 0, pm.metadata.Volume, playing, artworkURL, artworkData)
+	pm.metadata.Update(info.Title, info.Artist, info.Album, info.TrackID, info.Duration.Milliseconds(), 0, pm.metadata.Volume, info.Playing, info.ArtworkURL, info.ArtworkData)
 	pm.mutex.Unlock()
 
 	pm.writeMetadata()
