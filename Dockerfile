@@ -1,6 +1,6 @@
 FROM alpine:3.20 AS build
 
-RUN apk -U --no-cache add go alsa-lib-dev libogg-dev libvorbis-dev
+RUN apk -U --no-cache add go alsa-lib-dev libogg-dev libvorbis-dev flac-dev gcc musl-dev
 
 WORKDIR /src
 
@@ -8,7 +8,7 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN go build -v ./cmd/daemon
+RUN CGO_ENABLED=1 go build -v ./cmd/daemon
 
 FROM alpine:3.20
 

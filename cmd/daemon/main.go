@@ -13,6 +13,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/mpris"
 
 	"github.com/devgianlu/go-librespot/apresolve"
 	"github.com/devgianlu/go-librespot/metadata"
@@ -49,6 +50,7 @@ type App struct {
 	state       librespot.AppState
 
 	server   ApiServer
+	mpris    mpris.Server
 	logoutCh chan *AppPlayer
 }
 
@@ -64,7 +66,12 @@ func parseDeviceType(val string) (devicespb.DeviceType, error) {
 func NewApp(cfg *Config) (app *App, err error) {
 	app = &App{cfg: cfg, logoutCh: make(chan *AppPlayer)}
 
-	app.log = &LogrusAdapter{log.NewEntry(log.StandardLogger())}
+	logger := log.StandardLogger()
+	logger.SetFormatter(&log.TextFormatter{
+		DisableTimestamp: cfg.LogDisableTimestamp,
+	})
+
+	app.log = &LogrusAdapter{log.NewEntry(logger)}
 	app.client = &http.Client{Timeout: 30 * time.Second}
 
 	app.deviceType, err = parseDeviceType(cfg.DeviceType)
@@ -125,6 +132,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 	// start a dummy timer for prefetching next media
 	appPlayer.prefetchTimer = time.AfterFunc(time.Duration(math.MaxInt64), appPlayer.prefetchNext)
+	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
+	appPlayer.prefetchTimer.Stop()
 
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,
@@ -146,6 +155,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		AudioKey: appPlayer.sess.AudioKey(),
 		Events:   appPlayer.sess.Events(),
 		Log:      app.log,
+
+		FlacEnabled: app.cfg.FlacEnabled,
 
 		NormalisationEnabled:      !app.cfg.NormalisationDisabled,
 		NormalisationUseAlbumGain: app.cfg.NormalisationUseAlbumGain,
@@ -240,7 +251,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			panic("zeroconf is disabled and no credentials are present")
 		}
 
-		appPlayer.Run(ctx, app.server.Receive())
+		appPlayer.Run(ctx, app.server.Receive(), app.mpris.Receive())
 		return nil
 	}
 
@@ -268,7 +279,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			Debugf("initializing zeroconf session")
 
 		apiCh = make(chan ApiRequest)
-		go currentPlayer.Run(ctx, apiCh)
+		go currentPlayer.Run(ctx, apiCh, app.mpris.Receive())
 
 		// let zeroconf know that we already have a user
 		z.SetCurrentUser(currentPlayer.sess.Username())
@@ -319,7 +330,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 					apiCh = make(chan ApiRequest)
 					currentPlayer = newAppPlayer
 
-					go newAppPlayer.Run(ctx, apiCh)
+					go newAppPlayer.Run(ctx, apiCh, app.mpris.Receive())
 
 					// let zeroconf know that we already have a user
 					z.SetCurrentUser(newAppPlayer.sess.Username())
@@ -368,7 +379,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				Debugf("persisted zeroconf credentials")
 		}
 
-		go newAppPlayer.Run(ctx, apiCh)
+		go newAppPlayer.Run(ctx, apiCh, app.mpris.Receive())
 		return true
 	})
 }
@@ -381,6 +392,7 @@ type Config struct {
 	configLock *flock.Flock
 
 	LogLevel                      log.Level `koanf:"log_level"`
+	LogDisableTimestamp           bool      `koanf:"log_disable_timestamp"`
 	DeviceId                      string    `koanf:"device_id"`
 	DeviceName                    string    `koanf:"device_name"`
 	DeviceType                    string    `koanf:"device_type"`
@@ -405,6 +417,8 @@ type Config struct {
 	ZeroconfPort                  int       `koanf:"zeroconf_port"`
 	DisableAutoplay               bool      `koanf:"disable_autoplay"`
 	ZeroconfInterfacesToAdvertise []string  `koanf:"zeroconf_interfaces_to_advertise"`
+	MprisEnabled                  bool      `koanf:"mpris_enabled"`
+	FlacEnabled                   bool      `koanf:"flac_enabled"`
 	Server                        struct {
 		Enabled     bool   `koanf:"enabled"`
 		Address     string `koanf:"address"`
@@ -485,8 +499,8 @@ func loadConfig(cfg *Config) error {
 		"volume_steps":   100,
 		"initial_volume": 100,
 
-		"credentials.type":          "zeroconf",
-		"server.address":            "localhost",
+		"credentials.type": "zeroconf",
+		"server.address":   "localhost",
 		"metadata_pipe.enabled":     false,
 		"metadata_pipe.path":        "/tmp/go-librespot-metadata",
 		"metadata_pipe.format":      "dacp",
@@ -561,6 +575,16 @@ func main() {
 		}
 	} else {
 		app.server, _ = NewStubApiServer(app.log)
+	}
+
+	// create mpris server if needed
+	if cfg.MprisEnabled {
+		app.mpris, err = mpris.NewServer(app.log)
+		if err != nil {
+			log.WithError(err).Fatal("failed creating mpris server")
+		}
+	} else {
+		app.mpris = mpris.DummyServer{}
 	}
 
 	ctx := context.TODO()

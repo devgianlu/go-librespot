@@ -11,9 +11,11 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
@@ -94,6 +96,11 @@ func (p *AppPlayer) extractMetadataFromStream(stream *player.Stream) (title, art
 func (p *AppPlayer) prefetchNext() {
 	ctx := context.TODO()
 
+func (p *AppPlayer) prefetchNext(ctx context.Context) {
+	// Limit ourselves to 30 seconds for prefetching
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	next := p.state.tracks.PeekNext(ctx)
 	if next == nil {
 		return
@@ -132,23 +139,52 @@ func (p *AppPlayer) prefetchNext() {
 
 func (p *AppPlayer) schedulePrefetchNext() {
 	if p.state.player.IsPaused || p.primaryStream == nil {
-		p.prefetchTimer.Reset(time.Duration(math.MaxInt64))
+		p.prefetchTimer.Stop()
 		return
 	}
 
 	untilTrackEnd := time.Duration(p.primaryStream.Media.Duration()-int32(p.player.PositionMs())) * time.Millisecond
 	untilTrackEnd -= 30 * time.Second
 	if untilTrackEnd < 10*time.Second {
-		p.prefetchTimer.Reset(time.Duration(math.MaxInt64))
-
-		go p.prefetchNext()
+		p.prefetchTimer.Reset(0)
+		p.app.log.Tracef("prefetch as soon as possible")
 	} else {
 		p.prefetchTimer.Reset(untilTrackEnd)
 		p.app.log.Tracef("scheduling prefetch in %.0fs", untilTrackEnd.Seconds())
 	}
 }
 
+func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
+	// p.state, p.state.player, p.state.device, p.state.player.Options are assumed to always be non-nil here
+
+	var trackUri *string
+	var media *librespot.Media
+	if p.state.player.Track != nil {
+		trackUri = &p.state.player.Track.Uri
+	}
+	if p.primaryStream != nil {
+		media = p.primaryStream.Media
+	}
+
+	p.app.mpris.EmitStateUpdate(
+		mpris.MediaState{
+			PlaybackStatus: playbackStatus,
+			LoopStatus: mpris.GetLoopStatus(
+				p.state.player.Options.RepeatingContext, p.state.player.Options.RepeatingTrack),
+			Shuffle:    p.state.player.Options.ShufflingContext,
+			Volume:     float64(p.state.device.Volume) / float64(player.MaxStateVolume),
+			PositionMs: p.state.player.Position,
+			Uri:        trackUri,
+			Media:      media,
+		},
+	)
+}
+
 func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
+	// Limit ourselves to 30 seconds for handling player events
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch ev.Type {
 	case player.EventTypePlay:
 		p.state.player.IsPlaying = true
@@ -164,13 +200,8 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.tracks.CurrentTrack(),
 			p.state.trackPosition(),
 		)
-		/*
-			if p.primaryStream != nil {
-				title, artist, album, trackID, duration, artworkURL := p.extractMetadataFromStream(p.primaryStream)
-				p.app.log.Debugf("Sending metadata: %s by %s", title, artist)
-				p.UpdateTrack(title, artist, album, trackID, duration, true, artworkURL) // true = playing
-			}
-		*/
+
+		p.emitMprisUpdate(mpris.Playing)
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -189,10 +220,14 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 
 		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
 
+
 		p.UpdatePlayingState(true)
 
 		// Add this line to update position on resume
 		p.UpdatePosition(time.Duration(p.player.PositionMs()) * time.Millisecond)
+
+		p.emitMprisUpdate(mpris.Playing)
+
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePlaying,
@@ -218,7 +253,11 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.trackPosition(),
 		)
 
+
 		p.UpdatePlayingState(false)
+
+		p.emitMprisUpdate(mpris.Paused)
+
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypePaused,
@@ -255,6 +294,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 					PlayOrigin: p.state.playOrigin(),
 				},
 			})
+			p.emitMprisUpdate(mpris.Stopped)
 		}
 	case player.EventTypeStop:
 
@@ -266,6 +306,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 				PlayOrigin: p.state.playOrigin(),
 			},
 		})
+		p.emitMprisUpdate(mpris.Stopped)
 	default:
 		panic("unhandled player event")
 	}
@@ -325,7 +366,7 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	p.state.tracks = ctxTracks
 	p.state.player.Track = ctxTracks.CurrentTrack()
 	p.state.player.PrevTracks = ctxTracks.PrevTracks()
-	p.state.player.NextTracks = ctxTracks.NextTracks(ctx)
+	p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 	p.state.player.Index = ctxTracks.Index()
 
 	// load current track into stream
@@ -463,7 +504,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 		p.state.player.Options.ShufflingContext = *shufflingContext
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
 
 		p.app.server.Emit(&ApiEvent{
@@ -495,7 +536,7 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 
 	p.state.tracks.AddToQueue(track)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 	p.updateState(ctx)
 	p.schedulePrefetchNext()
 }
@@ -508,7 +549,7 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 
 	p.state.tracks.SetQueue(prev, next)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, next)
 	p.updateState(ctx)
 	p.schedulePrefetchNext()
 }
@@ -582,7 +623,15 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
 
+
 	p.UpdatePosition(time.Duration(position) * time.Millisecond)
+
+	p.app.mpris.EmitSeekUpdate(
+		mpris.SeekState{
+			PositionMs: position,
+		},
+	)
+
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeSeek,
@@ -611,7 +660,7 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
 	}
 
@@ -640,7 +689,7 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
 
 		if err := p.loadCurrentTrack(ctx, p.state.player.IsPaused, true); err != nil {
@@ -693,7 +742,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 
 		p.state.player.Track = p.state.tracks.CurrentTrack()
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx)
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
 
 		uri = p.state.player.Track.Uri
@@ -702,7 +751,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
-	if !hasNextTrack && !p.app.cfg.DisableAutoplay {
+	if !hasNextTrack && !p.app.cfg.DisableAutoplay && !strings.HasPrefix(p.state.player.ContextUri, "spotify:station:") {
 		p.state.player.Suppressions = &connectpb.Suppressions{}
 
 		// Consider all tracks as recent because we got here by reaching the end of the context
@@ -791,6 +840,10 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 // The original change can come from anywhere: from Spotify Connect, from the
 // REST API, or from a volume mixer.
 func (p *AppPlayer) volumeUpdated(ctx context.Context) {
+	// Limit ourselves to 5 seconds for handling volume updates
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	if err := p.putConnectState(ctx, connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
 		p.app.log.WithError(err).Error("failed put state after volume change")
 	}
@@ -803,6 +856,7 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 		},
 	})
 }
+
 
 func (p *AppPlayer) getAlbumArtworkURL(album *metadatapb.Album) string {
 	if album == nil || album.CoverGroup == nil || len(album.CoverGroup.Image) == 0 {
@@ -865,4 +919,27 @@ func (p *AppPlayer) downloadArtwork(url string) []byte {
 	}
 
 	return data
+
+func (p *AppPlayer) stopPlayback(ctx context.Context) error {
+	p.player.Stop()
+	p.primaryStream = nil
+	p.secondaryStream = nil
+
+	p.state.reset()
+	if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
+		return fmt.Errorf("failed inactive state put: %w", err)
+	}
+
+	p.schedulePrefetchNext()
+
+	if p.app.cfg.ZeroconfEnabled {
+		p.logout <- p
+	}
+
+	p.app.server.Emit(&ApiEvent{
+		Type: ApiEventTypeInactive,
+	})
+
+	return nil
+
 }

@@ -102,7 +102,9 @@ func (r *ContextResolver) loadPage(ctx context.Context, url string) (*connectpb.
 		return nil, fmt.Errorf("invalid page url: %s", url)
 	}
 
-	url = url[5:]
+	url = strings.TrimPrefix(url, "hm://")
+	r.log.WithField("uri", r.Uri()).Tracef("loading context page from %s", url)
+
 	resp, err := r.sp.Request(ctx, "GET", url, nil, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting page at %s: %w", url, err)

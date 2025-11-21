@@ -2,6 +2,8 @@ syntax = "proto2";
 
 package spotify.metadata;
 
+import "spotify/metadata/contentratings/v1/content_ratings.proto";
+
 message Artist {
   optional bytes gid = 1;
   optional string name = 2;
@@ -11,7 +13,6 @@ message Artist {
   repeated AlbumGroup single_group = 6;
   repeated AlbumGroup compilation_group = 7;
   repeated AlbumGroup appears_on_group = 8;
-  repeated string genre = 9;
   repeated ExternalId external_id = 10;
   repeated Image portrait = 11;
   repeated Biography biography = 12;
@@ -22,6 +23,8 @@ message Artist {
   optional ImageGroup portrait_group = 17;
   repeated SalePeriod sale_period = 18;
   repeated Availability availability = 20;
+
+  reserved 9;
 }
 
 message Album {
@@ -42,7 +45,6 @@ message Album {
   optional string label = 5;
   optional Date date = 6;
   optional sint32 popularity = 7;
-  repeated string genre = 8;
   repeated Image cover = 9;
   repeated ExternalId external_id = 10;
   repeated Disc disc = 11;
@@ -56,6 +58,9 @@ message Album {
   optional string version_title = 19;
   optional string type_str = 20;
   repeated Availability availability = 23;
+  optional int64 prerelease_end_date = 42;
+
+  reserved 8;
 }
 
 message Track {
@@ -80,10 +85,18 @@ message Track {
   repeated Availability availability = 19;
   optional Licensor licensor = 21;
   repeated string language_of_performance = 22;
+  optional Audio original_audio = 24;
   repeated ContentRating content_rating = 25;
   optional string original_title = 27;
   optional string version_title = 28;
   repeated ArtistWithRole artist_with_role = 32;
+  optional string canonical_uri = 36;
+  repeated Video original_video = 38;
+  repeated TrackAudioFormat audio_formats = 41;
+}
+
+message TrackAudioFormat {
+  optional Audio original_audio = 1;
 }
 
 message ArtistWithRole {
@@ -135,6 +148,7 @@ message Show {
   optional string trailer_uri = 83;
   optional bool music_and_talk = 85;
   optional bool is_audiobook = 89;
+  optional bool is_creator_channel = 90;
 }
 
 message Episode {
@@ -159,6 +173,7 @@ message Episode {
   optional bool allow_background_playback = 81;
   repeated Availability availability = 82;
   optional string external_url = 83;
+  optional Audio original_audio = 84;
 
   optional EpisodeType type = 87;
   enum EpisodeType {
@@ -170,10 +185,23 @@ message Episode {
   optional bool music_and_talk = 91;
   repeated ContentRating content_rating = 95;
   optional bool is_audiobook_chapter = 96;
+  optional bool is_podcast_short = 97;
+  repeated spotify.metadata.contentratings.v1.ContentRatingTagWithMarkets episode_content_rating = 102;
 }
 
 message Licensor {
   optional bytes uuid = 1;
+}
+
+message Audio {
+  optional bytes uuid = 1;
+
+  optional Format format = 2;
+  enum Format {
+    UNKNOWN = 0;
+    DEFAULT = 1;
+    PARROT = 2;
+  }
 }
 
 message TopTracks {
@@ -294,18 +322,16 @@ message AudioFile {
     MP3_160_ENC = 7;
     AAC_24 = 8;
     AAC_48 = 9;
-    MP4_128 = 10;
-    MP4_128_DUAL = 11;
-    MP4_128_CBCS = 12;
-    MP4_256 = 13;
-    MP4_256_DUAL = 14;
-    MP4_256_CBCS = 15;
     FLAC_FLAC = 16;
     XHE_AAC_24 = 18;
     XHE_AAC_16 = 19;
     XHE_AAC_12 = 20;
     FLAC_FLAC_24BIT = 22;
   }
+}
+
+message Video {
+  optional bytes gid = 1;
 }
 
 message VideoFile {

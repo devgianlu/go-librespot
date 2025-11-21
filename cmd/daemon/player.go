@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/devgianlu/go-librespot/mpris"
+	"github.com/godbus/dbus/v5"
 	"google.golang.org/protobuf/proto"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -74,6 +76,10 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 }
 
 func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
+	// Limit ourselves to 30 seconds for handling dealer messages
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
@@ -124,24 +130,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		}
 		p.app.log.Infof("playback was transferred to %s", name)
 
-		p.player.Stop()
-		p.primaryStream = nil
-		p.secondaryStream = nil
-
-		p.state.reset()
-		if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
-			return fmt.Errorf("failed inactive state put: %w", err)
-		}
-
-		p.schedulePrefetchNext()
-
-		if p.app.cfg.ZeroconfEnabled {
-			p.logout <- p
-		}
-
-		p.app.server.Emit(&ApiEvent{
-			Type: ApiEventTypeInactive,
-		})
+		return p.stopPlayback(ctx)
 	}
 
 	return nil
@@ -249,7 +238,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.tracks = ctxTracks
 		p.state.player.Track = ctxTracks.CurrentTrack()
 		p.state.player.PrevTracks = ctxTracks.PrevTracks()
-		p.state.player.NextTracks = ctxTracks.NextTracks(ctx)
+		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 		p.state.player.Index = ctxTracks.Index()
 
 		// load current track into stream
@@ -371,6 +360,10 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 }
 
 func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request) error {
+	// Limit ourselves to 30 seconds for handling dealer requests
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.MessageIdent {
 	case "hm://connect-state/v1/player/command":
 		return p.handlePlayerCommand(ctx, req.Payload)
@@ -381,6 +374,10 @@ func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request)
 }
 
 func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, error) {
+	// Limit ourselves to 30 seconds for handling API requests
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	switch req.Type {
 	case ApiRequestTypeWebApi:
 		data := req.Data.(ApiRequestDataWebApi)
@@ -566,13 +563,87 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	}
 }
 
+func pointer[T any](d T) *T {
+	return &d
+}
+
+func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
+	// Limit ourselves to 30 seconds for handling mpris commands
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	switch req.Type {
+	case mpris.MediaPlayer2PlayerCommandTypeNext:
+		return p.skipNext(ctx, nil)
+	case mpris.MediaPlayer2PlayerCommandTypePrevious:
+		return p.skipPrev(ctx, true)
+	case mpris.MediaPlayer2PlayerCommandTypePlay:
+		return p.play(ctx)
+	case mpris.MediaPlayer2PlayerCommandTypePause:
+		return p.pause(ctx)
+	case mpris.MediaPlayer2PlayerCommandTypePlayPause:
+		if p.state.player.IsPaused {
+			return p.play(ctx)
+		} else {
+			return p.pause(ctx)
+		}
+	case mpris.MediaPlayer2PlayerCommandTypeStop:
+		return p.stopPlayback(ctx)
+	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
+		p.app.log.Tracef("mpris loop status argument %s", req.Argument)
+		dt := req.Argument
+		switch dt {
+		case mpris.None:
+			p.setOptions(ctx, pointer(false), pointer(false), nil)
+		case mpris.Playlist:
+			p.setOptions(ctx, pointer(true), pointer(false), nil)
+		case mpris.Track:
+			p.setOptions(ctx, pointer(true), pointer(true), nil)
+		default:
+			p.app.log.Warnf("mpris loop status argument is invalid (%s)", req.Argument)
+		}
+		return nil
+	case mpris.MediaPlayer2PlayerCommandShuffleChanged:
+		sh := req.Argument.(bool)
+		p.setOptions(ctx, nil, nil, &sh)
+		return nil
+	case mpris.MediaPlayer2PlayerCommandVolumeChanged:
+		volRelative := req.Argument.(float64)
+		volAbs := uint32(player.MaxStateVolume * volRelative)
+
+		p.updateVolume(volAbs)
+		return nil
+	case mpris.MediaPlayer2PlayerCommandTypeSetPosition:
+		arg := req.Argument.(mpris.MediaPlayer2CommandSetPositionPayload)
+
+		p.app.log.Tracef("media player set position argument: %v", arg)
+
+		if arg.ObjectPath.IsValid() {
+			spotifyId := strings.Join(strings.Split(string(arg.ObjectPath), "/")[3:], ":")
+			if spotifyId != p.state.player.Track.Uri {
+				return fmt.Errorf("seek tries to jump to different uri, not yet supported (got: %s, expected: %s)", spotifyId, p.state.player.Track.Uri)
+			}
+		}
+
+		newPositionAbs := arg.PositionUs / 1000
+		return p.seek(ctx, newPositionAbs)
+	case mpris.MediaPlayer2PlayerCommandTypeSeek:
+		newPosAbs := p.player.PositionMs() + req.Argument.(int64)/1000
+		return p.seek(ctx, newPosAbs)
+	case mpris.MediaPlayer2PlayerCommandTypeOpenUri, mpris.MediaPlayer2PlayerCommandRateChanged:
+		p.app.log.Warnf("unimplemented mpris event %d", req.Type)
+		return fmt.Errorf("unimplemented mpris event %d", req.Type)
+	}
+	return nil
+}
+
 func (p *AppPlayer) Close() {
 	p.stop <- struct{}{}
 	p.player.Close()
 	p.sess.Close()
 }
 
-func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
+func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaPlayer2PlayerCommand) {
 	err := p.sess.Dealer().Connect(ctx)
 	if err != nil {
 		p.app.log.WithError(err).Error("failed connecting to dealer")
@@ -592,15 +663,27 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 		select {
 		case <-p.stop:
 			return
-		case pkt := <-apRecv:
+		case pkt, ok := <-apRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleAccesspointPacket(pkt.Type, pkt.Payload); err != nil {
 				p.app.log.WithError(err).Warn("failed handling accesspoint packet")
 			}
-		case msg := <-msgRecv:
+		case msg, ok := <-msgRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleDealerMessage(ctx, msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
-		case req := <-reqRecv:
+		case req, ok := <-reqRecv:
+			if !ok {
+				continue
+			}
+
 			if err := p.handleDealerRequest(ctx, req); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
@@ -608,11 +691,37 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest) {
 				p.app.log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
 			}
-		case req := <-apiRecv:
+		case req, ok := <-apiRecv:
+			if !ok {
+				continue
+			}
+
 			data, err := p.handleApiRequest(ctx, req)
 			req.Reply(data, err)
-		case ev := <-playerRecv:
+		case mprisReq, ok := <-mprisRecv:
+			if !ok {
+				continue
+			}
+
+			p.app.log.Tracef("new mpris message %v", mprisReq)
+			err := p.handleMprisEvent(ctx, mprisReq)
+			dbusError := mpris.MediaPlayer2PlayerCommandResponse{
+				Err: &dbus.Error{},
+			}
+			if err != nil {
+				dbusError.Err.Name = err.Error()
+			} else {
+				dbusError.Err = nil
+			}
+			mprisReq.Reply(dbusError)
+		case ev, ok := <-playerRecv:
+			if !ok {
+				continue
+			}
+
 			p.handlePlayerEvent(ctx, &ev)
+		case <-p.prefetchTimer.C:
+			p.prefetchNext(ctx)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.

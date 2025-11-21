@@ -1,11 +1,8 @@
-//go:build !events
-
-package events
+package impl
 
 import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
-	"github.com/devgianlu/go-librespot/events/plugin"
 	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -13,12 +10,10 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 )
 
-var Plugin plugin.Interface = dummyPlugin{}
-
-type dummyPlugin struct {
+type Impl struct {
 }
 
-func (p dummyPlugin) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
+func (p Impl) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
 	return dummyEventManager{}, nil
 }
 

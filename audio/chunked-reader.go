@@ -3,6 +3,7 @@ package audio
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -62,6 +63,8 @@ type HttpChunkedReader struct {
 	len int64
 	pos int64
 
+	prefetchWg sync.WaitGroup
+
 	initialLatency time.Duration
 	latencies      []time.Duration
 }
@@ -117,7 +120,10 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 			URL:    r.url,
 			Header: http.Header{
 				"User-Agent": []string{librespot.UserAgent()},
-				"Range":      []string{fmt.Sprintf("bytes=%d-%d", idx*DefaultChunkSize, (idx+1)*DefaultChunkSize-1)},
+				"Range": []string{fmt.Sprintf("bytes=%d-%d",
+					idx*DefaultChunkSize,
+					min(max(r.len, DefaultChunkSize), int64((idx+1)*DefaultChunkSize))-1,
+				)},
 			},
 		})
 		if err != nil {
@@ -151,6 +157,7 @@ func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
 	}
 
 	chunk.fetching = true
+	chunk.err = nil
 	chunk.L.Unlock()
 
 	// download chunk
@@ -199,7 +206,11 @@ func (r *HttpChunkedReader) prefetchChunks(curr int) {
 			break
 		}
 
-		go func(i int) { _, _ = r.fetchChunk(i) }(i)
+		r.prefetchWg.Add(1)
+		go func(i int) {
+			defer r.prefetchWg.Done()
+			_, _ = r.fetchChunk(i)
+		}(i)
 	}
 }
 
@@ -221,7 +232,7 @@ func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
 	n = 0
 	for len(p) > 0 {
 		if chunkIdx >= len(r.chunks) {
-			return n, nil
+			return n, io.EOF
 		}
 
 		// get the chunk data
@@ -372,4 +383,19 @@ func (r *HttpChunkedReader) TotalTime() time.Duration {
 		sum += latency
 	}
 	return sum
+}
+
+func (r *HttpChunkedReader) Close() error {
+	for _, chunk := range r.chunks {
+		chunk.L.Lock()
+		if chunk.fetching {
+			chunk.err = net.ErrClosed
+			chunk.fetching = false
+			chunk.Broadcast()
+		}
+		chunk.L.Unlock()
+	}
+
+	r.prefetchWg.Wait()
+	return nil
 }
