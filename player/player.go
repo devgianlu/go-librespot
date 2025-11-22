@@ -90,6 +90,26 @@ type playerCmdDataSet struct {
 	drop    bool
 }
 
+// Update MetadataCallback interface:
+// TrackUpdateInfo contains information for updating track metadata
+type TrackUpdateInfo struct {
+	Title       string
+	Artist      string
+	Album       string
+	TrackID     string
+	Duration    time.Duration
+	Playing     bool
+	ArtworkURL  string
+	ArtworkData []byte
+}
+
+type MetadataCallback interface {
+	UpdateTrack(info TrackUpdateInfo)
+	UpdatePosition(position time.Duration)
+	UpdateVolume(volume int)
+	UpdatePlayingState(playing bool)
+}
+
 type Options struct {
 	Spclient *spclient.Spclient
 	AudioKey *audio.KeyProvider
@@ -158,6 +178,7 @@ type Options struct {
 	//
 	// This is only supported on the pipe backend.
 	AudioOutputPipeFormat string
+	MetadataCallback      MetadataCallback
 }
 
 func NewPlayer(opts *Options) (*Player, error) {

@@ -16,6 +16,7 @@ import (
 	"github.com/devgianlu/go-librespot/mpris"
 
 	"github.com/devgianlu/go-librespot/apresolve"
+	"github.com/devgianlu/go-librespot/metadata"
 	"github.com/devgianlu/go-librespot/player"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/devgianlu/go-librespot/session"
@@ -122,6 +123,14 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		volumeUpdate: make(chan float32, 1),
 	}
 
+	appPlayer.metadataPlayer = metadata.NewPlayerMetadata(app.log, metadata.MetadataPipeConfig{
+		Enabled:    app.cfg.MetadataPipe.Enabled,
+		Path:       app.cfg.MetadataPipe.Path,
+		Format:     app.cfg.MetadataPipe.Format,
+		BufferSize: app.cfg.MetadataPipe.BufferSize,
+	})
+
+	// start a dummy timer for prefetching next media
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.prefetchTimer.Stop()
 
@@ -167,9 +176,14 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 		AudioOutputPipe:       app.cfg.AudioOutputPipe,
 		AudioOutputPipeFormat: app.cfg.AudioOutputPipeFormat,
+		MetadataCallback:      appPlayer, // AppPlayer implements MetadataCallback
 	},
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)
+	}
+
+	if err := appPlayer.metadataPlayer.Start(); err != nil {
+		app.log.WithError(err).Warnf("failed to start metadata system")
 	}
 
 	return appPlayer, nil
@@ -425,6 +439,12 @@ type Config struct {
 			PersistCredentials bool `koanf:"persist_credentials"`
 		} `koanf:"zeroconf"`
 	} `koanf:"credentials"`
+	MetadataPipe struct {
+		Enabled    bool   `koanf:"enabled"`
+		Path       string `koanf:"path"`
+		Format     string `koanf:"format"`
+		BufferSize int    `koanf:"buffer_size"`
+	} `koanf:"metadata_pipe"`
 }
 
 func loadConfig(cfg *Config) error {
@@ -478,8 +498,12 @@ func loadConfig(cfg *Config) error {
 		"volume_steps":   100,
 		"initial_volume": 100,
 
-		"credentials.type": "zeroconf",
-		"server.address":   "localhost",
+		"credentials.type":          "zeroconf",
+		"server.address":            "localhost",
+		"metadata_pipe.enabled":     false,
+		"metadata_pipe.path":        "/tmp/go-librespot-metadata",
+		"metadata_pipe.format":      "dacp",
+		"metadata_pipe.buffer_size": 100,
 	}, "."), nil)
 
 	// load file configuration (if available)

@@ -12,4 +12,7 @@
 /.gocache
 /vcpkg
 /vcpkg_installed
-/dist
+/distgo-librespot
+*.tar.gz
+sedtmp
+.go-librespot
