@@ -112,10 +112,6 @@ func (tm *TrackMetadata) ToXMLFormat() []byte {
 		// Encode binary data as base64
 		encodedData := base64.StdEncoding.EncodeToString(data)
 
-		// DEBUG: Log artwork info
-		fmt.Printf("DEBUG Artwork: type=%s, code=%s, raw_len=%d, encoded_len=%d\n",
-			itemType, code, len(data), len(encodedData))
-		fmt.Printf("DEBUG First 100 chars of encoded: %.100s\n", encodedData)
 
 		// Use the ORIGINAL BINARY LENGTH, with 8-digit hex format
 		lengthHex := fmt.Sprintf("%08x", len(data))
@@ -183,7 +179,6 @@ func (tm *TrackMetadata) ToXMLFormat() []byte {
 	result = append(result, encodeItem("ssnc", "ppos", positionStr)...)
 
 	// DEBUG: Log position info
-	fmt.Printf("DEBUG Position: tm.Position=%d ms, positionSec=%d s\n", tm.Position, positionSec)
 
 	return result
 }
