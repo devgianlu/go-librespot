@@ -306,7 +306,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				// we will restore the session even if it's for the same user, but it shouldn't be an issue
 				newAppPlayer, err := appPlayerFunc(ctx)
 				if err != nil {
-					log.WithError(err).Errorf("failed restoring session after logout")
+					log.Fatalf("Failed restoring session after logout: %v", err)
 				} else if newAppPlayer == nil {
 					// unset the zeroconf user
 					z.SetCurrentUser("")
