@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const SpotifyVersionCode = 125200442
+const SpotifyVersionCode = 127700358
 
 var version string
 
