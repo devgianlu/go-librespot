@@ -8,6 +8,10 @@ if [ -z "$VARIANT" ]; then
     exit 1
 fi
 
+# Get the tag associated with the current commit
+VERSION="$(git tag --points-at HEAD)"
+VERSION="${VERSION#v}"
+
 # Validate and map variant to compilation envs
 if [ "$VARIANT" = "x86_64" ]; then
   TARGET="x86-64-linux-gnu"
@@ -47,6 +51,7 @@ DOCKER_IMAGE_NAME="go-librespot-build-${VARIANT}"
 # Build the image for cross-compilation
 docker build \
   --build-arg "TARGET=$TARGET" \
+  --build-arg "VERSION=$VERSION" \
   --build-arg "TRIPLET=$TRIPLET" \
   --build-arg "GOARCH=$GOARCH" \
   --build-arg "GOAMD64=$GOAMD64" \
