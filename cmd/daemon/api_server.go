@@ -153,12 +153,38 @@ func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
 
 	imageSize := metadatapb.Image_Size(metadatapb.Image_Size_value[strings.ToUpper(size)])
 
+	dist := func(a metadatapb.Image_Size) int {
+		diff := int(a) - int(imageSize)
+		if diff < 0 {
+			return -diff
+		}
+		return diff
+	}
+
+	// Find an image with the exact requested size.
+	// If no exact match, return the closest image to the requested size.
+	var bestImage *metadatapb.Image
 	for _, img := range images {
-		if img.Size != nil && *img.Size == imageSize {
+		if img.Size == nil {
+			continue
+		}
+
+		if *img.Size == imageSize {
 			return img.FileId
+		}
+
+		// Find the image with the closest size. This logic works because the
+		// metadatapb.Image_Size enum values are ordered from smallest to largest.
+		if bestImage == nil || dist(*img.Size) < dist(*bestImage.Size) {
+			bestImage = img
 		}
 	}
 
+	if bestImage != nil {
+		return bestImage.FileId
+	}
+
+	// Fallback to the first image if none have size information.
 	return images[0].FileId
 }
 
