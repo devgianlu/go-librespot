@@ -14,6 +14,7 @@ import (
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/mpris"
+	"github.com/devgianlu/go-librespot/playplay"
 
 	"github.com/devgianlu/go-librespot/apresolve"
 	"github.com/devgianlu/go-librespot/player"
@@ -108,6 +109,12 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 	if cfg.ClientToken != "" {
 		app.clientToken = cfg.ClientToken
+	}
+
+	if cfg.FlacEnabled && !playplay.Plugin.IsSupported() {
+		// FLAC decryption keys are available only with the PlayPlay DRM implementation.
+		// Using PlayPlay might get you banned by Spotify.
+		return nil, fmt.Errorf("FLAC playback requires a PlapPlay implementation")
 	}
 
 	return app, nil
