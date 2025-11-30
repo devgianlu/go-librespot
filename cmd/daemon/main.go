@@ -314,6 +314,9 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				newAppPlayer, err := appPlayerFunc(ctx)
 				if err != nil {
 					log.WithError(err).Errorf("failed restoring session after logout")
+
+					// unset the zeroconf user
+					z.SetCurrentUser("")
 				} else if newAppPlayer == nil {
 					// unset the zeroconf user
 					z.SetCurrentUser("")
