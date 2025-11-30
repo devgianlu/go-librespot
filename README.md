@@ -129,6 +129,7 @@ server:
   allow_origin: '' # Value for the Access-Control-Allow-Origin header
   cert_file: '' # Path to certificate file for TLS
   key_file: '' # Path to key file for TLS
+  image_size: 'default' # Album art image size (default, small, large, xlarge)
 ```
 
 For detailed API documentation see [here](/API.md).

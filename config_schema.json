@@ -147,6 +147,16 @@
               "type": "string",
               "description": "File path of the private key file to use for TLS",
               "default": ""
+            },
+            "image_size": {
+              "type": "string",
+              "description": "The preferred size of album cover images served by the API server",
+              "enum": [
+                "default",
+                "small",
+                "large",
+                "xlarge"
+              ]
             }
           }
         },
