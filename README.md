@@ -28,7 +28,7 @@ An example Docker Compose configuration for PulseAudio is available [here](/dock
 
 ### Using Brew
 
-You can also install go-librespot [using Brew](https://formulae.brew.sh/formula/go-librespot) 
+You can also install go-librespot [using Brew](https://formulae.brew.sh/formula/go-librespot)
 on macOS and Linux (thanks @kriive):
 
 ```shell
@@ -146,6 +146,26 @@ Various configurations for volume control are available:
    volume dependant
 4. **External volume with mixer**: Device volume is synchronized with Spotify volume, output samples are not volume
    dependant, volume changes are not applied to the ALSA mixer
+
+### Audio normalization
+
+go-librespot implements audio normalization according to Spotify's standards, which targets **-14 dB LUFS** (Loudness
+Units relative to Full Scale) based on the **ITU-R BS.1770** standard.
+[Source](https://support.spotify.com/us/artists/article/loudness-normalization/)
+
+Normalization can be configured with the following options:
+
+```yaml
+normalisation_disabled: false # Whether to disable normalization (default: false)
+normalisation_use_album_gain: false # Whether to use album gain instead of track gain (default: false)
+normalisation_pregain: 0 # Pregain in dB to apply before normalization (default: 0)
+```
+
+The pregain is applied on Spotify's -14 dB LUFS target. Spotify suggests the following presets for pregain:
+
+- Loud: -11 dB LUFS, apply a pregain of +3 dB
+- Normal: -14 dB LUFS, apply a pregain of 0 dB
+- Quiet: -19 dB LUFS, apply a pregain of -5 dB
 
 ### Additional configuration
 
