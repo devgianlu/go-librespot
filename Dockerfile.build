@@ -35,9 +35,10 @@ ARG GOCC
 ARG GOARCH
 ARG GOAMD64
 ARG GOARM
+ARG VERSION
 
 WORKDIR /src
 ENV CGO_ENABLED=1 PKG_CONFIG_PATH="/build/vcpkg_installed/$TRIPLET/lib/pkgconfig" CC="$GOCC" \
     GOARCH="$GOARCH" GOAMD64="$GOAMD64" GOARM="$GOARM" \
     GOCACHE=/src/.gocache/go-build GOMODCACHE=/src/.gocache/mod
-CMD ["go", "build", "-o", "./go-librespot", "-a", "-ldflags", "-s -w", "./cmd/daemon"]
+CMD ["go", "build", "-o", "./go-librespot", "-a", "-ldflags", "-s -w -X github.com/devgianlu/go-librespot.version=$VERSION", "./cmd/daemon"]

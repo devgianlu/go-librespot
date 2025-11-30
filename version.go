@@ -9,7 +9,7 @@ import (
 
 const SpotifyVersionCode = 125200442
 
-var commit, version string
+var version string
 
 // Extract and return the commit hash stored in the binary, if available.
 func commitHash() string {
@@ -26,8 +26,6 @@ func commitHash() string {
 func VersionNumberString() string {
 	if len(version) > 0 {
 		return strings.TrimPrefix(version, "v")
-	} else if len(commit) >= 8 {
-		return commit[:8]
 	} else if commit := commitHash(); len(commit) >= 8 {
 		return commit[:8]
 	} else {
@@ -37,9 +35,7 @@ func VersionNumberString() string {
 
 func SpotifyLikeClientVersion() string {
 	if len(version) > 0 {
-		if len(commit) >= 8 {
-			return fmt.Sprintf("%s.g%s", version, commit[:8])
-		} else if commit := commitHash(); len(commit) >= 8 {
+		if commit := commitHash(); len(commit) >= 8 {
 			return fmt.Sprintf("%s.g%s", version, commit[:8])
 		} else {
 			return version
