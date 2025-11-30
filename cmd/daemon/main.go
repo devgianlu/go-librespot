@@ -421,6 +421,8 @@ type Config struct {
 		AllowOrigin string `koanf:"allow_origin"`
 		CertFile    string `koanf:"cert_file"`
 		KeyFile     string `koanf:"key_file"`
+
+		ImageSize string `koanf:"image_size"`
 	} `koanf:"server"`
 	Credentials struct {
 		Type        string `koanf:"type"`
@@ -489,7 +491,9 @@ func loadConfig(cfg *Config) error {
 		"initial_volume": 100,
 
 		"credentials.type": "zeroconf",
-		"server.address":   "localhost",
+
+		"server.address":    "localhost",
+		"server.image_size": "default",
 	}, "."), nil)
 
 	// load file configuration (if available)

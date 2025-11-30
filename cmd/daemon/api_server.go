@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/rs/cors"
-
 	librespot "github.com/devgianlu/go-librespot"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	"github.com/rs/cors"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -139,7 +138,7 @@ type ApiResponseStatusTrack struct {
 	Name          string   `json:"name"`
 	ArtistNames   []string `json:"artist_names"`
 	AlbumName     string   `json:"album_name"`
-	AlbumCoverUrl string   `json:"album_cover_url"`
+	AlbumCoverUrl *string  `json:"album_cover_url"`
 	Position      int64    `json:"position"`
 	Duration      int      `json:"duration"`
 	ReleaseDate   string   `json:"release_date"`
@@ -147,7 +146,23 @@ type ApiResponseStatusTrack struct {
 	DiscNumber    int      `json:"disc_number"`
 }
 
-func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, position int64) *ApiResponseStatusTrack {
+func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
+	if len(images) == 0 {
+		return nil
+	}
+
+	imageSize := metadatapb.Image_Size(metadatapb.Image_Size_value[strings.ToUpper(size)])
+
+	for _, img := range images {
+		if img.Size != nil && *img.Size == imageSize {
+			return img.FileId
+		}
+	}
+
+	return images[0].FileId
+}
+
+func (p *AppPlayer) newApiResponseStatusTrack(media *librespot.Media, position int64) *ApiResponseStatusTrack {
 	if media.IsTrack() {
 		track := media.Track()
 
@@ -156,11 +171,9 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 			artists = append(artists, *a.Name)
 		}
 
-		var albumCoverId string
-		if len(track.Album.Cover) > 0 {
-			albumCoverId = hex.EncodeToString(track.Album.Cover[0].FileId)
-		} else if track.Album.CoverGroup != nil && len(track.Album.CoverGroup.Image) > 0 {
-			albumCoverId = hex.EncodeToString(track.Album.CoverGroup.Image[0].FileId)
+		albumCoverId := getBestImageIdForSize(track.Album.Cover, p.app.cfg.Server.ImageSize)
+		if albumCoverId == nil && track.Album.CoverGroup != nil {
+			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.Server.ImageSize)
 		}
 
 		return &ApiResponseStatusTrack{
@@ -168,7 +181,7 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 			Name:          *track.Name,
 			ArtistNames:   artists,
 			AlbumName:     *track.Album.Name,
-			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
 			Duration:      int(*track.Duration),
 			ReleaseDate:   track.Album.Date.String(),
@@ -178,17 +191,14 @@ func NewApiResponseStatusTrack(media *librespot.Media, prodInfo *ProductInfo, po
 	} else {
 		episode := media.Episode()
 
-		var albumCoverId string
-		if len(episode.CoverImage.Image) > 0 {
-			albumCoverId = hex.EncodeToString(episode.CoverImage.Image[0].FileId)
-		}
+		albumCoverId := getBestImageIdForSize(episode.CoverImage.Image, p.app.cfg.Server.ImageSize)
 
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
 			Name:          *episode.Name,
 			ArtistNames:   []string{*episode.Show.Name},
 			AlbumName:     *episode.Show.Name,
-			AlbumCoverUrl: prodInfo.ImageUrl(albumCoverId),
+			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
 			Duration:      int(*episode.Duration),
 			ReleaseDate:   "",

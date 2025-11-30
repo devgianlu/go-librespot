@@ -435,7 +435,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		}
 
 		if p.primaryStream != nil && p.prodInfo != nil {
-			resp.Track = NewApiResponseStatusTrack(p.primaryStream.Media, p.prodInfo, p.state.trackPosition())
+			resp.Track = p.newApiResponseStatusTrack(p.primaryStream.Media, p.state.trackPosition())
 		}
 
 		return resp, nil
