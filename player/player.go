@@ -513,10 +513,28 @@ func (p *Player) retrieveAudioKey(ctx context.Context, spotId librespot.SpotifyI
 	return p.audioKey.Request(ctx, spotId.Id(), fileId)
 }
 
+// Spotify normalizes to -14 dB LUFS according to ITU-R BS.1770 standard
+// See https://support.spotify.com/us/artists/article/loudness-normalization/
+const spotifyLoudnessTarget = -14.0
+
 func calculateNormalisationFactor(params *audiofilespb.NormalizationParams, pregain float32) float32 {
-	normalisationFactor := float32(math.Pow(10, float64((params.LoudnessDb+pregain)/20)))
-	if normalisationFactor*params.TruePeakDb > 1 {
-		normalisationFactor = 1 / params.TruePeakDb
+	// LoudnessDb is the integrated loudness of the track in LUFS (ITU-R BS.1770)
+	// To normalize, calculate the gain needed to reach Spotify's target of -14 LUFS
+	gainDb := spotifyLoudnessTarget - params.LoudnessDb + pregain
+
+	// Convert gain from dB to linear scale
+	normalisationFactor := float32(math.Pow(10, float64(gainDb/20)))
+
+	// TruePeakDb from audio files response is in dBTP (dB True Peak)
+	truePeakLinear := float32(math.Pow(10, float64(params.TruePeakDb)/20))
+	if truePeakLinear <= 0 {
+		return normalisationFactor
+	}
+
+	// Clamp to avoid exceeding full-scale (0 dBFS) after normalization
+	// If the normalized peak would exceed 1.0, reduce the gain
+	if normalisationFactor*truePeakLinear > 1 {
+		normalisationFactor = 1 / truePeakLinear
 	}
 	return normalisationFactor
 }
