@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/xlab/vorbis-go/vorbis"
@@ -182,26 +181,6 @@ func ExtractMetadataPage(log librespot.Logger, r io.ReaderAt, limit int64) (libr
 	// return a new stream without the metadata page
 	syncState.Deref()
 	return io.NewSectionReader(r, int64(syncState.Returned), limit-int64(syncState.Returned)), &metadata, nil
-}
-
-func (m MetadataPage) GetTrackFactor(normalisationPregain float32) float32 {
-	normalisationFactor := float32(math.Pow(10, float64((m.trackGainDb+normalisationPregain)/20)))
-	if normalisationFactor*m.trackPeak > 1 {
-		m.log.Warn("reducing track normalisation factor to prevent clipping, please add negative pregain to avoid")
-		normalisationFactor = 1 / m.trackPeak
-	}
-
-	return normalisationFactor
-}
-
-func (m MetadataPage) GetAlbumFactor(normalisationPregain float32) float32 {
-	normalisationFactor := float32(math.Pow(10, float64((m.albumGainDb+normalisationPregain)/20)))
-	if normalisationFactor*m.albumPeak > 1 {
-		m.log.Warn("reducing album normalisation factor to prevent clipping, please add negative pregain to avoid")
-		normalisationFactor = 1 / m.albumPeak
-	}
-
-	return normalisationFactor
 }
 
 func (m MetadataPage) GetSeekPosition(samplesPos int64) int64 {
