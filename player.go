@@ -32,6 +32,14 @@ func NewMediaFromEpisode(episode *metadatapb.Episode) *Media {
 	return &Media{track: nil, episode: episode}
 }
 
+func (te Media) Id() SpotifyId {
+	if te.track != nil {
+		return SpotifyIdFromGid(SpotifyIdTypeTrack, te.track.GetGid())
+	} else {
+		return SpotifyIdFromGid(SpotifyIdTypeEpisode, te.episode.GetGid())
+	}
+}
+
 func (te Media) IsTrack() bool {
 	return te.track != nil
 }
