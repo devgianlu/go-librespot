@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/devgianlu/go-librespot/events"
 	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/player"
-	"net/http"
-	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
@@ -93,9 +94,6 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 		return nil, fmt.Errorf("failed getting accesspoint from resolver: %w", err)
 	}
 	s.ap = ap.NewAccesspoint(opts.Log, apAddr, s.deviceId)
-	if err != nil {
-		return nil, fmt.Errorf("failed initializing accesspoint: %w", err)
-	}
 
 	// authenticate with the accesspoint using the proper credentials
 	switch creds := opts.Credentials.(type) {
