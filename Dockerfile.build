@@ -1,7 +1,14 @@
-FROM --platform=linux/amd64 docker.io/golang:1.22.2
+FROM --platform=linux/amd64 debian:buster-slim
 
 # Build tools
-RUN apt-get update && apt-get install -y zip autoconf autopoint libtool
+RUN sed -i 's/deb.debian.org/archive.debian.org/' /etc/apt/sources.list && \
+    apt-get update && apt-get install -y wget curl git zip gcc g++ make autoconf autopoint pkg-config libtool
+
+# Install golang
+RUN wget https://go.dev/dl/go1.25.5.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go1.25.5.linux-amd64.tar.gz && \
+    rm go1.25.5.linux-amd64.tar.gz
+ENV PATH="/usr/local/go/bin:$PATH"
 
 # Install toolchain
 ARG TARGET
