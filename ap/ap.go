@@ -80,6 +80,12 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 		return fmt.Errorf("failed initializing diffiehellman: %w", err)
 	}
 
+	// close previous connection if any
+	if ap.conn != nil {
+		_ = ap.conn.Close()
+		ap.conn = nil
+	}
+
 	// open connection to accesspoint
 	attempts := 0
 	for {
@@ -182,7 +188,14 @@ func (ap *Accesspoint) Connect(ctx context.Context, creds *pb.LoginCredentials) 
 	ap.connMu.Lock()
 	defer ap.connMu.Unlock()
 
-	return ap.connect(ctx, creds)
+	return backoff.Retry(func() error {
+		err := ap.connect(ctx, creds)
+		if err != nil {
+			ap.log.WithError(err).Warnf("failed connecting to accesspoint, retrying")
+		}
+
+		return err
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(500*time.Millisecond), 5), ctx))
 }
 
 func (ap *Accesspoint) connect(ctx context.Context, creds *pb.LoginCredentials) error {
