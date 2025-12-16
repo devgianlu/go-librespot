@@ -80,7 +80,7 @@ func NewApp(cfg *Config) (app *App, err error) {
 	}
 
 	app.state.SetLogger(app.log)
-	if err := app.state.Read(cfg.ConfigDir); err != nil {
+	if err := app.state.Read(cfg.CacheDir); err != nil {
 		return nil, err
 	}
 
@@ -380,11 +380,12 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 }
 
 type Config struct {
-	ConfigDir string `koanf:"config_dir"`
+	CacheDir   string `koanf:"cache"`
+	ConfigPath string `koanf:"config"`
 
 	// We need to keep this object around, otherwise it gets GC'd and the
 	// finalizer will run, probably closing the lock.
-	configLock *flock.Flock
+	cacheLock *flock.Flock
 
 	LogLevel                      log.Level `koanf:"log_level"`
 	LogDisableTimestamp           bool      `koanf:"log_disable_timestamp"`
@@ -439,8 +440,19 @@ type Config struct {
 	} `koanf:"credentials"`
 }
 
+// backwards compatibility for config_dir flag
+func aliasNormalizeFunc(f *flag.FlagSet, name string) flag.NormalizedName {
+	switch name {
+	case "config_dir":
+		name = "cache"
+		break
+	}
+	return flag.NormalizedName(name)
+}
+
 func loadConfig(cfg *Config) error {
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
+	f.SetNormalizeFunc(aliasNormalizeFunc)
 	f.Usage = func() {
 		fmt.Println(f.FlagUsages())
 		os.Exit(0)
@@ -449,25 +461,33 @@ func loadConfig(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	defaultConfigDir := filepath.Join(userConfigDir, "go-librespot")
-	f.StringVar(&cfg.ConfigDir, "config_dir", defaultConfigDir, "the configuration directory")
+	defaultConfigPath := filepath.Join(userConfigDir, "go-librespot", "config.yaml")
+	f.StringVar(&cfg.ConfigPath, "config", defaultConfigPath, "the configuration file")
+
+	userCacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return err
+	}
+	defaultCachePath := filepath.Join(userCacheDir, "go-librespot")
+	f.StringVar(&cfg.CacheDir, "cache", defaultCachePath, "the cache directory")
+
 	err = f.Parse(os.Args[1:])
 	if err != nil {
 		return err
 	}
 
-	// Make config directory if needed.
-	err = os.MkdirAll(cfg.ConfigDir, 0o700)
+	// Make cache directory if needed.
+	err = os.MkdirAll(cfg.CacheDir, 0o700)
 	if err != nil {
-		return fmt.Errorf("failed creating config directory: %w", err)
+		return fmt.Errorf("failed creating cache directory: %w", err)
 	}
 
-	// Lock the config directory (to ensure multiple instances won't clobber
+	// Lock the cache directory (to ensure multiple instances won't clobber
 	// each others state).
-	lockFilePath := filepath.Join(cfg.ConfigDir, "lockfile")
-	cfg.configLock = flock.New(lockFilePath)
-	if locked, err := cfg.configLock.TryLock(); err != nil {
-		return fmt.Errorf("could not lock config directory: %w", err)
+	lockFilePath := filepath.Join(cfg.CacheDir, "lockfile")
+	cfg.cacheLock = flock.New(lockFilePath)
+	if locked, err := cfg.cacheLock.TryLock(); err != nil {
+		return fmt.Errorf("could not lock cache directory: %w", err)
 	} else if !locked {
 		// Lock already taken! Looks like go-librespot is already running.
 		return fmt.Errorf("%w (lockfile: %s)", errAlreadyRunning, lockFilePath)
@@ -498,10 +518,11 @@ func loadConfig(cfg *Config) error {
 
 	// load file configuration (if available)
 	var configPath string
-	if _, err := os.Stat(filepath.Join(cfg.ConfigDir, "config.yaml")); os.IsNotExist(err) {
-		configPath = filepath.Join(cfg.ConfigDir, "config.yml")
+	if _, err := os.Stat(cfg.ConfigPath); os.IsNotExist(err) {
+		// postel: allow .yml in place of .yaml
+		configPath = strings.TrimSuffix(cfg.ConfigPath, filepath.Ext(cfg.ConfigPath)) + ".yml"
 	} else {
-		configPath = filepath.Join(cfg.ConfigDir, "config.yaml")
+		configPath = cfg.ConfigPath
 	}
 
 	if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
