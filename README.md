@@ -39,7 +39,7 @@ brew install go-librespot
 
 To build from source the following prerequisites are necessary:
 
-- Go 1.22 or higher
+- Go 1.25 or higher
 - Libraries: `libogg`, `libvorbis`, `flac`, `libasound2`
 
 To install Go, download it from the [Go website](https://go.dev/dl/).
