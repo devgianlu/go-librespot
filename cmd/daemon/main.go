@@ -451,6 +451,10 @@ func loadConfig(cfg *Config) error {
 	}
 	defaultConfigDir := filepath.Join(userConfigDir, "go-librespot")
 	f.StringVar(&cfg.ConfigDir, "config_dir", defaultConfigDir, "the configuration directory")
+
+	var configOverrides []string
+	f.StringArrayVarP(&configOverrides, "conf", "c", nil, "override config values (format: field=value, use field1.field2=value for nested fields)")
+
 	err = f.Parse(os.Args[1:])
 	if err != nil {
 		return err
@@ -513,6 +517,26 @@ func loadConfig(cfg *Config) error {
 	// load command line configuration
 	if err := k.Load(posflag.Provider(f, ".", k), nil); err != nil {
 		return fmt.Errorf("failed loading command line configuration: %w", err)
+	}
+
+	// apply command line config overrides (-c/--conf flags)
+	if len(configOverrides) > 0 {
+		overrideMap := make(map[string]interface{})
+		for _, override := range configOverrides {
+			parts := strings.SplitN(override, "=", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid config override format: %s (expected field=value)", override)
+			}
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			if key == "" {
+				return fmt.Errorf("invalid config override: empty field name in %s", override)
+			}
+			overrideMap[key] = value
+		}
+		if err := k.Load(confmap.Provider(overrideMap, "."), nil); err != nil {
+			return fmt.Errorf("failed loading config overrides: %w", err)
+		}
 	}
 
 	// unmarshal configuration
