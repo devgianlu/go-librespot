@@ -70,16 +70,40 @@ The default directory for configuration files is `~/.config/go-librespot`. On ma
 
 The full configuration schema is available [here](/config_schema.json), only the main options are detailed below.
 
-### Zeroconf mode
+### Zeroconf Mode and mDNS Backend Selection
 
-This is the default mode. It uses mDNS auto discovery to allow Spotify clients inside the same network to connect to
-go-librespot. This is also known as Spotify Connect.
+Zeroconf mode enables mDNS auto discovery, allowing Spotify clients inside the same network to connect to go-librespot. This is also known as Spotify Connect.
 
-An example configuration (not required) looks like this:
+**Backend selection:**  
+go-librespot supports two different backends for mDNS service registration:
+
+- **builtin**: (default) Uses the built-in mDNS responder provided by go-librespot itself.  
+- **avahi**: Uses the system's avahi-daemon (via D-Bus) for mDNS service registration.
+
+You can configure which backend to use via the `zeroconf_backend` setting in your configuration file:
 
 ```yaml
-zeroconf_enabled: false # Whether to keep the device discoverable at all times, even if authenticated via other means
-zeroconf_port: 0 # The port to use for Zeroconf, 0 for random
+zeroconf_backend: avahi   # Options: "builtin" (default), "avahi"
+```
+
+Or via the command line:
+
+```shell
+go-librespot -c zeroconf_backend=avahi
+```
+
+#### Which backend should I use?
+
+- Use **avahi** if you want to integrate with an existing Avahi daemon, e.g. on embedded systems, to avoid port conflicts, or to centralize mDNS advertisements with system service management (e.g., using `systemd`).
+    - Compatible with Avahi 0.6.x and later (tested with 0.7 and 0.8).
+- Use **builtin** if you do **not** have Avahi running and want go-librespot to manage its own mDNS advertisements (no extra dependencies required).
+
+#### Example minimal Zeroconf configuration
+
+```yaml
+zeroconf_enabled: true # Whether to keep the device discoverable at all times, even if authenticated via other means
+zeroconf_port: 0       # The port to use for Zeroconf, 0 for random
+zeroconf_backend: avahi
 credentials:
   type: zeroconf
   zeroconf:
