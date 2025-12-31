@@ -14,4 +14,3 @@ type ServiceRegistrar interface {
 	// Shutdown stops advertising the service and releases resources.
 	Shutdown()
 }
-
