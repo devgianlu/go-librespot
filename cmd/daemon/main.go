@@ -253,7 +253,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 	}
 
 	// start zeroconf server and dispatch
-	z, err := zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType, app.cfg.ZeroconfInterfacesToAdvertise)
+	z, err := zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType, app.cfg.ZeroconfInterfacesToAdvertise, app.cfg.ZeroconfBackend == "avahi")
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
@@ -410,6 +410,7 @@ type Config struct {
 	ExternalVolume                bool      `koanf:"external_volume"`
 	ZeroconfEnabled               bool      `koanf:"zeroconf_enabled"`
 	ZeroconfPort                  int       `koanf:"zeroconf_port"`
+	ZeroconfBackend               string    `koanf:"zeroconf_backend"`
 	DisableAutoplay               bool      `koanf:"disable_autoplay"`
 	ZeroconfInterfacesToAdvertise []string  `koanf:"zeroconf_interfaces_to_advertise"`
 	MprisEnabled                  bool      `koanf:"mpris_enabled"`
@@ -495,6 +496,8 @@ func loadConfig(cfg *Config) error {
 		"initial_volume": 100,
 
 		"credentials.type": "zeroconf",
+
+		"zeroconf_backend": "builtin",
 
 		"server.address":    "localhost",
 		"server.image_size": "default",

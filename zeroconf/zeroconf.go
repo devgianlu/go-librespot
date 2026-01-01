@@ -16,7 +16,6 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dh"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
-	"github.com/grandcat/zeroconf"
 )
 
 type Zeroconf struct {
@@ -26,8 +25,8 @@ type Zeroconf struct {
 	deviceId   string
 	deviceType devicespb.DeviceType
 
-	listener net.Listener
-	server   *zeroconf.Server
+	listener  net.Listener
+	registrar ServiceRegistrar
 
 	dh *dh.DiffieHellman
 
@@ -46,7 +45,7 @@ type NewUserRequest struct {
 	result chan bool
 }
 
-func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, deviceType devicespb.DeviceType, interfacesToAdvertise []string) (_ *Zeroconf, err error) {
+func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, deviceType devicespb.DeviceType, interfacesToAdvertise []string, useAvahi bool) (_ *Zeroconf, err error) {
 	z := &Zeroconf{log: log, deviceId: deviceId, deviceName: deviceName, deviceType: deviceType}
 	z.reqsChan = make(chan NewUserRequest)
 
@@ -63,20 +62,38 @@ func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, de
 	listenPort := z.listener.Addr().(*net.TCPAddr).Port
 	log.Infof("zeroconf server listening on port %d", listenPort)
 
-	var ifaces []net.Interface
-	for _, ifaceName := range interfacesToAdvertise {
-		liface, err := net.InterfaceByName(ifaceName)
+	// Select the mDNS backend based on configuration
+	if useAvahi {
+		avahiReg, err := NewAvahiRegistrar()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get info for network interface %s: %w", ifaceName, err)
+			_ = z.listener.Close()
+			return nil, fmt.Errorf("failed initializing avahi registrar: %w", err)
+		}
+		z.registrar = avahiReg
+		log.Infof("using avahi-daemon %s for mDNS service registration", avahiReg.Version())
+	} else {
+		var ifaces []net.Interface
+		for _, ifaceName := range interfacesToAdvertise {
+			liface, err := net.InterfaceByName(ifaceName)
+			if err != nil {
+				_ = z.listener.Close()
+				return nil, fmt.Errorf("failed to get info for network interface %s: %w", ifaceName, err)
+			}
+
+			ifaces = append(ifaces, *liface)
+			log.Infof("advertising on network interface %s", ifaceName)
 		}
 
-		ifaces = append(ifaces, *liface)
-		log.Info(fmt.Sprintf("advertising on network interface %s", ifaceName))
+		z.registrar = NewBuiltinRegistrar(ifaces)
+		log.Infof("using built-in mDNS responder")
 	}
 
-	z.server, err = zeroconf.Register(deviceName, "_spotify-connect._tcp", "local.", listenPort, []string{"CPath=/", "VERSION=1.0", "Stack=SP"}, ifaces)
+	// Register the Spotify Connect service
+	err = z.registrar.Register(deviceName, "_spotify-connect._tcp", "local.", listenPort, []string{"CPath=/", "VERSION=1.0", "Stack=SP"})
 	if err != nil {
-		return nil, fmt.Errorf("failed registering zeroconf server: %w", err)
+		z.registrar.Shutdown()
+		_ = z.listener.Close()
+		return nil, fmt.Errorf("failed registering zeroconf service: %w", err)
 	}
 
 	return z, nil
@@ -91,7 +108,7 @@ func (z *Zeroconf) SetCurrentUser(username string) {
 // Close stops the zeroconf responder and HTTP listener,
 // but does not close the last opened session.
 func (z *Zeroconf) Close() {
-	z.server.Shutdown()
+	z.registrar.Shutdown()
 	_ = z.listener.Close()
 }
 
@@ -246,7 +263,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 type HandleNewRequestFunc func(req NewUserRequest) bool
 
 func (z *Zeroconf) Serve(handler HandleNewRequestFunc) error {
-	defer z.server.Shutdown()
+	defer z.registrar.Shutdown()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
