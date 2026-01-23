@@ -4,11 +4,13 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	librespot "github.com/devgianlu/go-librespot"
 	"io"
 	"math"
 	"os"
 	"sync"
+	"syscall"
+
+	librespot "github.com/devgianlu/go-librespot"
 )
 
 type pipeOutput struct {
@@ -70,9 +72,15 @@ func newPipeOutput(opts *NewOutputOptions) (out *pipeOutput, err error) {
 		return nil, fmt.Errorf("unknown output pipe format: %s", opts.OutputPipeFormat)
 	}
 
-	out.file, err = os.OpenFile(opts.OutputPipe, os.O_WRONLY, 0)
+	// Open the FIFO for writing as non-blocking to cause an error if there is no reader.
+	out.file, err = os.OpenFile(opts.OutputPipe, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open fifo: %w", err)
+	}
+
+	// Restore blocking mode now that we are sure we have a reader.
+	if err := syscall.SetNonblock(int(out.file.Fd()), false); err != nil {
+		return nil, fmt.Errorf("failed to set blocking mode on fifo: %w", err)
 	}
 
 	go out.outputLoop()
