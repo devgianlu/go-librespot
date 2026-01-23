@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/coder/websocket"
 	librespot "github.com/devgianlu/go-librespot"
-	"nhooyr.io/websocket"
 )
 
 const (

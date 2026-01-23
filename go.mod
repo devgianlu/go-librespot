@@ -6,6 +6,7 @@ toolchain go1.25.5
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/coder/websocket v1.8.14
 	github.com/devgianlu/shannon v0.0.0-20230613115856-82ec90b7fa7e
 	github.com/godbus/dbus/v5 v5.2.0
 	github.com/gofrs/flock v0.13.0
@@ -28,7 +29,6 @@ require (
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sys v0.39.0
 	google.golang.org/protobuf v1.36.11
-	nhooyr.io/websocket v1.8.17
 )
 
 require (
