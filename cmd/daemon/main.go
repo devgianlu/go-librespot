@@ -465,7 +465,7 @@ func loadConfig(cfg *Config) error {
 	defaultConfigPath := filepath.Join(userConfigDir, "go-librespot", "config.yaml")
 	f.StringVar(&cfg.ConfigPath, "config", defaultConfigPath, "the configuration file")
 
-	userStateDir, err := os.UserConfigDir()
+	userStateDir, err := UserStateDir() // local implementation
 	if err != nil {
 		return err
 	}
