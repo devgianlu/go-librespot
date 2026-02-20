@@ -240,14 +240,16 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	p.state.player.Restrictions = spotCtx.Restrictions
 	p.state.player.ContextRestrictions = spotCtx.Restrictions
 
-	if len(spotCtx.Restrictions.DisallowTogglingShuffleReasons) > 0 {
-		p.state.player.Options.ShufflingContext = false
-	}
-	if len(spotCtx.Restrictions.DisallowTogglingRepeatTrackReasons) > 0 {
-		p.state.player.Options.RepeatingTrack = false
-	}
-	if len(spotCtx.Restrictions.DisallowTogglingRepeatContextReasons) > 0 {
-		p.state.player.Options.RepeatingContext = false
+	if spotCtx.Restrictions != nil {
+		if len(spotCtx.Restrictions.DisallowTogglingShuffleReasons) > 0 {
+			p.state.player.Options.ShufflingContext = false
+		}
+		if len(spotCtx.Restrictions.DisallowTogglingRepeatTrackReasons) > 0 {
+			p.state.player.Options.RepeatingTrack = false
+		}
+		if len(spotCtx.Restrictions.DisallowTogglingRepeatContextReasons) > 0 {
+			p.state.player.Options.RepeatingContext = false
+		}
 	}
 
 	if p.state.player.ContextMetadata == nil {
