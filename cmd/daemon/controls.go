@@ -660,8 +660,15 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 
 		// Consider all tracks as recent because we got here by reaching the end of the context
 		var prevTrackUris []string
-		for _, track := range p.state.tracks.AllTracks(ctx) {
-			prevTrackUris = append(prevTrackUris, track.Uri)
+		if p.state.tracks != nil {
+			for _, track := range p.state.tracks.AllTracks(ctx) {
+				prevTrackUris = append(prevTrackUris, track.Uri)
+			}
+		}
+
+		if len(prevTrackUris) == 0 {
+			p.app.log.Warnf("cannot resolve autoplay station because there are no previous tracks in context %s", p.state.player.ContextUri)
+			return false, nil
 		}
 
 		p.app.log.Debugf("resolving autoplay station for %d tracks", len(prevTrackUris))
