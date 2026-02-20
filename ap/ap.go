@@ -128,7 +128,7 @@ func (ap *Accesspoint) ConnectStored(ctx context.Context, username string, data 
 func (ap *Accesspoint) ConnectBlob(ctx context.Context, username string, encryptedBlob64 []byte) error {
 	encryptedBlob := make([]byte, base64.StdEncoding.DecodedLen(len(encryptedBlob64)))
 	if written, err := base64.StdEncoding.Decode(encryptedBlob, encryptedBlob64); err != nil {
-		return fmt.Errorf("failed decodeing encrypted blob: %w", err)
+		return fmt.Errorf("failed decoding encrypted blob: %w", err)
 	} else {
 		encryptedBlob = encryptedBlob[:written]
 	}
@@ -142,7 +142,7 @@ func (ap *Accesspoint) ConnectBlob(ctx context.Context, username string, encrypt
 
 	bc, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("failed initializing aes cihper: %w", err)
+		return fmt.Errorf("failed initializing AES cipher: %w", err)
 	}
 
 	decryptedBlob := make([]byte, len(encryptedBlob))
