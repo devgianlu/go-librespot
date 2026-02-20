@@ -42,7 +42,7 @@ func NewAvahiRegistrar() (*AvahiRegistrar, error) {
 	var hostname string
 	err = server.Call(avahiServerIface+".GetHostName", 0).Store(&hostname)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to connect to avahi-daemon (is it running?): %w", err)
 	}
 
