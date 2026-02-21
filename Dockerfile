@@ -16,4 +16,4 @@ RUN apk update && apk -U --no-cache add libpulse avahi libgcc gcompat alsa-lib
 
 COPY --from=build /src/daemon /usr/bin/go-librespot
 
-CMD ["/usr/bin/go-librespot", "--config_dir", "/config"]
+CMD ["/usr/bin/go-librespot", "--state", "/state", "--config", "/config/config.yaml"]
