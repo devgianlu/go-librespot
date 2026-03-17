@@ -12,6 +12,7 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/flac"
+	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/playplay"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
@@ -22,6 +23,7 @@ import (
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/vorbis"
 	"golang.org/x/exp/rand"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -47,6 +49,7 @@ type Player struct {
 	countryCode               *string
 
 	sp       *spclient.Spclient
+	mercury  *mercury.Client
 	audioKey *audio.KeyProvider
 	events   EventManager
 
@@ -90,6 +93,7 @@ type playerCmdDataSet struct {
 
 type Options struct {
 	Spclient *spclient.Spclient
+	Mercury  *mercury.Client
 	AudioKey *audio.KeyProvider
 	Events   EventManager
 
@@ -162,6 +166,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 	p := &Player{
 		log:                       opts.Log,
 		sp:                        opts.Spclient,
+		mercury:                   opts.Mercury,
 		audioKey:                  opts.AudioKey,
 		events:                    opts.Events,
 		cdnQuarantine:             make(map[string]time.Time),
@@ -719,4 +724,91 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	}
 
 	return &Stream{PlaybackId: playbackId, Source: stream, Media: media, File: file}, nil
+}
+
+// getMercuryTrack fetches track metadata via the Mercury AP endpoint.
+// TTS narration tracks are not available via ExtendedMetadata (returns 404).
+func (p *Player) getMercuryTrack(ctx context.Context, spotId librespot.SpotifyId) (*metadatapb.Track, error) {
+	uri := "hm://metadata/4/track/" + spotId.Base62()
+	data, err := p.mercury.Request(ctx, "GET", uri, nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("mercury track metadata failed: %w", err)
+	}
+	var track metadatapb.Track
+	if err := proto.Unmarshal(data, &track); err != nil {
+		return nil, fmt.Errorf("failed unmarshaling mercury track: %w", err)
+	}
+	return &track, nil
+}
+
+// NewNarrationStream creates a Stream for a DJ TTS narration clip.
+// Uses Mercury for metadata because TTS tracks are absent from ExtendedMetadata.
+func (p *Player) NewNarrationStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
+	log := p.log.WithField("uri", spotId.Uri())
+
+	playbackId := make([]byte, 16)
+	_, _ = rand.Read(playbackId)
+
+	p.events.PreStreamLoadNew(playbackId, spotId, mediaPosition)
+
+	trackMeta, err := p.getMercuryTrack(ctx, spotId)
+	if err != nil {
+		return nil, err
+	}
+
+	media := librespot.NewMediaFromTrack(trackMeta)
+	spotId = media.Id()
+
+	file := selectBestMediaFormat(trackMeta.File, bitrate, false)
+	if file == nil {
+		return nil, librespot.ErrNoSupportedFormats
+	}
+
+	p.events.PostStreamResolveAudioFile(playbackId, int32(bitrate), media, file)
+
+	log.Debugf("selected narration format %s (%x)", file.Format.String(), file.FileId)
+
+	audioKey, err := p.retrieveAudioKey(ctx, spotId, file.FileId)
+	if err != nil {
+		return nil, fmt.Errorf("failed retrieving narration audio key: %w", err)
+	}
+
+	p.events.PostStreamRequestAudioKey(playbackId)
+
+	storageResolve, err := p.sp.ResolveStorageInteractive(ctx, file.FileId, file.Format, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed resolving narration storage: %w", err)
+	}
+
+	p.events.PostStreamResolveStorage(playbackId)
+
+	rawStream, err := p.httpChunkedReaderFromStorageResolve(log, client, storageResolve)
+	if err != nil {
+		return nil, fmt.Errorf("failed creating narration chunked reader: %w", err)
+	}
+
+	p.events.PostStreamInitHttpChunkReader(playbackId, rawStream)
+
+	decryptedStream, err := audio.NewAesAudioDecryptor(rawStream, audioKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed initializing narration audio decryptor: %w", err)
+	}
+
+	audioStream, metaPage, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
+	if err != nil {
+		return nil, fmt.Errorf("failed reading narration metadata page: %w", err)
+	}
+
+	vorbisStream, err := vorbis.New(log, audioStream, metaPage, 1.0)
+	if err != nil {
+		return nil, fmt.Errorf("failed initializing narration vorbis stream: %w", err)
+	}
+
+	if vorbisStream.SampleRate != SampleRate {
+		return nil, fmt.Errorf("unsupported narration sample rate: %d", vorbisStream.SampleRate)
+	} else if vorbisStream.Channels != Channels {
+		return nil, fmt.Errorf("unsupported narration channels: %d", vorbisStream.Channels)
+	}
+
+	return &Stream{PlaybackId: playbackId, Source: vorbisStream, Media: media, File: file}, nil
 }

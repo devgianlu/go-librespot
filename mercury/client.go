@@ -41,6 +41,9 @@ func NewClient(log librespot.Logger, accesspoint *ap.Accesspoint) *Client {
 	c := &Client{log: log, ap: accesspoint}
 	c.reqChan = make(chan hermesRequest)
 	c.stopChan = make(chan struct{}, 1)
+	// Start receiving immediately so MercuryEvent packets that arrive right after
+	// AP authentication (before any Request() is called) are not dropped.
+	c.startReceiving()
 	return c
 }
 
@@ -60,7 +63,61 @@ func (c *Client) recvLoop() {
 			c.stopChan <- struct{}{}
 			return
 		case pkt := <-ch:
-			if pkt.Type != ap.PacketTypeMercuryReq {
+			if pkt.Type == ap.PacketTypeMercuryEvent {
+				// Decode and log the event so we can inspect what URI/payload arrives
+				// immediately after a DJ transfer (these come via the AP Mercury channel).
+				evResp := bytes.NewReader(pkt.Payload)
+				var evSeqLen uint16
+				_ = binary.Read(evResp, binary.BigEndian, &evSeqLen)
+				var evSeq uint64
+				switch evSeqLen {
+				case 8:
+					_ = binary.Read(evResp, binary.BigEndian, &evSeq)
+				case 4:
+					var s uint32
+					_ = binary.Read(evResp, binary.BigEndian, &s)
+					evSeq = uint64(s)
+				case 2:
+					var s uint16
+					_ = binary.Read(evResp, binary.BigEndian, &s)
+					evSeq = uint64(s)
+				}
+				var evFlags uint8
+				_ = binary.Read(evResp, binary.BigEndian, &evFlags)
+				var evPartsCount uint16
+				_ = binary.Read(evResp, binary.BigEndian, &evPartsCount)
+				evParts := make([][]byte, evPartsCount)
+				for i := uint16(0); i < evPartsCount; i++ {
+					var partLen uint16
+					_ = binary.Read(evResp, binary.BigEndian, &partLen)
+					part := make([]byte, partLen)
+					_, _ = evResp.Read(part)
+					evParts[i] = part
+				}
+				if len(evParts) > 0 {
+					var evHeader spotifypb.MercuryHeader
+					if err := proto.Unmarshal(evParts[0], &evHeader); err == nil {
+						c.log.Debugf("mercury event: seq=%d flags=%d uri=%s statusCode=%v parts=%d payloadLen=%d",
+							evSeq, evFlags,
+							evHeader.GetUri(),
+							evHeader.StatusCode,
+							len(evParts),
+							func() int {
+								n := 0
+								for _, p := range evParts[1:] {
+									n += len(p)
+								}
+								return n
+							}(),
+						)
+					} else {
+						c.log.Debugf("mercury event: seq=%d flags=%d totalPayload=%d (header parse err: %v)", evSeq, evFlags, len(pkt.Payload), err)
+					}
+				} else {
+					c.log.Debugf("mercury event: seq=%d flags=%d totalPayload=%d (no parts)", evSeq, evFlags, len(pkt.Payload))
+				}
+				continue
+			} else if pkt.Type != ap.PacketTypeMercuryReq {
 				c.log.Warnf("skipping mercury packet with type: %s", pkt.Type.String())
 				continue
 			}
