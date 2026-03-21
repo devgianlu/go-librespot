@@ -223,19 +223,12 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 				p.djAwaitingLoad = true
 			}
 		} else if p.state.active && p.state.player.ContextUri == p.app.djCachedContextUri {
-			// Already playing DJ — refresh the queue in place for the next skip.
-			ctxTracks := make([]*connectpb.ContextTrack, len(newTracks))
-			copy(ctxTracks, newTracks)
-			resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, ctxTracks)
-			newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
-			ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
-			if p.state.player.Track != nil {
-				_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, librespot.ProvidedTrackToContextTrack(p.state.player.Track)))
-			}
-			p.state.tracks = newList
-			p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
-			p.updateState(ctx)
-			p.app.log.Debugf("refreshed DJ queue from playlist update (%d next tracks)", len(newTracks))
+			// Already playing DJ — buffer this section for later use when the queue runs low.
+			// We don't rebuild immediately because the lexicon tracks (with jump markers) are
+			// already in the queue. When the queue drops below 8, djPoll will pop from this
+			// buffer to extend with fresh variety instead of looping the same 15 lexicon tracks.
+			p.app.djSectionBuffer = append(p.app.djSectionBuffer, newTracks)
+			p.app.log.Debugf("buffered DJ section %d (%d tracks) from playlist update", len(p.app.djSectionBuffer), len(newTracks))
 		}
 		return nil
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
@@ -722,7 +715,7 @@ func (p *AppPlayer) djPollContextResolve(ctx context.Context) {
 	p.djPollAttempts++
 	p.app.log.Debugf("djPoll: attempt %d for %s", p.djPollAttempts, p.app.djCachedContextUri)
 
-	lexCtx, err := p.sess.Spclient().LexiconContextResolve(ctx, p.app.djCachedContextUri, "interactive")
+	lexCtx, err := p.sess.Spclient().LexiconContextResolve(ctx, p.app.djCachedContextUri, "state_restore")
 	if err != nil || lexCtx == nil {
 		if p.djPollAttempts < maxAttempts {
 			p.djPollTimer.Reset(pollInterval)
@@ -759,7 +752,7 @@ func (p *AppPlayer) djPollContextResolve(ctx context.Context) {
 	}
 	p.state.player.ContextMetadata["dj.interactivity_enabled"] = "true"
 
-	p.app.log.Infof("djPoll: resolved %d tracks for %s on attempt %d", len(newTracks), p.app.djCachedContextUri, p.djPollAttempts)
+	p.app.log.Infof("djPoll: resolved %d tracks for %s (volatile_id=%s)", len(newTracks), p.app.djCachedContextUri, lexCtx.Metadata["playlist_volatile_context_id"])
 	p.app.djCachedNextTracks = newTracks
 	p.app.djCacheIsOurs = true
 
@@ -781,18 +774,37 @@ func (p *AppPlayer) djPollContextResolve(ctx context.Context) {
 			p.djAwaitingLoad = true
 		}
 	} else if p.state.active && p.state.player.ContextUri == p.app.djCachedContextUri {
-		ctxTracks := make([]*connectpb.ContextTrack, len(newTracks))
-		copy(ctxTracks, newTracks)
-		resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, ctxTracks)
-		newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
-		ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
+		// Prefer a buffered vibe section over repeating the same lexicon tracks.
+		// djSectionBuffer is populated by the hm://playlist/ push handler at DJ startup;
+		// each entry is one section's worth of different tracks. Using it here prevents
+		// the same 15 lexicon tracks from looping.
+		var combined []*connectpb.ContextTrack
 		if p.state.player.Track != nil {
+			combined = append(combined, &connectpb.ContextTrack{Uri: p.state.player.Track.Uri})
+		}
+
+		if len(p.app.djSectionBuffer) > 0 {
+			// Pop the oldest section and use its tracks.
+			sectionTracks := p.app.djSectionBuffer[0]
+			p.app.djSectionBuffer = p.app.djSectionBuffer[1:]
+			combined = append(combined, sectionTracks...)
+			p.app.log.Infof("djPoll: using buffered section (%d tracks, %d sections remaining)", len(sectionTracks), len(p.app.djSectionBuffer))
+		} else {
+			// Buffer exhausted — fall back to repeating the lexicon tracks.
+			combined = append(combined, newTracks...)
+			p.app.log.Infof("djPoll: section buffer empty, repeating lexicon tracks (%d tracks)", len(newTracks))
+		}
+
+		resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, combined)
+		newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
+		if p.state.player.Track != nil {
+			ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
 			_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, librespot.ProvidedTrackToContextTrack(p.state.player.Track)))
 		}
 		p.state.tracks = newList
 		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.updateState(ctx)
-		p.app.log.Debugf("djPoll: refreshed queue (%d next tracks)", len(newTracks))
+		p.app.log.Debugf("djPoll: refreshed queue (%d next tracks ahead)", len(p.state.player.NextTracks))
 	}
 }
 
