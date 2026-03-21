@@ -373,6 +373,35 @@ func (c *Spclient) ContextResolve(ctx context.Context, uri string) (*connectpb.C
 	return &context, nil
 }
 
+// LexiconContextResolve calls the lexicon-session-provider endpoint which returns the
+// full DJ session (tracks + metadata) as JSON in connectpb.Context format.
+// reason is "interactive" for fresh user-initiated DJ starts, "state_restore" for resumes.
+func (c *Spclient) LexiconContextResolve(ctx context.Context, contextUri, reason string) (*connectpb.Context, error) {
+	q := url.Values{"contextUri": {contextUri}, "reason": {reason}}
+	resp, err := c.Request(ctx, "GET", "/lexicon-session-provider/context-resolve/v2/session", q, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("invalid status code from lexicon context resolve: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading lexicon response body: %w", err)
+	}
+
+	var context connectpb.Context
+	if err := json.Unmarshal(respBytes, &context); err != nil {
+		return nil, fmt.Errorf("failed json unmarshalling lexicon Context: %w", err)
+	}
+
+	return &context, nil
+}
+
 func (c *Spclient) ContextResolveAutoplay(ctx context.Context, reqProto *playerpb.AutoplayContextRequest) (*connectpb.Context, error) {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {
