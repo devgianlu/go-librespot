@@ -222,11 +222,11 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 				p.app.log.WithError(err).Warn("failed loading DJ track from playlist update, reverting to djAwaitingLoad")
 				p.djAwaitingLoad = true
 			}
-		} else if p.state.active && p.state.player.ContextUri == p.app.djCachedContextUri {
-			// Already playing DJ — buffer this section for later use when the queue runs low.
-			// We don't rebuild immediately because the lexicon tracks (with jump markers) are
-			// already in the queue. When the queue drops below 8, djPoll will pop from this
-			// buffer to extend with fresh variety instead of looping the same 15 lexicon tracks.
+		} else {
+			// Buffer this section for later use when the queue runs low. We buffer
+			// unconditionally here (not gated on ContextUri) because the push can
+			// arrive while a temporary regular-playlist context is active (e.g.
+			// during a Switch-it-up transition), and we must not silently drop it.
 			p.app.djSectionBuffer = append(p.app.djSectionBuffer, newTracks)
 			p.app.log.Debugf("buffered DJ section %d (%d tracks) from playlist update", len(p.app.djSectionBuffer), len(newTracks))
 		}
@@ -1105,6 +1105,10 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 	apRecv := p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
 	msgRecv := p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/", "hm://playlist/v2/playlist/")
 	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
+	// Also receive playlist pushes that arrive via the Mercury AP event channel
+	// (PacketTypeMercuryEvent). These are the vibe-section playlists the server
+	// sends during an active DJ session — they outnumber the dealer pushes ~10:1.
+	mercuryPlaylistRecv := p.sess.Mercury().SubscribeEvent("hm://playlist/v2/playlist/")
 	playerRecv := p.player.Receive()
 
 	volumeTimer := time.NewTimer(time.Minute)
@@ -1129,6 +1133,11 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 
 			if err := p.handleDealerMessage(ctx, msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
+			}
+		case evMsg := <-mercuryPlaylistRecv:
+			// Playlist push via the Mercury AP event channel — same handling as dealer.
+			if err := p.handleDealerMessage(ctx, dealer.Message{Uri: evMsg.Uri, Payload: evMsg.Payload}); err != nil {
+				p.app.log.WithError(err).Warn("failed handling mercury playlist event")
 			}
 		case req, ok := <-reqRecv:
 			if !ok {
