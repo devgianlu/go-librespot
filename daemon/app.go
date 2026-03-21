@@ -15,6 +15,7 @@ import (
 	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
 	"github.com/devgianlu/go-librespot/playplay"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
 	"github.com/devgianlu/go-librespot/session"
 	"github.com/devgianlu/go-librespot/zeroconf"
@@ -40,6 +41,12 @@ type App struct {
 	server   ApiServer
 	mpris    mpris.Server
 	logoutCh chan *AppPlayer
+
+	// DJ cache persists across zeroconf reconnects so that a transfer command
+	// arriving on a new session can still use the queue from the last cluster push.
+	djCachedContextUri string
+	djCachedNextTracks []*connectpb.ContextTrack
+	djCacheIsOurs      bool
 
 	closed bool
 }
@@ -212,6 +219,10 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.prefetchTimer.Stop()
 
+	appPlayer.djPollTimer = time.NewTimer(math.MaxInt64)
+	appPlayer.djPollTimer.Stop()
+	appPlayer.djPollAttempts = 0
+
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,
 		DeviceType:  app.deviceType,
@@ -229,6 +240,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{
 		Spclient: appPlayer.sess.Spclient(),
+		Mercury:  appPlayer.sess.Mercury(),
 		AudioKey: appPlayer.sess.AudioKey(),
 		Events:   appPlayer.sess.Events(),
 		Log:      app.log,
