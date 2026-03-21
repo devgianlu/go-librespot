@@ -25,6 +25,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 )
 
@@ -55,6 +56,22 @@ type AppPlayer struct {
 	secondaryStream *player.Stream
 
 	prefetchTimer *time.Timer
+
+	// djPollTimer periodically retries ContextResolve for the DJ playlist after a transfer
+	// with no tracks, in case the playlist becomes available before Spotify sends the ~53s push.
+	djPollTimer    *time.Timer
+	djPollAttempts int
+
+	// djPendingMusicId is set when a DJ narration clip is playing as the
+	// primary stream. It holds the SpotifyId of the actual music track that
+	// should start once the narration finishes (EventTypeNotPlaying).
+	djPendingMusicId *librespot.SpotifyId
+
+	// djAwaitingLoad is set when a DJ play command was accepted but context resolution
+	// returned no tracks (empty spclient pages). Cleared once the first DJ track loads.
+	// This lets the ClusterUpdate handler distinguish "transitioning into DJ" (should load)
+	// from "already playing music within DJ" (should not reload).
+	djAwaitingLoad bool
 }
 
 func (p *AppPlayer) playbackReady() bool {
@@ -141,6 +158,86 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		p.app.log.WithField("username", librespot.ObfuscateUsername(p.sess.Username())).
 			Debugf("requested logout out")
 		p.logout <- p
+	} else if strings.HasPrefix(msg.Uri, "hm://playlist/v2/playlist/") {
+		// Spotify responds to djAwaitingLoad (IsPlaying=false + DJ context) by updating a
+		// companion playlist with the next batch of DJ tracks and pushing this notification.
+		// Extract the playlist ID, fetch its content, and use the tracks to resume playback.
+		playlistId := strings.TrimPrefix(msg.Uri, "hm://playlist/v2/playlist/")
+		if idx := strings.IndexByte(playlistId, '/'); idx >= 0 {
+			playlistId = playlistId[:idx]
+		}
+		p.app.log.Debugf("playlist update notification: %s (payloadLen=%d, djAwaitingLoad=%t, djContextUri=%q)",
+			playlistId, len(msg.Payload), p.djAwaitingLoad, p.app.djCachedContextUri)
+
+		// Only process if we are in a known DJ context — otherwise this is an unrelated update.
+		if p.app.djCachedContextUri == "" {
+			return nil
+		}
+
+		playlistUri := "spotify:playlist:" + playlistId
+		spotCtx, err := p.sess.Spclient().ContextResolve(ctx, playlistUri)
+		if err != nil {
+			p.app.log.WithError(err).Debugf("failed resolving playlist update %s", playlistUri)
+			return nil
+		}
+
+		// Collect all tracks from the resolved context.
+		var newTracks []*connectpb.ContextTrack
+		for _, page := range spotCtx.Pages {
+			for _, track := range page.Tracks {
+				if track.Uri != "spotify:delimiter" {
+					newTracks = append(newTracks, track)
+				}
+			}
+		}
+
+		if len(newTracks) == 0 {
+			p.app.log.Debugf("playlist update %s resolved with 0 tracks (ignoring)", playlistUri)
+			return nil
+		}
+
+		p.app.log.Infof("DJ playlist update %s: %d tracks (djAwaitingLoad=%t)", playlistUri, len(newTracks), p.djAwaitingLoad)
+		p.app.djCachedNextTracks = newTracks
+		p.app.djCacheIsOurs = true
+		p.djPollTimer.Stop() // cancel any in-progress poll — we got the tracks via push
+
+		if p.djAwaitingLoad {
+			// Load the first track immediately — same as the pendingDJ path in the cluster handler.
+			currentTrack := newTracks[0]
+			ctxTracks := make([]*connectpb.ContextTrack, len(newTracks))
+			copy(ctxTracks, newTracks)
+			resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, ctxTracks)
+			newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
+			ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
+			_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, currentTrack))
+
+			p.state.tracks = newList
+			p.state.player.Track = p.state.tracks.CurrentTrack()
+			p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
+			p.state.player.PositionAsOfTimestamp = 0
+
+			p.djAwaitingLoad = false
+			p.app.log.Infof("loading DJ track from playlist update (%d next tracks)", len(newTracks)-1)
+			if err := p.loadCurrentTrack(ctx, false, true); err != nil {
+				p.app.log.WithError(err).Warn("failed loading DJ track from playlist update, reverting to djAwaitingLoad")
+				p.djAwaitingLoad = true
+			}
+		} else if p.state.active && p.state.player.ContextUri == p.app.djCachedContextUri {
+			// Already playing DJ — refresh the queue in place for the next skip.
+			ctxTracks := make([]*connectpb.ContextTrack, len(newTracks))
+			copy(ctxTracks, newTracks)
+			resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, ctxTracks)
+			newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
+			ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
+			if p.state.player.Track != nil {
+				_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, librespot.ProvidedTrackToContextTrack(p.state.player.Track)))
+			}
+			p.state.tracks = newList
+			p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
+			p.updateState(ctx)
+			p.app.log.Debugf("refreshed DJ queue from playlist update (%d next tracks)", len(newTracks))
+		}
+		return nil
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
 		var clusterUpdate connectpb.ClusterUpdate
 		if err := proto.Unmarshal(msg.Payload, &clusterUpdate); err != nil {
@@ -148,9 +245,163 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		}
 
 		stopBeingActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId && clusterUpdate.Cluster.PlayerState.Timestamp > p.state.lastTransferTimestamp
+		p.app.log.Debugf("cluster decision: activeDeviceId=%q ourDeviceId=%q clusterPlayerTs=%d lastTransferTs=%d stateActive=%t stopBeingActive=%t djAwaitingLoad=%t stateContextUri=%q",
+			clusterUpdate.Cluster.ActiveDeviceId, p.app.deviceId,
+			clusterUpdate.Cluster.PlayerState.Timestamp, p.state.lastTransferTimestamp,
+			p.state.active, stopBeingActive, p.djAwaitingLoad, p.state.player.ContextUri)
 
 		// We are still the active device, do not quit
 		if !stopBeingActive {
+			clusterState := clusterUpdate.Cluster.GetPlayerState()
+			nextCount := 0
+			if clusterState != nil {
+				nextCount = len(clusterState.NextTracks)
+			}
+			isDJCluster := false
+			if clusterState != nil {
+				// Primary check: PlayOrigin.FeatureIdentifier == "dynamic-sessions".
+				// This is reliably set by the server for DJ sessions on both desktop
+				// and speaker/zeroconf devices.
+				if clusterState.PlayOrigin != nil && clusterState.PlayOrigin.FeatureIdentifier == "dynamic-sessions" {
+					isDJCluster = true
+				}
+				// Fallback: check source.components on individual tracks (populated
+				// on desktop/interactive clients but often absent on speaker devices).
+				if !isDJCluster {
+					for _, t := range clusterState.NextTracks {
+						if player.IsDJTrack(t) {
+							isDJCluster = true
+							break
+						}
+					}
+				}
+				// Third check: context URI matches our known DJ playlist URI.
+				// Spotify sometimes sends featureId="home" when DJ is pressed from the
+				// home/browse screen rather than the now-playing DJ button. The cluster
+				// still carries the DJ playlist URI and next tracks — treat it as DJ.
+				clusterCtxUri := clusterState.ContextUri
+				if clusterCtxUri == "" {
+					clusterCtxUri = p.state.player.ContextUri
+				}
+				if !isDJCluster && p.app.djCachedContextUri != "" && clusterCtxUri == p.app.djCachedContextUri {
+					isDJCluster = true
+				}
+				// Fourth check: we are explicitly waiting for a DJ cluster (djAwaitingLoad=true)
+				// and the cluster's context URI matches the DJ context URI we accepted in the
+				// play command. This catches fresh-start DJ sessions where featureId="home" is
+				// sent and djCachedContextUri is not yet populated (empty on first boot/restart).
+				if !isDJCluster && p.djAwaitingLoad && clusterCtxUri != "" && clusterCtxUri == p.state.player.ContextUri {
+					isDJCluster = true
+				}
+			}
+			p.app.log.Debugf("cluster update received (active=%t, nextTracks=%d, djCluster=%t, featureId=%s)",
+				p.state.active, nextCount, isDJCluster, func() string {
+					if clusterState != nil && clusterState.PlayOrigin != nil {
+						return clusterState.PlayOrigin.FeatureIdentifier
+					}
+					return ""
+				}())
+
+			// Log what the server echoes back about our device's capabilities.
+			if ourDevice := clusterUpdate.Cluster.Device[p.app.deviceId]; ourDevice != nil && ourDevice.Capabilities != nil {
+				caps := ourDevice.Capabilities
+				p.app.log.Debugf("server-reflected caps: SupportsDj=%t IsVoiceEnabled=%t", caps.SupportsDj, caps.IsVoiceEnabled)
+			}
+
+			if isDJCluster {
+				// Cache the DJ next tracks for use when a transfer command arrives shortly after.
+				contextUri := clusterState.ContextUri
+				if contextUri == "" {
+					contextUri = p.state.player.ContextUri
+				}
+				if nextCount > 0 {
+					p.app.djCachedContextUri = contextUri
+					p.app.djCachedNextTracks = make([]*connectpb.ContextTrack, 0, nextCount)
+					for _, t := range clusterState.NextTracks {
+						if t.Uri != "spotify:delimiter" {
+							p.app.djCachedNextTracks = append(p.app.djCachedNextTracks, librespot.ProvidedTrackToContextTrack(t))
+						}
+					}
+					p.app.djCacheIsOurs = clusterUpdate.Cluster.ActiveDeviceId == p.app.deviceId
+					p.app.log.Debugf("cached DJ next tracks from cluster push (%d tracks for %s, ours=%t)", nextCount, contextUri, p.app.djCacheIsOurs)
+				} else {
+					p.app.log.Debugf("skipping DJ cache update for %s — cluster has 0 next tracks (keeping %d cached)", contextUri, len(p.app.djCachedNextTracks))
+				}
+
+				// Update the live track list if we are the active player with a DJ context.
+				// This covers two cases:
+				// (a) Already playing a DJ track — refresh queue in place.
+				// (b) Accepted a DJ play command but have no tracks yet (ContextUri set,
+				//     no track loaded) — start playing from the cluster's current track.
+				// Use djCachedContextUri to detect active DJ sessions. IsDJTrack() is
+				// unreliable because regular music tracks in a DJ queue don't carry
+				// YourDJ source metadata, and transferred tracks never do.
+				// Guard with !djAwaitingLoad so this path doesn't fire during the initial
+				// DJ selection (when we're still waiting for the first track from the
+				// cluster) — that case is handled by pendingDJ below.
+				alreadyDJ := p.state.active && p.state.player.Track != nil && contextUri == p.app.djCachedContextUri && !p.djAwaitingLoad
+				pendingDJ := p.djAwaitingLoad && p.state.player.ContextUri == contextUri
+				p.app.log.Debugf("DJ path eval: alreadyDJ=%t pendingDJ=%t djAwaitingLoad=%t stateContextUri=%q clusterContextUri=%q clusterTrack=%v nextTracks=%d",
+					alreadyDJ, pendingDJ, p.djAwaitingLoad, p.state.player.ContextUri, contextUri,
+					func() string {
+						if clusterState.Track != nil {
+							return clusterState.Track.Uri
+						}
+						return "<nil>"
+					}(), nextCount)
+				if alreadyDJ || pendingDJ {
+					// If this is a pendingDJ activation cluster but it has no next tracks,
+					// Spotify sent a lightweight heartbeat instead of the full queue.
+					// Stay in djAwaitingLoad and wait for the real cluster with tracks.
+					if nextCount == 0 {
+						p.app.log.Debugf("DJ cluster has 0 next tracks (pendingDJ=%t alreadyDJ=%t) — ignoring, keeping %d cached tracks", pendingDJ, alreadyDJ, len(p.app.djCachedNextTracks))
+					} else {
+						currentTrack := func() *connectpb.ContextTrack {
+							if alreadyDJ {
+								return librespot.ProvidedTrackToContextTrack(p.state.player.Track)
+							}
+							// For pendingDJ (cold start): Spotify sets clusterState.Track to whatever
+							// was already playing - not a new DJ track. Use djCachedNextTracks[0]
+							// so we start on the actual first DJ track, same as the cache path.
+							if len(p.app.djCachedNextTracks) > 0 {
+								return p.app.djCachedNextTracks[0]
+							}
+							if clusterState.Track != nil {
+								return librespot.ProvidedTrackToContextTrack(clusterState.Track)
+							}
+							return nil
+						}()
+						ctxTracks := make([]*connectpb.ContextTrack, 0, nextCount+1)
+						ctxTracks = append(ctxTracks, currentTrack)
+						if alreadyDJ {
+							ctxTracks = append(ctxTracks, p.app.djCachedNextTracks...)
+						} else if len(p.app.djCachedNextTracks) > 1 {
+							ctxTracks = append(ctxTracks, p.app.djCachedNextTracks[1:]...)
+						}
+						resolver := spclient.NewStaticContextResolver(p.app.log, contextUri, ctxTracks)
+						newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
+						ctxType := librespot.InferSpotifyIdTypeFromContextUri(contextUri)
+						_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, currentTrack))
+						p.state.tracks = newList
+						p.state.player.Track = p.state.tracks.CurrentTrack()
+						p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
+						p.app.log.Debugf("updated active DJ track list (%d next tracks, pendingDJ=%t)", nextCount, pendingDJ)
+
+						// If we were waiting for the first DJ track (pendingDJ), load it now.
+						// Also restart if stuck (alreadyDJ but no primary stream — e.g. after back-to-back narration clips).
+						stuckDJ := alreadyDJ && p.primaryStream == nil
+						if pendingDJ || stuckDJ {
+							p.djAwaitingLoad = false
+							p.state.player.ContextUri = contextUri
+							p.state.player.PositionAsOfTimestamp = 0
+							p.app.log.Debugf("loading DJ track from cluster (pendingDJ=%t stuckDJ=%t)", pendingDJ, stuckDJ)
+							if err := p.loadCurrentTrack(ctx, false, true); err != nil {
+								p.app.log.WithError(err).Warn("failed loading DJ track from cluster push")
+							}
+						}
+					} // end else (nextCount > 0)
+				}
+			}
 			return nil
 		}
 
@@ -187,9 +438,64 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		}
 		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
 
+		// Log transfer context metadata and options modes for DJ debugging
+		p.app.log.Debugf("transfer context metadata: %v", transferState.CurrentSession.Context.Metadata)
+		if transferState.Options != nil {
+			p.app.log.Debugf("transfer options modes: %v", transferState.Options.Modes)
+		}
+
 		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
-			return fmt.Errorf("failed creating track list: %w", err)
+			// Dynamic contexts (e.g. Spotify DJ) return empty pages from spclient.
+			// Use cached DJ next tracks from a recent ClusterUpdate if available,
+			// otherwise fall back to the current track + queue from the transfer state.
+			contextUri := transferState.CurrentSession.Context.Uri
+			staticTracks := []*connectpb.ContextTrack{transferState.Playback.CurrentTrack}
+			if len(p.app.djCachedNextTracks) > 0 && p.app.djCachedContextUri == contextUri {
+				staticTracks = append(staticTracks, p.app.djCachedNextTracks...)
+				p.app.log.WithError(err).Warnf("context resolution failed, using cached DJ queue for %s (%d tracks)", contextUri, len(staticTracks))
+			} else {
+				// Try lexicon-session-provider to get the full DJ queue immediately.
+				lexCtx, lexErr := p.sess.Spclient().LexiconContextResolve(ctx, contextUri, "state_restore")
+				if lexErr == nil {
+					var lexTracks []*connectpb.ContextTrack
+					for _, page := range lexCtx.GetPages() {
+						for _, t := range page.GetTracks() {
+							if t.Uri != "spotify:delimiter" && t.Uri != "" {
+								lexTracks = append(lexTracks, t)
+							}
+						}
+					}
+					if len(lexTracks) > 0 {
+						p.app.log.Infof("lexicon: got %d DJ tracks for transfer %s", len(lexTracks), contextUri)
+						staticTracks = append(staticTracks, lexTracks...)
+						p.app.djCachedNextTracks = lexTracks
+						p.app.djCacheIsOurs = true
+						// Apply DJ context metadata from lexicon response.
+						if transferState.CurrentSession.Context.Metadata == nil {
+							transferState.CurrentSession.Context.Metadata = map[string]string{}
+						}
+						for k, v := range lexCtx.Metadata {
+							transferState.CurrentSession.Context.Metadata[k] = v
+						}
+					} else {
+						p.app.log.Debugf("lexicon: 0 tracks for transfer %s, falling back to djPoll", contextUri)
+						staticTracks = append(staticTracks, transferState.Queue.Tracks...)
+					}
+				} else {
+					p.app.log.Debugf("lexicon: transfer resolve failed (%v), falling back to djPoll", lexErr)
+					staticTracks = append(staticTracks, transferState.Queue.Tracks...)
+				}
+				p.app.log.WithError(err).Warnf("context resolution failed, building static track list for %s (tracks=%d)", contextUri, len(staticTracks))
+				p.app.djCachedContextUri = contextUri
+				if len(staticTracks) <= 1 {
+					// Lexicon failed — fall back to polling.
+					p.djPollAttempts = 0
+					p.djPollTimer.Reset(3 * time.Second)
+				}
+			}
+			resolver := spclient.NewStaticContextResolver(p.app.log, contextUri, staticTracks)
+			ctxTracks = tracks.NewTrackListFromResolver(p.app.log, resolver)
 		}
 
 		if sessId := transferState.CurrentSession.OriginalSessionId; sessId != nil {
@@ -210,13 +516,17 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		// playback
 		// Note: this sets playback speed to 0 or 1 because that's all we're
 		// capable of, depending on whether the playback is paused or not.
-		p.state.player.Timestamp = transferState.Playback.Timestamp
+		// Pin Timestamp to now so updateTimestamp() doesn't advance position by
+		// stale elapsed time. The raw PositionAsOfTimestamp from the transfer is
+		// the position the phone was at when it sent the command; we start from there.
+		p.state.player.Timestamp = time.Now().UnixMilli()
 		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
 		p.state.setPaused(pause)
 
 		// current session
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
 		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
+		p.app.log.Debugf("transfer PlayOrigin.FeatureIdentifier=%q", p.state.player.PlayOrigin.FeatureIdentifier)
 		p.state.player.ContextUri = transferState.CurrentSession.Context.Uri
 		p.state.player.ContextUrl = transferState.CurrentSession.Context.Url
 		p.state.player.ContextRestrictions = transferState.CurrentSession.Context.Restrictions
@@ -287,6 +597,8 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.PlayOrigin = req.Command.PlayOrigin
 		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
 		p.state.player.Suppressions = req.Command.Options.Suppressions
+		p.app.log.Debugf("play command: contextUri=%s featureId=%s prevContextUri=%s",
+			req.Command.Context.GetUri(), req.Command.PlayOrigin.GetFeatureIdentifier(), p.state.player.ContextUri)
 
 		// apply overrides
 		if req.Command.Options.PlayerOptionsOverride != nil {
@@ -319,6 +631,13 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 	case "pause":
 		return p.pause(ctx)
 	case "resume":
+		// If we are waiting for DJ tracks, a resume cannot succeed (no stream yet).
+		// Acknowledge it silently — the state we already sent shows IsPlaying=false,
+		// which should stop the phone from retrying indefinitely.
+		if p.djAwaitingLoad {
+			p.app.log.Debugf("resume while djAwaitingLoad — ignoring (waiting for playlist update)")
+			return nil
+		}
 		return p.play(ctx)
 	case "seek_to":
 		var position int64
@@ -386,6 +705,94 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		return nil
 	default:
 		return fmt.Errorf("unsupported player command: %s", req.Command.Endpoint)
+	}
+}
+
+// djPollContextResolve is called from the Run() select loop when djPollTimer fires.
+// It retries ContextResolve for the current DJ playlist to see if tracks are available
+// before Spotify sends the ~53s background push notification.
+func (p *AppPlayer) djPollContextResolve(ctx context.Context) {
+	const maxAttempts = 20
+	const pollInterval = 3 * time.Second
+
+	if p.app.djCachedContextUri == "" {
+		return // nothing to poll
+	}
+
+	p.djPollAttempts++
+	p.app.log.Debugf("djPoll: attempt %d for %s", p.djPollAttempts, p.app.djCachedContextUri)
+
+	lexCtx, err := p.sess.Spclient().LexiconContextResolve(ctx, p.app.djCachedContextUri, "interactive")
+	if err != nil || lexCtx == nil {
+		if p.djPollAttempts < maxAttempts {
+			p.djPollTimer.Reset(pollInterval)
+		} else {
+			p.app.log.Debugf("djPoll: giving up after %d attempts for %s", p.djPollAttempts, p.app.djCachedContextUri)
+		}
+		return
+	}
+
+	var newTracks []*connectpb.ContextTrack
+	for _, page := range lexCtx.GetPages() {
+		for _, track := range page.GetTracks() {
+			if track.Uri != "spotify:delimiter" && track.Uri != "" {
+				newTracks = append(newTracks, track)
+			}
+		}
+	}
+
+	if len(newTracks) == 0 {
+		if p.djPollAttempts < maxAttempts {
+			p.djPollTimer.Reset(pollInterval)
+		}
+		return
+	}
+
+	// Merge DJ metadata from lexicon response (includes interactivity fields)
+	if lexCtx.Metadata != nil {
+		if p.state.player.ContextMetadata == nil {
+			p.state.player.ContextMetadata = map[string]string{}
+		}
+		for k, v := range lexCtx.Metadata {
+			p.state.player.ContextMetadata[k] = v
+		}
+	}
+	p.state.player.ContextMetadata["dj.interactivity_enabled"] = "true"
+
+	p.app.log.Infof("djPoll: resolved %d tracks for %s on attempt %d", len(newTracks), p.app.djCachedContextUri, p.djPollAttempts)
+	p.app.djCachedNextTracks = newTracks
+	p.app.djCacheIsOurs = true
+
+	if p.djAwaitingLoad {
+		currentTrack := newTracks[0]
+		ctxTracks := make([]*connectpb.ContextTrack, len(newTracks))
+		copy(ctxTracks, newTracks)
+		resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, ctxTracks)
+		newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
+		ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
+		_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, currentTrack))
+		p.state.tracks = newList
+		p.state.player.Track = p.state.tracks.CurrentTrack()
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
+		p.state.player.PositionAsOfTimestamp = 0
+		p.djAwaitingLoad = false
+		if err := p.loadCurrentTrack(ctx, false, true); err != nil {
+			p.app.log.WithError(err).Warn("djPoll: failed loading first DJ track")
+			p.djAwaitingLoad = true
+		}
+	} else if p.state.active && p.state.player.ContextUri == p.app.djCachedContextUri {
+		ctxTracks := make([]*connectpb.ContextTrack, len(newTracks))
+		copy(ctxTracks, newTracks)
+		resolver := spclient.NewStaticContextResolver(p.app.log, p.app.djCachedContextUri, ctxTracks)
+		newList := tracks.NewTrackListFromResolver(p.app.log, resolver)
+		ctxType := librespot.InferSpotifyIdTypeFromContextUri(p.app.djCachedContextUri)
+		if p.state.player.Track != nil {
+			_ = newList.TrySeek(ctx, tracks.ContextTrackComparator(ctxType, librespot.ProvidedTrackToContextTrack(p.state.player.Track)))
+		}
+		p.state.tracks = newList
+		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
+		p.updateState(ctx)
+		p.app.log.Debugf("djPoll: refreshed queue (%d next tracks)", len(newTracks))
 	}
 }
 
@@ -684,7 +1091,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 	}
 
 	apRecv := p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
-	msgRecv := p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/")
+	msgRecv := p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/", "hm://playlist/v2/playlist/")
 	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
 	playerRecv := p.player.Receive()
 
@@ -754,6 +1161,8 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			p.handlePlayerEvent(ctx, &ev)
 		case <-p.prefetchTimer.C:
 			p.prefetchNext(ctx)
+		case <-p.djPollTimer.C:
+			p.djPollContextResolve(ctx)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.
