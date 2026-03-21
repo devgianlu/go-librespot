@@ -278,8 +278,10 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 				p.state.player.ContextMetadata = map[string]string{}
 			}
 
-			// Call lexicon to get initial DJ tracks for immediate playback.
-			lexCtx, lexErr := p.sess.Spclient().LexiconContextResolve(ctx, spotCtx.Uri, "interactive")
+			// Call lexicon with state_restore to get full metadata (playlist_volatile_context_id,
+			// lexicon_current_time, session_control_display, etc.) that Spotify needs to
+			// recognize the session and enable "Switch it up" on the phone.
+			lexCtx, lexErr := p.sess.Spclient().LexiconContextResolve(ctx, spotCtx.Uri, "state_restore")
 			if lexErr == nil {
 				for _, page := range lexCtx.GetPages() {
 					for _, t := range page.GetTracks() {
@@ -297,9 +299,23 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 					p.app.djCacheIsOurs = true
 				}
 			} else {
-				p.app.log.Debugf("lexicon: resolve failed (%v), will wait for poll", lexErr)
+				p.app.log.Debugf("lexicon: resolve failed (%v), will wait for cluster", lexErr)
 			}
 			p.state.player.ContextMetadata["dj.interactivity_enabled"] = "true"
+
+			// Always send IsPlaying=false + full metadata first.
+			// This signals Spotify to register a fresh DJ session server-side,
+			// which causes it to eventually broadcast a ClusterUpdate that enables
+			// "Switch it up" on the phone.
+			p.player.Stop()
+			p.primaryStream = nil
+			p.secondaryStream = nil
+			p.state.player.NextTracks = nil
+			p.state.player.PrevTracks = nil
+			p.state.player.PositionAsOfTimestamp = 0
+			p.state.player.IsPlaying = false
+			p.state.player.IsBuffering = false
+			p.updateState(ctx)
 
 			if len(staticTracks) == 0 {
 				// Lexicon failed — wait for poll to get tracks.
