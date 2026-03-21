@@ -59,6 +59,12 @@ type App struct {
 	djCachedContextUri string
 	djCachedNextTracks []*connectpb.ContextTrack
 	djCacheIsOurs      bool // true when cache was populated while we were the active device
+
+	// djSectionBuffer holds vibe-section playlist tracks received via hm://playlist/ pushes.
+	// Each entry is one section (from a different vibe playlist). When the lexicon 15-track
+	// window is exhausted, djPoll pops the next section from here to keep playback going
+	// without looping the same 15 tracks.
+	djSectionBuffer [][]*connectpb.ContextTrack
 }
 
 func parseDeviceType(val string) (devicespb.DeviceType, error) {
