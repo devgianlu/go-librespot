@@ -273,7 +273,10 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 			p.state.player.ContextUrl = spotCtx.Url
 			p.state.player.ContextRestrictions = spotCtx.Restrictions
 			p.app.djCachedContextUri = spotCtx.Uri
-			p.app.djSectionBuffer = nil // clear on new DJ context so stale sections aren't reused
+			// Keep djSectionBuffer — sections buffered from a previous handover are still
+			// valid for a fresh start of the same DJ context. Clearing them would leave
+			// fresh starts with an empty buffer in interactive mode (where the server only
+			// pushes a handful of playlists per session, not the full 50).
 
 			if p.state.player.ContextMetadata == nil {
 				p.state.player.ContextMetadata = map[string]string{}
@@ -300,6 +303,15 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 						lexCtx.Metadata["lexicon_current_time"])
 					for k, v := range lexCtx.Metadata {
 						p.state.player.ContextMetadata[k] = v
+					}
+					// Log track metadata to find vibe section playlist URIs.
+					for i, t := range staticTracks {
+						su := t.Metadata["station_uri"]
+						sc := t.Metadata["source.components"]
+						jid := t.Metadata["narration.jump.commentary_id"]
+						if su != "" || jid != "" {
+							p.app.log.Debugf("lexicon track[%d] %s station_uri=%q source=%q jump=%q", i, t.Uri, su, sc, jid)
+						}
 					}
 					p.app.djCachedNextTracks = staticTracks
 					p.app.djCacheIsOurs = true
@@ -835,6 +847,22 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
+
+		// Proactive DJ queue refresh on targeted skip (Switch it up). The
+		// normal low-queue check lives in advanceNext which is NOT called when
+		// skip_next carries a target track, so we mirror it here.
+		isDJSkip := p.state.player.PlayOrigin != nil && p.state.player.PlayOrigin.FeatureIdentifier == "dynamic-sessions"
+		if isDJSkip && !p.djAwaitingLoad && len(p.state.player.NextTracks) < 8 {
+			p.app.log.Infof("skipNext: DJ queue low (%d tracks), scheduling lexicon refresh", len(p.state.player.NextTracks))
+			p.djPollAttempts = 0
+			if !p.djPollTimer.Stop() {
+				select {
+				case <-p.djPollTimer.C:
+				default:
+				}
+			}
+			p.djPollTimer.Reset(3 * time.Second)
+		}
 
 		if err := p.loadCurrentTrack(ctx, p.state.player.IsPaused, true); err != nil {
 			// In DJ mode, narration/media clips appear in the queue as spotify:track: but
