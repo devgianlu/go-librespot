@@ -48,6 +48,12 @@ type App struct {
 	djCachedNextTracks []*connectpb.ContextTrack
 	djCacheIsOurs      bool
 
+	// djSectionBuffer holds vibe-section playlist tracks received via hm://playlist/ pushes.
+	// Each entry is one section (from a different vibe playlist). When the lexicon 15-track
+	// window is exhausted, djPoll pops the next section from here to keep playback going
+	// without looping the same 15 tracks.
+	djSectionBuffer [][]*connectpb.ContextTrack
+
 	closed bool
 }
 

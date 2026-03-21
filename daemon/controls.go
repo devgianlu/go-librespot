@@ -273,28 +273,18 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 			p.state.player.ContextUrl = spotCtx.Url
 			p.state.player.ContextRestrictions = spotCtx.Restrictions
 			p.app.djCachedContextUri = spotCtx.Uri
+			p.app.djSectionBuffer = nil // clear on new DJ context so stale sections aren't reused
 
 			if p.state.player.ContextMetadata == nil {
 				p.state.player.ContextMetadata = map[string]string{}
 			}
 
-			// For zeroconf sessions: use state_restore to get the full session metadata
-			// (playlist_volatile_context_id, lexicon_current_time, session_control_display, etc.)
-			// that Spotify needs to register a fresh DJ session and enable "Switch it up".
-			// Then send IsPlaying=false before playing — this is the registration signal.
-			//
-			// For interactive/persistent sessions: Spotify already considers the device
-			// permanently registered, so the state_restore+IsPlaying=false pattern has no
-			// effect (Spotify doesn't create a new session registration). Use "interactive"
-			// instead and start playing immediately without the pre-registration step.
-			isZeroconf := p.app.cfg.Credentials.Type == "zeroconf"
-			lexReason := "interactive"
-			if isZeroconf {
-				lexReason = "state_restore"
-			}
-			p.app.log.Debugf("lexicon: fresh DJ start reason=%s (zeroconf=%t)", lexReason, isZeroconf)
+			// Always use state_restore to get full session metadata (playlist_volatile_context_id,
+			// lexicon_current_time, session_control_display, etc.) — the phone requires these
+			// fields to activate "Switch it up".
+			p.app.log.Debugf("lexicon: fresh DJ start reason=state_restore")
 
-			lexCtx, lexErr := p.sess.Spclient().LexiconContextResolve(ctx, spotCtx.Uri, lexReason)
+			lexCtx, lexErr := p.sess.Spclient().LexiconContextResolve(ctx, spotCtx.Uri, "state_restore")
 			if lexErr == nil {
 				for _, page := range lexCtx.GetPages() {
 					for _, t := range page.GetTracks() {
@@ -304,7 +294,10 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 					}
 				}
 				if len(staticTracks) > 0 {
-					p.app.log.Infof("lexicon: pre-fetched %d DJ tracks for %s", len(staticTracks), spotCtx.Uri)
+					p.app.log.Infof("lexicon: pre-fetched %d DJ tracks for %s (volatile_id=%s lexicon_time=%s)",
+						len(staticTracks), spotCtx.Uri,
+						lexCtx.Metadata["playlist_volatile_context_id"],
+						lexCtx.Metadata["lexicon_current_time"])
 					for k, v := range lexCtx.Metadata {
 						p.state.player.ContextMetadata[k] = v
 					}
@@ -316,19 +309,19 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 			}
 			p.state.player.ContextMetadata["dj.interactivity_enabled"] = "true"
 
-			if isZeroconf {
-				// Send IsPlaying=false + full metadata to register the fresh DJ session
-				// server-side. Spotify will enable "Switch it up" on the phone after this.
-				p.player.Stop()
-				p.primaryStream = nil
-				p.secondaryStream = nil
-				p.state.player.NextTracks = nil
-				p.state.player.PrevTracks = nil
-				p.state.player.PositionAsOfTimestamp = 0
-				p.state.player.IsPlaying = false
-				p.state.player.IsBuffering = false
-				p.updateState(ctx)
-			}
+			// Send IsPlaying=false + full metadata first.
+			// This signals Spotify to register a fresh DJ session server-side,
+			// which causes it to eventually broadcast a ClusterUpdate that enables
+			// "Switch it up" on the phone.
+			p.player.Stop()
+			p.primaryStream = nil
+			p.secondaryStream = nil
+			p.state.player.NextTracks = nil
+			p.state.player.PrevTracks = nil
+			p.state.player.PositionAsOfTimestamp = 0
+			p.state.player.IsPlaying = false
+			p.state.player.IsBuffering = false
+			p.updateState(ctx)
 
 			if len(staticTracks) == 0 {
 				// Lexicon failed — wait for poll to get tracks.
@@ -930,6 +923,23 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
+
+		// Proactive DJ queue refresh: when nextTracks drops below 8, schedule a
+		// lexicon poll to fetch 15 fresh tracks with new jump points. We do NOT set
+		// IsPlaying=false here — that disrupts the phone's DJ state and greys out
+		// "Switch it up" even after the queue is refreshed.
+		isDJActive := p.state.player.PlayOrigin != nil && p.state.player.PlayOrigin.FeatureIdentifier == "dynamic-sessions"
+		if isDJActive && !p.djAwaitingLoad && len(p.state.player.NextTracks) < 8 {
+			p.app.log.Infof("advanceNext: DJ queue low (%d tracks), scheduling lexicon refresh", len(p.state.player.NextTracks))
+			p.djPollAttempts = 0
+			if !p.djPollTimer.Stop() {
+				select {
+				case <-p.djPollTimer.C:
+				default:
+				}
+			}
+			p.djPollTimer.Reset(3 * time.Second)
+		}
 
 		uri = p.state.player.Track.Uri
 	}
