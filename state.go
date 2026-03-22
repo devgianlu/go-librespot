@@ -61,6 +61,7 @@ func (s *AppState) Read(configDir string) error {
 	return nil
 }
 
+
 func (s *AppState) Write() error {
 	s.Lock()
 	defer s.Unlock()
@@ -76,7 +77,19 @@ func (s *AppState) Write() error {
 		if err := json.NewEncoder(tmpFile).Encode(s); err != nil {
 			return fmt.Errorf("failed writing marshalled app state: %w", err)
 		}
-	} 
+	}
+  if err := s.persistStateWithoutCredentials(tmpFile); err != nil {
+    return err  
+	}
+
+	if err := os.Rename(tmpFile.Name(), s.path); err != nil {
+		return fmt.Errorf("failed replacing app state file: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AppState) persistStateWithoutCredentials(tmpFile *os.File) error {
 	persistedState := struct {
 		DeviceId     string          `json:"device_id"`
 		EventManager json.RawMessage `json:"event_manager"`
@@ -90,12 +103,6 @@ func (s *AppState) Write() error {
 	if err := json.NewEncoder(tmpFile).Encode(&persistedState); err != nil {
 		return fmt.Errorf("failed writing marshalled app state: %w", err)
 	}
-
-
-	if err := os.Rename(tmpFile.Name(), s.path); err != nil {
-		return fmt.Errorf("failed replacing app state file: %w", err)
-	}
-
 	return nil
 }
 
