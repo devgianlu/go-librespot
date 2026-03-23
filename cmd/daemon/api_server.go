@@ -34,6 +34,8 @@ type ConcreteApiServer struct {
 	certFile    string
 	keyFile     string
 
+	playbackReady func() bool
+
 	close    bool
 	listener net.Listener
 
@@ -251,6 +253,10 @@ type ApiResponseStatus struct {
 	Track          *ApiResponseStatusTrack `json:"track"`
 }
 
+type ApiResponseRoot struct {
+	PlaybackReady bool `json:"playback_ready"`
+}
+
 type ApiResponseVolume struct {
 	Value uint32 `json:"value"`
 	Max   uint32 `json:"max"`
@@ -318,8 +324,8 @@ type ApiEventDataShuffleContext struct {
 	Value bool `json:"value"`
 }
 
-func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string) (_ ApiServer, err error) {
-	s := &ConcreteApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile}
+func NewApiServer(log librespot.Logger, address string, port int, allowOrigin string, certFile string, keyFile string, playbackReady func() bool) (_ ApiServer, err error) {
+	s := &ConcreteApiServer{log: log, allowOrigin: allowOrigin, certFile: certFile, keyFile: keyFile, playbackReady: playbackReady}
 	s.requests = make(chan ApiRequest)
 
 	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", address, port))
@@ -408,7 +414,13 @@ func (s *ConcreteApiServer) serve() {
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
+
+		resp := ApiResponseRoot{}
+		if s.playbackReady != nil {
+			resp.PlaybackReady = s.playbackReady()
+		}
+
+		_ = json.NewEncoder(w).Encode(resp)
 	})
 	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.handleRequest(ApiRequest{

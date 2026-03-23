@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/devgianlu/go-librespot/mpris"
@@ -44,11 +45,19 @@ type AppPlayer struct {
 	prodInfo    *ProductInfo
 	countryCode *string
 
+	hasSpotConnId          atomic.Bool
+	hasInitialConnectState atomic.Bool
+	hasCountryCode         atomic.Bool
+
 	state           *State
 	primaryStream   *player.Stream
 	secondaryStream *player.Stream
 
 	prefetchTimer *time.Timer
+}
+
+func (p *AppPlayer) playbackReady() bool {
+	return p.hasSpotConnId.Load() && p.hasInitialConnectState.Load() && p.hasCountryCode.Load()
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -67,6 +76,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 		return nil
 	case ap.PacketTypeCountryCode:
 		*p.countryCode = string(payload)
+		p.hasCountryCode.Store(true)
 		return nil
 	default:
 		return nil
@@ -80,12 +90,15 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
+		p.hasSpotConnId.Store(p.spotConnId != "")
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
 
 		// put the initial state
 		if err := p.putConnectState(ctx, connectpb.PutStateReason_NEW_DEVICE); err != nil {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
+
+		p.hasInitialConnectState.Store(true)
 
 		if !p.app.cfg.ExternalVolume && len(p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
