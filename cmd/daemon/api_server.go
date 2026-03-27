@@ -91,6 +91,7 @@ const (
 	ApiEventTypeRepeatTrack    ApiEventType = "repeat_track"
 	ApiEventTypeRepeatContext  ApiEventType = "repeat_context"
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
+	ApiEventTypePlaybackReady  ApiEventType = "playback_ready"
 )
 
 type ApiRequest struct {

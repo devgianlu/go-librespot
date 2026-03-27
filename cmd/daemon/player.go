@@ -48,6 +48,7 @@ type AppPlayer struct {
 	hasSpotConnId          atomic.Bool
 	hasInitialConnectState atomic.Bool
 	hasCountryCode         atomic.Bool
+	playbackReadyEmitted   atomic.Bool
 
 	state           *State
 	primaryStream   *player.Stream
@@ -58,6 +59,12 @@ type AppPlayer struct {
 
 func (p *AppPlayer) playbackReady() bool {
 	return p.hasSpotConnId.Load() && p.hasInitialConnectState.Load() && p.hasCountryCode.Load()
+}
+
+func (p *AppPlayer) notifyPlaybackReadyIfNeeded() {
+	if p.playbackReady() && p.playbackReadyEmitted.CompareAndSwap(false, true) {
+		p.app.server.Emit(&ApiEvent{Type: ApiEventTypePlaybackReady})
+	}
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -77,6 +84,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 	case ap.PacketTypeCountryCode:
 		*p.countryCode = string(payload)
 		p.hasCountryCode.Store(true)
+		p.notifyPlaybackReadyIfNeeded()
 		return nil
 	default:
 		return nil
@@ -99,6 +107,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		}
 
 		p.hasInitialConnectState.Store(true)
+		p.notifyPlaybackReadyIfNeeded()
 
 		if !p.app.cfg.ExternalVolume && len(p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
