@@ -114,7 +114,7 @@ type Options struct {
 
 	// AudioBackend specifies the audio backend to use (alsa, pulseaudio, etc).
 	AudioBackend string
-	// AudioRuntimeSocket specifies a prefixed with protocol (e.g. `unix:` or `tcp:`) path
+	// AudioBackendRuntimeSocket specifies a prefixed with protocol (e.g. `unix:` or `tcp:`) path
 	// to a runtime socket of audio backend.
 	//
 	// This feature is support only for the pulseaudio backend.
