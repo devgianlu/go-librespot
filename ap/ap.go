@@ -80,12 +80,6 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 		return fmt.Errorf("failed initializing diffiehellman: %w", err)
 	}
 
-	// close previous connection if any
-	if ap.conn != nil {
-		_ = ap.conn.Close()
-		ap.conn = nil
-	}
-
 	// open connection to accesspoint
 	attempts := 0
 	for {
@@ -95,9 +89,13 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 		conn, err := proxy.Dial(ctx_, "tcp", addr)
 		cancel()
 		if err == nil {
+			// close previous connection if any
+			if ap.conn != nil {
+				_ = ap.conn.Close()
+			}
+
 			// we assign to ap.conn after because if Dial fails we'll have a nil ap.conn which we don't want
 			ap.conn = conn
-			// Successfully connected.
 			ap.log.Debugf("connected to %s", addr)
 			return nil
 		} else if attempts >= 6 {
