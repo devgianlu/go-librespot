@@ -203,6 +203,7 @@ device_id: '' # Spotify device ID (auto-generated)
 device_name: '' # Spotify device name
 device_type: computer # Spotify device type (icon)
 audio_backend: alsa # Audio backend to use (alsa, pipe, pulseaudio)
+audio_backend_runtime_socket: '' # Audio backends' runtime socket to use, if backend is pulseaudio
 audio_device: default # ALSA audio device to use for playback
 mixer_device: '' # ALSA mixer device for volume synchronization 
 mixer_control_name: Master # ALSA mixer control name for volume synchronization
