@@ -187,15 +187,20 @@ func (d *Dealer) ReceiveMessage(uriPrefixes ...string) <-chan Message {
 		panic("uri prefixes list cannot be empty")
 	}
 
-	d.messageReceiversLock.Lock()
-	defer d.messageReceiversLock.Unlock()
+	d.connMu.RLock()
+	if d.closed {
+		d.connMu.RUnlock()
+		c := make(chan Message)
+		close(c)
+		return c
+	}
 
-	// create new receiver
+	d.messageReceiversLock.Lock()
 	c := make(chan Message)
 	d.messageReceivers = append(d.messageReceivers, messageReceiver{uriPrefixes, c})
-
-	// start receiving if necessary
 	d.startReceiving()
+	d.messageReceiversLock.Unlock()
+	d.connMu.RUnlock()
 
 	return c
 }
@@ -242,20 +247,24 @@ func (d *Dealer) handleRequest(rawMsg *RawMessage) {
 }
 
 func (d *Dealer) ReceiveRequest(uri string) <-chan Request {
+	d.connMu.RLock()
+	if d.closed {
+		d.connMu.RUnlock()
+		c := make(chan Request)
+		close(c)
+		return c
+	}
+
 	d.requestReceiversLock.Lock()
 	defer d.requestReceiversLock.Unlock()
+	defer d.connMu.RUnlock()
 
-	// check that there isn't another receiver for this uri
-	_, ok := d.requestReceivers[uri]
-	if ok {
+	if _, ok := d.requestReceivers[uri]; ok {
 		panic(fmt.Sprintf("cannot have more request receivers for %s", uri))
 	}
 
-	// create new receiver
 	c := make(chan Request)
 	d.requestReceivers[uri] = requestReceiver{c}
-
-	// start receiving if necessary
 	d.startReceiving()
 
 	return c
