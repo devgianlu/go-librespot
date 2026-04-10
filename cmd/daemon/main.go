@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -50,10 +49,9 @@ type App struct {
 	clientToken string
 	state       librespot.AppState
 
-	server        ApiServer
-	mpris         mpris.Server
-	logoutCh      chan *AppPlayer
-	currentPlayer atomic.Pointer[AppPlayer]
+	server   ApiServer
+	mpris    mpris.Server
+	logoutCh chan *AppPlayer
 }
 
 func parseDeviceType(val string) (devicespb.DeviceType, error) {
@@ -122,18 +120,14 @@ func NewApp(cfg *Config) (app *App, err error) {
 	return app, nil
 }
 
-func (app *App) playbackReady() bool {
-	appPlayer := app.currentPlayer.Load()
-	return appPlayer != nil && appPlayer.playbackReady()
-}
-
 func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
-		app:          app,
-		stop:         make(chan struct{}, 1),
-		logout:       app.logoutCh,
-		countryCode:  new(string),
-		volumeUpdate: make(chan float32, 1),
+		app:             app,
+		stop:            make(chan struct{}, 1),
+		logout:          app.logoutCh,
+		countryCode:     new(string),
+		volumeUpdate:    make(chan float32, 1),
+		playbackReadyCh: make(chan struct{}),
 	}
 
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
@@ -250,8 +244,6 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			panic("zeroconf is disabled and no credentials are present")
 		}
 
-		app.currentPlayer.Store(appPlayer)
-		defer app.currentPlayer.Store(nil)
 		appPlayer.Run(ctx, app.server.Receive(), app.mpris.Receive())
 		return nil
 	}
@@ -280,7 +272,6 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			Debugf("initializing zeroconf session")
 
 		apiCh = make(chan ApiRequest)
-		app.currentPlayer.Store(currentPlayer)
 		go currentPlayer.Run(ctx, apiCh, app.mpris.Receive())
 
 		// let zeroconf know that we already have a user
@@ -293,7 +284,11 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			select {
 			case req := <-app.server.Receive():
 				if currentPlayer == nil {
-					req.Reply(nil, ErrNoSession)
+					if req.Type == ApiRequestTypeRoot {
+						req.Reply(&ApiResponseRoot{}, nil)
+					} else {
+						req.Reply(nil, ErrNoSession)
+					}
 					break
 				}
 
@@ -313,7 +308,6 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 					continue
 				}
 
-				app.currentPlayer.Store(nil)
 				currentPlayer.Close()
 				currentPlayer = nil
 
@@ -336,7 +330,6 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 					apiCh = make(chan ApiRequest)
 					currentPlayer = newAppPlayer
 
-					app.currentPlayer.Store(newAppPlayer)
 					go newAppPlayer.Run(ctx, apiCh, app.mpris.Receive())
 
 					// let zeroconf know that we already have a user
@@ -351,7 +344,6 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 
 	return z.Serve(func(req zeroconf.NewUserRequest) bool {
 		if currentPlayer != nil {
-			app.currentPlayer.Store(nil)
 			currentPlayer.Close()
 			currentPlayer = nil
 
@@ -387,7 +379,6 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				Debugf("persisted zeroconf credentials")
 		}
 
-		app.currentPlayer.Store(newAppPlayer)
 		go newAppPlayer.Run(ctx, apiCh, app.mpris.Receive())
 		return true
 	})
@@ -599,7 +590,7 @@ func main() {
 
 	// create api server if needed
 	if cfg.Server.Enabled {
-		app.server, err = NewApiServer(app.log, cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile, app.playbackReady)
+		app.server, err = NewApiServer(app.log, cfg.Server.Address, cfg.Server.Port, cfg.Server.AllowOrigin, cfg.Server.CertFile, cfg.Server.KeyFile)
 		if err != nil {
 			log.WithError(err).Fatal("failed creating api server")
 		}
