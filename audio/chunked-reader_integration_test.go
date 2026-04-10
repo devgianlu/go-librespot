@@ -5,9 +5,11 @@ package audio_test
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +25,19 @@ type HttpChunkedReaderIntegrationSuite struct {
 	testData []byte
 	logger   librespot.Logger
 	server   *httptest.Server
+}
+
+func (suite *HttpChunkedReaderIntegrationSuite) newReader(server *httptest.Server) *audio.HttpChunkedReader {
+	suite.T().Helper()
+
+	if server == nil {
+		server = suite.server
+	}
+
+	reader, err := audio.NewHttpChunkedReader(suite.logger, server.Client(), server.URL)
+	suite.Require().NoError(err)
+	suite.T().Cleanup(func() { _ = reader.Close() })
+	return reader
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) SetupTest() {
@@ -67,9 +82,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) handleHTTPRequest(w http.Respons
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestBasicReadOperations() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	// Test basic read
 	buf := make([]byte, 1000)
@@ -87,9 +100,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestBasicReadOperations() {
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestLargeSequentialRead() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	// Read the entire file
 	result, err := io.ReadAll(reader)
@@ -99,9 +110,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestLargeSequentialRead() {
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestRandomAccessPattern() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	positions := []int64{
 		0,
@@ -128,9 +137,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestRandomAccessPattern() {
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestConcurrentReads() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	const numGoroutines = 10
 	const readSize = 1024
@@ -177,9 +184,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestConcurrentReads() {
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestSeekOperations() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	// Test various seek operations
 	testCases := []struct {
@@ -213,12 +218,11 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestSeekOperations() {
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestPrefetching() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	// Read from the beginning to trigger prefetching
 	buf := make([]byte, 1000)
+	var err error
 	_, err = reader.ReadAt(buf, 0)
 	suite.Require().NoError(err)
 
@@ -242,9 +246,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestPrefetching() {
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestLatencyMetrics() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	// Trigger multiple reads to generate latency data
 	buf := make([]byte, 1000)
@@ -269,10 +271,9 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestLatencyMetrics() {
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestErrorRecovery() {
 	// Create a server that fails occasionally
-	failCount := 0
+	var failCount atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		failCount++
-		if failCount%3 == 0 { // Fail every 3rd request
+		if failCount.Add(1)%3 == 0 { // Fail every 3rd request
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -280,9 +281,7 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestErrorRecovery() {
 	}))
 	defer server.Close()
 
-	reader, err := audio.NewHttpChunkedReader(suite.logger, server.Client(), server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(server)
 
 	// Try to read multiple chunks - some will fail and retry
 	buf := make([]byte, 1000)
@@ -295,14 +294,72 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestErrorRecovery() {
 	}
 }
 
+func (suite *HttpChunkedReaderIntegrationSuite) TestCloseCancelsInFlightRead() {
+	started := make(chan struct{})
+	var startedOnce sync.Once
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Range") == fmt.Sprintf("bytes=%d-%d", audio.DefaultChunkSize, audio.DefaultChunkSize*2-1) {
+			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", audio.DefaultChunkSize, audio.DefaultChunkSize*2-1, len(suite.testData)))
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write(suite.testData[audio.DefaultChunkSize : audio.DefaultChunkSize+1])
+			w.(http.Flusher).Flush()
+			startedOnce.Do(func() {
+				close(started)
+			})
+			<-r.Context().Done()
+			return
+		}
+
+		suite.handleHTTPRequest(w, r)
+	}))
+	defer server.Close()
+
+	reader := suite.newReader(server)
+
+	errCh := make(chan error, 1)
+	go func() {
+		buf := make([]byte, 1024)
+		_, err := reader.ReadAt(buf, audio.DefaultChunkSize)
+		errCh <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		suite.T().Fatal("second chunk did not start")
+	}
+
+	closeErrCh := make(chan error, 1)
+	go func() {
+		closeErrCh <- reader.Close()
+	}()
+
+	select {
+	case err := <-closeErrCh:
+		suite.Require().NoError(err)
+	case <-time.After(time.Second):
+		suite.T().Fatal("Close did not return")
+	}
+
+	select {
+	case err := <-errCh:
+		suite.Require().ErrorIs(err, net.ErrClosed)
+	case <-time.After(time.Second):
+		suite.T().Fatal("ReadAt did not return")
+	}
+
+	buf := make([]byte, 1)
+	_, err := reader.ReadAt(buf, 0)
+	suite.Require().ErrorIs(err, net.ErrClosed)
+}
+
 func (suite *HttpChunkedReaderIntegrationSuite) TestBoundaryConditions() {
-	reader, err := audio.NewHttpChunkedReader(suite.logger, suite.server.Client(), suite.server.URL)
-	suite.Require().NoError(err)
-	suite.T().Cleanup(func() { _ = reader.Close() })
+	reader := suite.newReader(nil)
 
 	// Test reading at exact chunk boundary
 	buf := make([]byte, 100)
-	_, err = reader.ReadAt(buf, audio.DefaultChunkSize)
+	_, err := reader.ReadAt(buf, audio.DefaultChunkSize)
 	suite.Require().NoError(err)
 
 	// Test reading across chunk boundary
