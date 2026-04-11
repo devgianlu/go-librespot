@@ -161,10 +161,11 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 		CountryCode: appPlayer.countryCode,
 
-		AudioBackend:     app.cfg.AudioBackend,
-		AudioDevice:      app.cfg.AudioDevice,
-		MixerDevice:      app.cfg.MixerDevice,
-		MixerControlName: app.cfg.MixerControlName,
+		AudioBackend:              app.cfg.AudioBackend,
+		AudioBackendRuntimeSocket: app.cfg.AudioBackendRuntimeSocket,
+		AudioDevice:               app.cfg.AudioDevice,
+		MixerDevice:               app.cfg.MixerDevice,
+		MixerControlName:          app.cfg.MixerControlName,
 
 		AudioBufferTime:  app.cfg.AudioBufferTime,
 		AudioPeriodCount: app.cfg.AudioPeriodCount,
@@ -393,6 +394,7 @@ type Config struct {
 	DeviceType                    string    `koanf:"device_type"`
 	ClientToken                   string    `koanf:"client_token"`
 	AudioBackend                  string    `koanf:"audio_backend"`
+	AudioBackendRuntimeSocket     string    `koanf:"audio_backend_runtime_socket"`
 	AudioDevice                   string    `koanf:"audio_device"`
 	MixerDevice                   string    `koanf:"mixer_device"`
 	MixerControlName              string    `koanf:"mixer_control_name"`

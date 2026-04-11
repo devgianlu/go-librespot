@@ -28,7 +28,13 @@ func newPulseAudioOutput(opts *NewOutputOptions) (*pulseAudioOutput, error) {
 	// The device name is shown by PulseAudio volume controls (usually built
 	// into a desktop environment), so we might want to use device_name here.
 	// We could also maybe change the application icon name by device_type.
-	client, err := pulse.NewClient(pulse.ClientApplicationName("go-librespot"), pulse.ClientApplicationIconName("speaker"))
+	clientopts := []pulse.ClientOption{pulse.ClientApplicationName("go-librespot"), pulse.ClientApplicationIconName("speaker")}
+
+	if opts.RuntimeSocket != "" {
+		clientopts = append(clientopts, pulse.ClientServerString(opts.RuntimeSocket))
+	}
+
+	client, err := pulse.NewClient(clientopts...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +49,12 @@ func newPulseAudioOutput(opts *NewOutputOptions) (*pulseAudioOutput, error) {
 
 	// Create a new playback.
 	var channelOpt pulse.PlaybackOption
-	if opts.ChannelCount == 1 {
+	switch opts.ChannelCount {
+	case 1:
 		channelOpt = pulse.PlaybackMono
-	} else if opts.ChannelCount == 2 {
+	case 2:
 		channelOpt = pulse.PlaybackStereo
-	} else {
+	default:
 		return nil, fmt.Errorf("cannot play %d channels, pulse only supports mono and stereo", opts.ChannelCount)
 	}
 	volumeUpdates := make(chan proto.ChannelVolumes, 1)

@@ -114,9 +114,14 @@ type Options struct {
 
 	// AudioBackend specifies the audio backend to use (alsa, pulseaudio, etc).
 	AudioBackend string
+	// AudioBackendRuntimeSocket specifies a prefixed with protocol (e.g. `unix:` or `tcp:`) path
+	// to a runtime socket of audio backend.
+	//
+	// This feature is support only for the pulseaudio backend.
+	AudioBackendRuntimeSocket string
 	// AudioDevice specifies the audio device name.
 	//
-	// This feature is support only for the alsa backend.
+	// This feature is support only for the alsa and pulseaudio backend.
 	AudioDevice string
 	// MixerDevice specifies the audio mixer name.
 	//
@@ -126,7 +131,6 @@ type Options struct {
 	//
 	// This only works in combination with Mixer.
 	MixerControlName string
-
 	// AudioBufferTime is the buffer time in microseconds.
 	//
 	// This is only supported on the alsa backend.
@@ -178,6 +182,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 				SampleRate:       SampleRate,
 				ChannelCount:     Channels,
 				Device:           opts.AudioDevice,
+				RuntimeSocket:    opts.AudioBackendRuntimeSocket,
 				Mixer:            opts.MixerDevice,
 				Control:          opts.MixerControlName,
 				InitialVolume:    volume,

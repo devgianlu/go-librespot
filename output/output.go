@@ -57,8 +57,13 @@ type NewOutputOptions struct {
 
 	// Device specifies the audio device name.
 	//
-	// This feature is support only for the alsa backend.
+	// This feature is support only for the alsa and pulseaudio backend.
 	Device string
+	// RuntimeSocket specifies a prefixed with protocol (e.g. `unix:` or `tcp:`) path
+	// to a runtime socket of audio backend.
+	//
+	// This feature is support only for pulseaudio backend.
+	RuntimeSocket string
 
 	// Mixer specifies the audio mixer name.
 	//
