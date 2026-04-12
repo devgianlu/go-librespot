@@ -9,6 +9,7 @@ import (
 	"github.com/devgianlu/go-librespot/ap"
 	spotifypb "github.com/devgianlu/go-librespot/proto/spotify"
 	"google.golang.org/protobuf/proto"
+	"strings"
 	"sync"
 	"time"
 )
@@ -27,6 +28,19 @@ type hermesResponse struct {
 	err error
 }
 
+// eventSubscriber receives Mercury AP push events (PacketTypeMercuryEvent) whose
+// URI matches one of the registered prefixes. Used for playlist section pushes.
+type eventSubscriber struct {
+	uriPrefixes []string
+	c           chan eventMessage
+}
+
+// EventMessage carries the URI and raw payload of a Mercury AP push event.
+type eventMessage struct {
+	Uri     string
+	Payload []byte
+}
+
 type Client struct {
 	log librespot.Logger
 	ap  *ap.Accesspoint
@@ -35,12 +49,18 @@ type Client struct {
 
 	reqChan  chan hermesRequest
 	stopChan chan struct{}
+
+	eventSubsLock sync.RWMutex
+	eventSubs     []eventSubscriber
 }
 
 func NewClient(log librespot.Logger, accesspoint *ap.Accesspoint) *Client {
 	c := &Client{log: log, ap: accesspoint}
 	c.reqChan = make(chan hermesRequest)
 	c.stopChan = make(chan struct{}, 1)
+	// Start receiving immediately so MercuryEvent packets that arrive right after
+	// AP authentication (before any Request() is called) are not dropped.
+	c.startReceiving()
 	return c
 }
 
@@ -60,7 +80,74 @@ func (c *Client) recvLoop() {
 			c.stopChan <- struct{}{}
 			return
 		case pkt := <-ch:
-			if pkt.Type != ap.PacketTypeMercuryReq {
+			if pkt.Type == ap.PacketTypeMercuryEvent {
+				// Decode and log the event so we can inspect what URI/payload arrives
+				// immediately after a DJ transfer (these come via the AP Mercury channel).
+				evResp := bytes.NewReader(pkt.Payload)
+				var evSeqLen uint16
+				_ = binary.Read(evResp, binary.BigEndian, &evSeqLen)
+				var evSeq uint64
+				switch evSeqLen {
+				case 8:
+					_ = binary.Read(evResp, binary.BigEndian, &evSeq)
+				case 4:
+					var s uint32
+					_ = binary.Read(evResp, binary.BigEndian, &s)
+					evSeq = uint64(s)
+				case 2:
+					var s uint16
+					_ = binary.Read(evResp, binary.BigEndian, &s)
+					evSeq = uint64(s)
+				}
+				var evFlags uint8
+				_ = binary.Read(evResp, binary.BigEndian, &evFlags)
+				var evPartsCount uint16
+				_ = binary.Read(evResp, binary.BigEndian, &evPartsCount)
+				evParts := make([][]byte, evPartsCount)
+				for i := uint16(0); i < evPartsCount; i++ {
+					var partLen uint16
+					_ = binary.Read(evResp, binary.BigEndian, &partLen)
+					part := make([]byte, partLen)
+					_, _ = evResp.Read(part)
+					evParts[i] = part
+				}
+				if len(evParts) > 0 {
+					var evHeader spotifypb.MercuryHeader
+					if err := proto.Unmarshal(evParts[0], &evHeader); err == nil {
+						uri := evHeader.GetUri()
+						var payload []byte
+						if len(evParts) > 1 {
+							payload = evParts[1]
+						}
+						payloadLen := 0
+						for _, p := range evParts[1:] {
+							payloadLen += len(p)
+						}
+						c.log.Debugf("mercury event: seq=%d flags=%d uri=%s statusCode=%v parts=%d payloadLen=%d",
+							evSeq, evFlags, uri, evHeader.StatusCode, len(evParts), payloadLen)
+						// Route to any registered event subscribers.
+						c.eventSubsLock.RLock()
+						for _, sub := range c.eventSubs {
+							for _, prefix := range sub.uriPrefixes {
+								if strings.HasPrefix(uri, prefix) {
+									select {
+									case sub.c <- eventMessage{Uri: uri, Payload: payload}:
+									default:
+										c.log.Debugf("mercury event subscriber full, dropping %s", uri)
+									}
+									break
+								}
+							}
+						}
+						c.eventSubsLock.RUnlock()
+					} else {
+						c.log.Debugf("mercury event: seq=%d flags=%d totalPayload=%d (header parse err: %v)", evSeq, evFlags, len(pkt.Payload), err)
+					}
+				} else {
+					c.log.Debugf("mercury event: seq=%d flags=%d totalPayload=%d (no parts)", evSeq, evFlags, len(pkt.Payload))
+				}
+				continue
+			} else if pkt.Type != ap.PacketTypeMercuryReq {
 				c.log.Warnf("skipping mercury packet with type: %s", pkt.Type.String())
 				continue
 			}
@@ -214,4 +301,15 @@ func (c *Client) Request(ctx context.Context, method, uri string, fields map[str
 func (c *Client) Close() {
 	c.stopChan <- struct{}{}
 	<-c.stopChan
+}
+
+// SubscribeEvent returns a channel that receives Mercury AP push events (PacketTypeMercuryEvent)
+// whose URI starts with one of the given prefixes. The channel is buffered to avoid blocking
+// the receive loop when the caller is temporarily busy.
+func (c *Client) SubscribeEvent(uriPrefixes ...string) <-chan eventMessage {
+	ch := make(chan eventMessage, 64)
+	c.eventSubsLock.Lock()
+	c.eventSubs = append(c.eventSubs, eventSubscriber{uriPrefixes: uriPrefixes, c: ch})
+	c.eventSubsLock.Unlock()
+	return ch
 }

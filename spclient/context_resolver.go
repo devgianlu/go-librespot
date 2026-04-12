@@ -48,6 +48,18 @@ func isTracksComplete(ctx *connectpb.Context) bool {
 	return expectedNumberOfTracks == totalLength
 }
 
+// NewStaticContextResolver creates a ContextResolver backed by a pre-known
+// list of tracks. Used for dynamic contexts (e.g. Spotify DJ) where
+// spclient returns empty pages.
+func NewStaticContextResolver(log librespot.Logger, uri string, contextTracks []*connectpb.ContextTrack) *ContextResolver {
+	typ := librespot.InferSpotifyIdTypeFromContextUri(uri)
+	spotCtx := &connectpb.Context{
+		Uri:   uri,
+		Pages: []*connectpb.ContextPage{{Tracks: contextTracks}},
+	}
+	return &ContextResolver{log: log, sp: nil, typ: typ, ctx: spotCtx}
+}
+
 func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
 
@@ -67,6 +79,19 @@ func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient,
 		}
 
 		spotCtx = newSpotCtx
+	}
+
+	// If every page is empty (no tracks, no PageUrl, no NextPageUrl), the context
+	// is unusable — callers should fall back to a static resolver.
+	allPagesEmpty := len(spotCtx.Pages) > 0
+	for _, page := range spotCtx.Pages {
+		if len(page.Tracks) > 0 || len(page.PageUrl) > 0 || len(page.NextPageUrl) > 0 {
+			allPagesEmpty = false
+			break
+		}
+	}
+	if allPagesEmpty {
+		return nil, fmt.Errorf("context %s has only empty pages", spotCtx.Uri)
 	}
 
 	autoplay := strings.HasPrefix(spotCtx.Uri, "spotify:station:")

@@ -50,6 +50,16 @@ func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrac
 	}
 }
 
+// ProvidedTrackToContextTrack converts a ProvidedTrack back to a ContextTrack.
+// Used to rebuild a ContextResolver from NextTracks received in a ClusterUpdate.
+func ProvidedTrackToContextTrack(track *connectpb.ProvidedTrack) *connectpb.ContextTrack {
+	return &connectpb.ContextTrack{
+		Uri:      track.Uri,
+		Uid:      track.Uid,
+		Metadata: track.Metadata,
+	}
+}
+
 type SpotifyIdType string
 
 const (

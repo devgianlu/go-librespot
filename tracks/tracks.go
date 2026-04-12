@@ -27,6 +27,16 @@ type List struct {
 	queue        []*connectpb.ContextTrack
 }
 
+// NewTrackListFromResolver creates a List from an already-built ContextResolver.
+// Used when the caller constructs a static resolver (e.g. for Spotify DJ).
+func NewTrackListFromResolver(log_ librespot.Logger, resolver *spclient.ContextResolver) *List {
+	tl := &List{}
+	tl.ctx = resolver
+	tl.log = log_.WithField("uri", resolver.Uri())
+	tl.tracks = newPagedList[*connectpb.ContextTrack](tl.log, resolver)
+	return tl
+}
+
 func NewTrackListFromContext(ctx context.Context, log_ librespot.Logger, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
 	tl := &List{}
 	tl.ctx, err = spclient.NewContextResolver(ctx, log_, sp, spotCtx)

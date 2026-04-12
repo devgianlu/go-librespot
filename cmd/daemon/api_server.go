@@ -204,12 +204,16 @@ func (p *AppPlayer) newApiResponseStatusTrack(media *librespot.Media, position i
 			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.Server.ImageSize)
 		}
 
+		var trackCoverUrl *string
+		if p.prodInfo != nil {
+			trackCoverUrl = p.prodInfo.ImageUrl(albumCoverId)
+		}
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
 			Name:          *track.Name,
 			ArtistNames:   artists,
 			AlbumName:     *track.Album.Name,
-			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
+			AlbumCoverUrl: trackCoverUrl,
 			Position:      position,
 			Duration:      int(*track.Duration),
 			ReleaseDate:   track.Album.Date.String(),
@@ -221,12 +225,16 @@ func (p *AppPlayer) newApiResponseStatusTrack(media *librespot.Media, position i
 
 		albumCoverId := getBestImageIdForSize(episode.CoverImage.Image, p.app.cfg.Server.ImageSize)
 
+		var episodeCoverUrl *string
+		if p.prodInfo != nil {
+			episodeCoverUrl = p.prodInfo.ImageUrl(albumCoverId)
+		}
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
 			Name:          *episode.Name,
 			ArtistNames:   []string{*episode.Show.Name},
 			AlbumName:     *episode.Show.Name,
-			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
+			AlbumCoverUrl: episodeCoverUrl,
 			Position:      position,
 			Duration:      int(*episode.Duration),
 			ReleaseDate:   "",
