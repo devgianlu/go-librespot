@@ -1,6 +1,8 @@
 package audio
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -45,10 +47,12 @@ func parseContentRange(resp *http.Response) (start int64, end int64, size int64,
 
 type chunkItem struct {
 	*sync.Cond
-
 	data     []byte
 	fetching bool
-	err      error
+}
+
+func newChunkItem() *chunkItem {
+	return &chunkItem{Cond: sync.NewCond(&sync.Mutex{})}
 }
 
 type HttpChunkedReader struct {
@@ -63,19 +67,34 @@ type HttpChunkedReader struct {
 	len int64
 	pos int64
 
+	prefetchMu sync.Mutex
 	prefetchWg sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
 
-	initialLatency time.Duration
-	latencies      []time.Duration
+	latMu     sync.Mutex
+	latencies []time.Duration
 }
 
 func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl string) (_ *HttpChunkedReader, err error) {
-	r := &HttpChunkedReader{log: log, client: client}
+	ctx, cancel := context.WithCancel(context.Background())
+	r := &HttpChunkedReader{
+		log:    log,
+		client: client,
+		ctx:    ctx,
+		cancel: cancel,
+	}
 
 	r.url, err = url.Parse(audioUrl)
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing resource url: %w", err)
 	}
+
+	defer func() {
+		if err != nil {
+			r.cancel()
+		}
+	}()
 
 	// request the first chunk, needed for the complete content length
 	resp, err := r.downloadChunk(0)
@@ -92,19 +111,14 @@ func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl st
 	}
 
 	// create the necessary amount of chunks
-	var totalChunks int64
-	if r.len%DefaultChunkSize == 0 {
-		totalChunks = r.len / DefaultChunkSize
-	} else {
-		totalChunks = r.len/DefaultChunkSize + 1
-	}
+	totalChunks := (r.len + DefaultChunkSize - 1) / DefaultChunkSize
 
 	r.chunks = make([]*chunkItem, totalChunks)
 	for i := int64(0); i < totalChunks; i++ {
-		r.chunks[i] = &chunkItem{Cond: sync.NewCond(&sync.Mutex{}), data: nil, err: nil}
+		r.chunks[i] = newChunkItem()
 	}
 
-	r.chunks[0].data, err = io.ReadAll(r.measureLatency(true, resp.Body))
+	r.chunks[0].data, err = io.ReadAll(r.measureLatency(resp.Body))
 	if err != nil {
 		return nil, fmt.Errorf("failed reading first chunk: %w", err)
 	}
@@ -113,9 +127,26 @@ func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl st
 	return r, nil
 }
 
+func (r *HttpChunkedReader) closeErr(err error) error {
+	if err != nil && r.isClosed() {
+		return net.ErrClosed
+	}
+
+	return err
+}
+
+func (r *HttpChunkedReader) isClosed() bool {
+	return r.ctx.Err() != nil
+}
+
 func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
+	retryBackoff := backoff.WithContext(
+		backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 3),
+		r.ctx,
+	)
+
 	return backoff.RetryWithData(func() (*http.Response, error) {
-		resp, err := r.client.Do(&http.Request{
+		resp, err := r.client.Do((&http.Request{
 			Method: "GET",
 			URL:    r.url,
 			Header: http.Header{
@@ -125,8 +156,13 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 					min(max(r.len, DefaultChunkSize), int64((idx+1)*DefaultChunkSize))-1,
 				)},
 			},
-		})
+		}).WithContext(r.ctx))
 		if err != nil {
+			err = r.closeErr(err)
+			if errors.Is(err, net.ErrClosed) {
+				return nil, backoff.Permanent(err)
+			}
+
 			return nil, err
 		}
 
@@ -136,67 +172,70 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 		}
 
 		return resp, nil
-	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 3))
+	}, retryBackoff)
+}
+
+func (r *HttpChunkedReader) downloadAndRead(idx int) ([]byte, error) {
+	resp, err := r.downloadChunk(idx)
+	if err != nil {
+		return nil, fmt.Errorf("failed downloading chunk %d: %w", idx, r.closeErr(err))
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	data, err := io.ReadAll(r.measureLatency(resp.Body))
+	if err != nil {
+		return nil, fmt.Errorf("failed reading chunk %d: %w", idx, r.closeErr(err))
+	}
+
+	return data, nil
 }
 
 func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
 	chunk := r.chunks[idx]
+
 	chunk.L.Lock()
-
-	// if the chunk is already being fetched, wait until it is done
-	for chunk.fetching {
-		for !(chunk.data != nil || chunk.err != nil) {
-			chunk.Wait()
+	for {
+		if r.isClosed() {
+			chunk.L.Unlock()
+			return nil, net.ErrClosed
 		}
+
+		if chunk.data != nil {
+			data := chunk.data
+			chunk.L.Unlock()
+			return data, nil
+		}
+
+		if !chunk.fetching {
+			chunk.fetching = true
+			chunk.L.Unlock()
+			break
+		}
+
+		chunk.Wait()
 	}
 
-	// chunk fetched, just return its data
-	if chunk.data != nil {
-		chunk.L.Unlock()
-		return chunk.data, nil
-	}
-
-	chunk.fetching = true
-	chunk.err = nil
-	chunk.L.Unlock()
-
-	// download chunk
-	resp, err := r.downloadChunk(idx)
+	data, err := r.downloadAndRead(idx)
 	if err != nil {
-		// update chunk and signal not fetching
 		chunk.L.Lock()
-		chunk.err = err
 		chunk.fetching = false
 		chunk.Broadcast()
 		chunk.L.Unlock()
-
-		return nil, fmt.Errorf("failed downloading chunk %d: %w", idx, chunk.err)
+		return nil, err
 	}
 
-	// ensure body gets closed
-	defer func() { _ = resp.Body.Close() }()
-
-	// read the chunk data
-	data, err := io.ReadAll(r.measureLatency(false, resp.Body))
-	if chunk.err != nil {
-		// update chunk and signal not fetching
-		chunk.L.Lock()
-		chunk.err = err
-		chunk.fetching = false
-		chunk.Broadcast()
-		chunk.L.Unlock()
-
-		return nil, fmt.Errorf("failed reading chunk %d: %w", idx, chunk.err)
-	}
-
-	// update chunk and signal not fetching
 	chunk.L.Lock()
 	chunk.data = data
 	chunk.fetching = false
 	chunk.Broadcast()
 	chunk.L.Unlock()
 
-	r.log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(chunk.data))
+	r.log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(data))
+	if r.isClosed() {
+		return nil, net.ErrClosed
+	}
+
 	return data, nil
 }
 
@@ -206,12 +245,27 @@ func (r *HttpChunkedReader) prefetchChunks(curr int) {
 			break
 		}
 
-		r.prefetchWg.Add(1)
-		go func(i int) {
-			defer r.prefetchWg.Done()
-			_, _ = r.fetchChunk(i)
-		}(i)
+		if !r.startPrefetch(i) {
+			return
+		}
 	}
+}
+
+func (r *HttpChunkedReader) startPrefetch(idx int) bool {
+	r.prefetchMu.Lock()
+	defer r.prefetchMu.Unlock()
+
+	if r.isClosed() {
+		return false
+	}
+
+	r.prefetchWg.Add(1)
+	go func() {
+		defer r.prefetchWg.Done()
+		_, _ = r.fetchChunk(idx)
+	}()
+
+	return true
 }
 
 func (r *HttpChunkedReader) Read(p []byte) (n int, err error) {
@@ -221,6 +275,10 @@ func (r *HttpChunkedReader) Read(p []byte) (n int, err error) {
 }
 
 func (r *HttpChunkedReader) ReadAt(p []byte, pos int64) (n int, _ error) {
+	if r.isClosed() {
+		return 0, net.ErrClosed
+	}
+
 	chunkIdx, off := int(pos/DefaultChunkSize), int(pos%DefaultChunkSize)
 	if chunkIdx >= len(r.chunks) {
 		return 0, io.EOF
@@ -289,17 +347,27 @@ func (r *HttpChunkedReader) Seek(offset int64, whence int) (int64, error) {
 	}
 }
 
-func (r *HttpChunkedReader) measureLatency(initial bool, rr io.Reader) io.Reader {
+func (r *HttpChunkedReader) measureLatency(rr io.Reader) io.Reader {
 	return &LatencyReader{
-		Reader: rr,
-		Callback: func(latency time.Duration) {
-			if initial {
-				r.initialLatency = latency
-			}
-
-			r.latencies = append(r.latencies, latency)
-		},
+		Reader:   rr,
+		Callback: r.recordLatency,
 	}
+}
+
+func (r *HttpChunkedReader) recordLatency(latency time.Duration) {
+	r.latMu.Lock()
+	defer r.latMu.Unlock()
+
+	r.latencies = append(r.latencies, latency)
+}
+
+func (r *HttpChunkedReader) latencySnapshot() []time.Duration {
+	r.latMu.Lock()
+	defer r.latMu.Unlock()
+
+	latencies := make([]time.Duration, len(r.latencies))
+	copy(latencies, r.latencies)
+	return latencies
 }
 
 func (r *HttpChunkedReader) Size() int64 {
@@ -311,16 +379,22 @@ func (r *HttpChunkedReader) Url() *url.URL {
 }
 
 func (r *HttpChunkedReader) InitialLatency() time.Duration {
-	return r.initialLatency
-}
-
-func (r *HttpChunkedReader) MaxLatency() time.Duration {
-	if len(r.latencies) == 0 {
+	latencies := r.latencySnapshot()
+	if len(latencies) == 0 {
 		return 0
 	}
 
-	maxLatency := r.latencies[0]
-	for _, latency := range r.latencies {
+	return latencies[0]
+}
+
+func (r *HttpChunkedReader) MaxLatency() time.Duration {
+	latencies := r.latencySnapshot()
+	if len(latencies) == 0 {
+		return 0
+	}
+
+	maxLatency := latencies[0]
+	for _, latency := range latencies {
 		if latency > maxLatency {
 			maxLatency = latency
 		}
@@ -330,12 +404,13 @@ func (r *HttpChunkedReader) MaxLatency() time.Duration {
 }
 
 func (r *HttpChunkedReader) MinLatency() time.Duration {
-	if len(r.latencies) == 0 {
+	latencies := r.latencySnapshot()
+	if len(latencies) == 0 {
 		return 0
 	}
 
-	minLatency := r.latencies[0]
-	for _, latency := range r.latencies {
+	minLatency := latencies[0]
+	for _, latency := range latencies {
 		if latency < minLatency {
 			minLatency = latency
 		}
@@ -345,25 +420,24 @@ func (r *HttpChunkedReader) MinLatency() time.Duration {
 }
 
 func (r *HttpChunkedReader) AvgLatencyMs() float64 {
-	if len(r.latencies) == 0 {
+	latencies := r.latencySnapshot()
+	if len(latencies) == 0 {
 		return 0
 	}
 
 	var sum time.Duration
-	for _, latency := range r.latencies {
+	for _, latency := range latencies {
 		sum += latency
 	}
 
-	return float64(sum.Milliseconds()) / float64(len(r.latencies))
+	return float64(sum.Milliseconds()) / float64(len(latencies))
 }
 
 func (r *HttpChunkedReader) MedianLatency() time.Duration {
-	if len(r.latencies) == 0 {
+	latencies := r.latencySnapshot()
+	if len(latencies) == 0 {
 		return 0
 	}
-
-	latencies := make([]time.Duration, len(r.latencies))
-	copy(latencies, r.latencies)
 
 	sort.Slice(latencies, func(i, j int) bool {
 		return latencies[i] < latencies[j]
@@ -378,21 +452,23 @@ func (r *HttpChunkedReader) MedianLatency() time.Duration {
 }
 
 func (r *HttpChunkedReader) TotalTime() time.Duration {
+	latencies := r.latencySnapshot()
+
 	var sum time.Duration
-	for _, latency := range r.latencies {
+	for _, latency := range latencies {
 		sum += latency
 	}
 	return sum
 }
 
 func (r *HttpChunkedReader) Close() error {
+	r.prefetchMu.Lock()
+	r.cancel()
+	r.prefetchMu.Unlock()
+
 	for _, chunk := range r.chunks {
 		chunk.L.Lock()
-		if chunk.fetching {
-			chunk.err = net.ErrClosed
-			chunk.fetching = false
-			chunk.Broadcast()
-		}
+		chunk.Broadcast()
 		chunk.L.Unlock()
 	}
 
