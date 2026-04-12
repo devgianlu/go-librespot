@@ -5,6 +5,7 @@ services:
     network_mode: host
     userns_mode: keep-id
     volumes:
+      - ~/.local/state/go-librespot:/state
       - ~/.config/go-librespot:/config
       - ~/.config/pulse/cookie:/pulse_cookie:ro
       - /run/user/1000/pulse/native:/pulse_native # Replace 1000 with your UID
