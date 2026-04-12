@@ -44,11 +44,37 @@ type AppPlayer struct {
 	prodInfo    *ProductInfo
 	countryCode *string
 
+	hasSpotConnId          bool
+	hasInitialConnectState bool
+	hasCountryCode         bool
+	playbackReadyCh        chan struct{}
+	playbackReadyOnce      sync.Once
+
 	state           *State
 	primaryStream   *player.Stream
 	secondaryStream *player.Stream
 
 	prefetchTimer *time.Timer
+}
+
+func (p *AppPlayer) playbackReady() bool {
+	select {
+	case <-p.playbackReadyCh:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *AppPlayer) notifyPlaybackReadyIfNeeded() {
+	if !p.hasSpotConnId || !p.hasInitialConnectState || !p.hasCountryCode {
+		return
+	}
+
+	p.playbackReadyOnce.Do(func() {
+		close(p.playbackReadyCh)
+		p.app.server.Emit(&ApiEvent{Type: ApiEventTypePlaybackReady})
+	})
 }
 
 func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byte) error {
@@ -67,6 +93,8 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 		return nil
 	case ap.PacketTypeCountryCode:
 		*p.countryCode = string(payload)
+		p.hasCountryCode = true
+		p.notifyPlaybackReadyIfNeeded()
 		return nil
 	default:
 		return nil
@@ -80,12 +108,16 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
+		p.hasSpotConnId = p.spotConnId != ""
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
 
 		// put the initial state
 		if err := p.putConnectState(ctx, connectpb.PutStateReason_NEW_DEVICE); err != nil {
 			return fmt.Errorf("failed initial state put: %w", err)
 		}
+
+		p.hasInitialConnectState = true
+		p.notifyPlaybackReadyIfNeeded()
 
 		if !p.app.cfg.ExternalVolume && len(p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
@@ -377,6 +409,8 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	defer cancel()
 
 	switch req.Type {
+	case ApiRequestTypeRoot:
+		return &ApiResponseRoot{PlaybackReady: p.playbackReady()}, nil
 	case ApiRequestTypeWebApi:
 		data := req.Data.(ApiRequestDataWebApi)
 		resp, err := p.sess.WebApi(ctx, data.Method, data.Path, data.Query, nil, nil)

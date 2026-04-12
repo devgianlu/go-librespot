@@ -47,7 +47,7 @@ components:
 paths:
   /:
     get:
-      description: Returns an empty object, used to very API is reachable
+      description: Returns API reachability and playback readiness
       responses:
         200:
           description: API is ok
@@ -55,6 +55,10 @@ paths:
             application/json:
               schema:
                 type: object
+                properties:
+                  playback_ready:
+                    description: Whether the daemon is fully bootstrapped and ready to accept /player/play
+                    type: boolean
   /status:
     get:
       description: Returns the player status

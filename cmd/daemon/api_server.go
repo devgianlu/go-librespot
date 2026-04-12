@@ -55,6 +55,7 @@ var (
 type ApiRequestType string
 
 const (
+	ApiRequestTypeRoot                ApiRequestType = "root"
 	ApiRequestTypeWebApi              ApiRequestType = "web_api"
 	ApiRequestTypeStatus              ApiRequestType = "status"
 	ApiRequestTypeResume              ApiRequestType = "resume"
@@ -89,6 +90,7 @@ const (
 	ApiEventTypeRepeatTrack    ApiEventType = "repeat_track"
 	ApiEventTypeRepeatContext  ApiEventType = "repeat_context"
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
+	ApiEventTypePlaybackReady  ApiEventType = "playback_ready"
 )
 
 type ApiRequest struct {
@@ -251,6 +253,10 @@ type ApiResponseStatus struct {
 	Track          *ApiResponseStatusTrack `json:"track"`
 }
 
+type ApiResponseRoot struct {
+	PlaybackReady bool `json:"playback_ready"`
+}
+
 type ApiResponseVolume struct {
 	Value uint32 `json:"value"`
 	Max   uint32 `json:"max"`
@@ -407,8 +413,12 @@ func jsonDecode(r *http.Request, v any) error {
 func (s *ConcreteApiServer) serve() {
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("{}"))
+		if r.Method != "GET" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeRoot}, w)
 	})
 	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		s.handleRequest(ApiRequest{

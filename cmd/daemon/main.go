@@ -122,11 +122,12 @@ func NewApp(cfg *Config) (app *App, err error) {
 
 func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err error) {
 	appPlayer := &AppPlayer{
-		app:          app,
-		stop:         make(chan struct{}, 1),
-		logout:       app.logoutCh,
-		countryCode:  new(string),
-		volumeUpdate: make(chan float32, 1),
+		app:             app,
+		stop:            make(chan struct{}, 1),
+		logout:          app.logoutCh,
+		countryCode:     new(string),
+		volumeUpdate:    make(chan float32, 1),
+		playbackReadyCh: make(chan struct{}),
 	}
 
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
@@ -284,7 +285,11 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			select {
 			case req := <-app.server.Receive():
 				if currentPlayer == nil {
-					req.Reply(nil, ErrNoSession)
+					if req.Type == ApiRequestTypeRoot {
+						req.Reply(&ApiResponseRoot{}, nil)
+					} else {
+						req.Reply(nil, ErrNoSession)
+					}
 					break
 				}
 
