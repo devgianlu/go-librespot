@@ -3,6 +3,7 @@ package go_librespot
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/zalando/go-keyring"
 	"os"
 	"path/filepath"
 	"sync"
@@ -51,10 +52,15 @@ func (s *AppState) Read(configDir string) error {
 		} else {
 			s.log.Debugf("stored credentials not found")
 		}
+
+		// Credentials might be in the OS keyring.
+		s.getCredsFromKeyring()
+
 	}
 
 	return nil
 }
+
 
 func (s *AppState) Write() error {
 	s.Lock()
@@ -67,14 +73,57 @@ func (s *AppState) Write() error {
 	if err != nil {
 		return fmt.Errorf("failed creating temporary file for app state: %w", err)
 	}
-
-	if err := json.NewEncoder(tmpFile).Encode(&s); err != nil {
-		return fmt.Errorf("failed writing marshalled app state: %w", err)
+	if err := s.writeCredsToKeyring(); err != nil {
+		if err := json.NewEncoder(tmpFile).Encode(s); err != nil {
+			return fmt.Errorf("failed writing marshalled app state: %w", err)
+		}
+	}
+  if err := s.persistStateWithoutCredentials(tmpFile); err != nil {
+    return err  
 	}
 
 	if err := os.Rename(tmpFile.Name(), s.path); err != nil {
 		return fmt.Errorf("failed replacing app state file: %w", err)
 	}
 
+	return nil
+}
+
+func (s *AppState) persistStateWithoutCredentials(tmpFile *os.File) error {
+	persistedState := struct {
+		DeviceId     string          `json:"device_id"`
+		EventManager json.RawMessage `json:"event_manager"`
+		LastVolume   *uint32         `json:"last_volume"`
+	}{
+		DeviceId:     s.DeviceId,
+		EventManager: s.EventManager,
+		LastVolume:   s.LastVolume,
+	}
+
+	if err := json.NewEncoder(tmpFile).Encode(&persistedState); err != nil {
+		return fmt.Errorf("failed writing marshalled app state: %w", err)
+	}
+	return nil
+}
+
+func (s *AppState) getCredsFromKeyring() {
+	storedCredsRaw, err := keyring.Get("librespot", "credentials")
+	if err != nil {
+		return
+	}
+	if err := json.Unmarshal([]byte(storedCredsRaw), &s.Credentials); err != nil {
+		return
+	}
+}
+
+func (s *AppState) writeCredsToKeyring() error {
+	creds, err := json.Marshal(s.Credentials)
+	if err != nil {
+		return err
+	}
+	err = keyring.Set("librespot", "credentials", string(creds))
+	if err != nil {
+		return err
+	}
 	return nil
 }
