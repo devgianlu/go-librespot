@@ -24,6 +24,8 @@ import (
 	"github.com/devgianlu/go-librespot/dealer"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	extmetadatapb "github.com/devgianlu/go-librespot/proto/spotify/extendedmetadata"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/session"
 	"github.com/devgianlu/go-librespot/tracks"
 )
@@ -590,9 +592,193 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		return &ApiResponseToken{
 			Token: accessToken,
 		}, nil
+	case ApiRequestTypeResolveTracks:
+		data := req.Data.(ApiRequestDataResolveTracks)
+
+		spotID, err := librespot.SpotifyIdFromUri(data.Uri)
+		if err != nil || spotID.Type() != librespot.SpotifyIdTypePlaylist {
+			return nil, ErrBadRequest
+		}
+
+		spotCtx, err := p.sess.Spclient().ContextResolve(ctx, data.Uri)
+		if err != nil {
+			return nil, fmt.Errorf("failed resolving context: %w", err)
+		}
+
+		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
+		if err != nil {
+			return nil, fmt.Errorf("failed creating track list from context: %w", err)
+		}
+
+		allTracks := ctxTracks.AllTracks(ctx)
+		total := len(allTracks)
+		offset := data.Offset
+		if offset > total {
+			offset = total
+		}
+		end := offset + data.Limit
+		if end > total {
+			end = total
+		}
+
+		resolvedTracks := make([]ApiResponseResolvedTrack, 0, end-offset)
+		for _, tr := range allTracks[offset:end] {
+			mapped := mapResolvedTrack(tr)
+			if mapped.Name == "" || len(mapped.Artists) == 0 || mapped.Img == "" {
+				enrichResolvedTrack(ctx, p, &mapped)
+			}
+			resolvedTracks = append(resolvedTracks, mapped)
+		}
+
+		return &ApiResponseResolveTracks{
+			Uri:     data.Uri,
+			Offset:  offset,
+			Limit:   data.Limit,
+			Total:   total,
+			HasNext: end < total,
+			Tracks:  resolvedTracks,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}
+}
+
+func mapResolvedTrack(track *connectpb.ProvidedTrack) ApiResponseResolvedTrack {
+	metadata := cloneMetadata(track.Metadata)
+	artistURI := track.ArtistUri
+	if artistURI == "" {
+		artistURI = firstNonEmpty(metadata, "artist_uri")
+	}
+	albumURI := track.AlbumUri
+	if albumURI == "" {
+		albumURI = firstNonEmpty(metadata, "album_uri")
+	}
+
+	return ApiResponseResolvedTrack{
+		Uri:        track.Uri,
+		Uid:        track.Uid,
+		Name:       firstNonEmpty(metadata, "name", "title", "track_name"),
+		Artists:    parseArtists(metadata),
+		Img:        firstNonEmpty(metadata, "image_url", "img", "album_cover_url"),
+		AlbumName:  firstNonEmpty(metadata, "album_name", "album_title"),
+		DurationMs: parseDurationMs(metadata),
+		AlbumUri:   albumURI,
+		ArtistUri:  artistURI,
+		Metadata:   metadata,
+	}
+}
+
+func enrichResolvedTrack(ctx context.Context, p *AppPlayer, track *ApiResponseResolvedTrack) {
+	spotID, err := librespot.SpotifyIdFromUri(track.Uri)
+	if err != nil || spotID.Type() != librespot.SpotifyIdTypeTrack {
+		return
+	}
+
+	var trackMeta metadatapb.Track
+	if err := p.sess.Spclient().ExtendedMetadataSimple(ctx, *spotID, extmetadatapb.ExtensionKind_TRACK_V4, &trackMeta); err != nil {
+		return
+	}
+
+	if track.Name == "" {
+		track.Name = trackMeta.GetName()
+	}
+
+	if len(track.Artists) == 0 {
+		artists := make([]string, 0, len(trackMeta.GetArtist()))
+		for _, artist := range trackMeta.GetArtist() {
+			if name := strings.TrimSpace(artist.GetName()); name != "" {
+				artists = append(artists, name)
+			}
+		}
+		if len(artists) > 0 {
+			track.Artists = artists
+		}
+	}
+
+	if track.AlbumName == "" && trackMeta.GetAlbum() != nil {
+		track.AlbumName = trackMeta.GetAlbum().GetName()
+	}
+
+	if track.DurationMs == 0 {
+		track.DurationMs = int(trackMeta.GetDuration())
+	}
+
+	if track.Img == "" && p.prodInfo != nil && trackMeta.GetAlbum() != nil {
+		album := trackMeta.GetAlbum()
+		coverId := getBestImageIdForSize(album.GetCover(), p.app.cfg.Server.ImageSize)
+		if coverId == nil && album.GetCoverGroup() != nil {
+			coverId = getBestImageIdForSize(album.GetCoverGroup().GetImage(), p.app.cfg.Server.ImageSize)
+		}
+		if img := p.prodInfo.ImageUrl(coverId); img != nil {
+			track.Img = *img
+		}
+	}
+}
+
+func cloneMetadata(metadata map[string]string) map[string]string {
+	if metadata == nil {
+		return map[string]string{}
+	}
+
+	out := make(map[string]string, len(metadata))
+	for k, v := range metadata {
+		out[k] = v
+	}
+	return out
+}
+
+func firstNonEmpty(metadata map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(metadata[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func parseArtists(metadata map[string]string) []string {
+	candidate := firstNonEmpty(metadata, "artist_names", "artists", "artist_name")
+	if candidate == "" {
+		return nil
+	}
+
+	var asList []string
+	if err := json.Unmarshal([]byte(candidate), &asList); err == nil {
+		artists := make([]string, 0, len(asList))
+		for _, name := range asList {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				artists = append(artists, name)
+			}
+		}
+		if len(artists) > 0 {
+			return artists
+		}
+	}
+
+	parts := strings.Split(candidate, ",")
+	artists := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			artists = append(artists, part)
+		}
+	}
+	if len(artists) == 0 {
+		return nil
+	}
+	return artists
+}
+
+func parseDurationMs(metadata map[string]string) int {
+	for _, key := range []string{"duration_ms", "duration"} {
+		if raw := strings.TrimSpace(metadata[key]); raw != "" {
+			if value, err := strconv.Atoi(raw); err == nil && value >= 0 {
+				return value
+			}
+		}
+	}
+	return 0
 }
 
 func pointer[T any](d T) *T {
