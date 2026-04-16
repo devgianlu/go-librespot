@@ -67,63 +67,54 @@ func (c *blockingConn) Close() error {
 	return nil
 }
 
-func TestPongAckTickerDoesNotPanicWhenConnNil(t *testing.T) {
+func TestPongAckTickerStopsWhenConnNil(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ap := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		stopped := make(chan struct{})
 
-		panicCh := make(chan any, 1)
 		go func() {
-			defer func() {
-				panicCh <- recover()
-			}()
+			defer close(stopped)
 			ap.pongAckTicker()
 		}()
 
 		time.Sleep(pongAckInterval + time.Nanosecond)
 		synctest.Wait()
 
-		select {
-		case p := <-panicCh:
-			if p != nil {
-				t.Fatalf("pongAckTicker panicked when conn was nil: %v", p)
-			}
-		default:
-		}
-
-		ap.pongAckTickerStop <- struct{}{}
+		ap.Close()
 		synctest.Wait()
 
 		select {
-		case p := <-panicCh:
-			if p != nil {
-				t.Fatalf("pongAckTicker panicked when conn was nil: %v", p)
-			}
+		case <-stopped:
 		default:
 			t.Fatal("pongAckTicker did not stop")
 		}
 	})
 }
 
-func TestCloseStopsPongAckTickerWhenConnNil(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		ap := NewAccesspoint(&librespot.NullLogger{}, nil, "")
-		done := make(chan struct{})
+func TestDoneChannelClosesOnClose(t *testing.T) {
+	ap := NewAccesspoint(&librespot.NullLogger{}, nil, "")
 
-		go func() {
-			defer close(done)
-			ap.pongAckTicker()
-		}()
+	select {
+	case <-ap.Done():
+		t.Fatal("done channel should remain open before Close")
+	default:
+	}
 
-		synctest.Wait()
-		ap.Close()
-		synctest.Wait()
+	ap.Close()
 
-		select {
-		case <-done:
-		default:
-			t.Fatal("pongAckTicker did not stop when closing with nil conn")
-		}
-	})
+	select {
+	case <-ap.Done():
+	default:
+		t.Fatal("done channel did not close")
+	}
+
+	ap.Close()
+
+	select {
+	case <-ap.Done():
+	default:
+		t.Fatal("done channel should stay closed after repeated Close")
+	}
 }
 
 func TestCloseWaitsForInFlightSend(t *testing.T) {

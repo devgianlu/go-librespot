@@ -27,8 +27,7 @@ type KeyProvider struct {
 
 	recvLoopOnce sync.Once
 
-	reqChan  chan keyRequest
-	stopChan chan struct{}
+	reqChan chan keyRequest
 }
 
 type keyRequest struct {
@@ -45,7 +44,6 @@ type keyResponse struct {
 func NewAudioKeyProvider(log librespot.Logger, ap *ap.Accesspoint) *KeyProvider {
 	p := &KeyProvider{log: log, ap: ap}
 	p.reqChan = make(chan keyRequest)
-	p.stopChan = make(chan struct{}, 1)
 	return p
 }
 
@@ -55,16 +53,20 @@ func (p *KeyProvider) startReceiving() {
 
 func (p *KeyProvider) recvLoop() {
 	ch := p.ap.Receive(ap.PacketTypeAesKey, ap.PacketTypeAesKeyError)
+	done := p.ap.Done()
 
 	seq := uint32(0)
 	reqs := map[uint32]keyRequest{}
 
 	for {
 		select {
-		case <-p.stopChan:
-			p.stopChan <- struct{}{}
+		case <-done:
 			return
-		case pkt := <-ch:
+		case pkt, ok := <-ch:
+			if !ok {
+				return
+			}
+
 			resp := bytes.NewReader(pkt.Payload)
 			var respSeq uint32
 			_ = binary.Read(resp, binary.BigEndian, &respSeq)
@@ -114,27 +116,32 @@ func (p *KeyProvider) recvLoop() {
 }
 
 func (p *KeyProvider) Request(ctx context.Context, gid []byte, fileId []byte) ([]byte, error) {
+	done := p.ap.Done()
+
 	p.startReceiving()
 
 	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse, 1)}
-	p.reqChan <- req
+	select {
+	case <-done:
+		return nil, ap.ErrAccesspointClosed
+	case p.reqChan <- req:
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
+	var resp keyResponse
 	select {
+	case resp = <-req.resp:
 	case <-ctx.Done():
-		return nil, context.DeadlineExceeded
-	case resp := <-req.resp:
-		if resp.err != nil {
-			return nil, resp.err
-		}
-
-		return resp.key, nil
+		return nil, ctx.Err()
+	case <-done:
+		return nil, ap.ErrAccesspointClosed
 	}
-}
 
-func (p *KeyProvider) Close() {
-	p.stopChan <- struct{}{}
-	<-p.stopChan
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	return resp.key, nil
 }

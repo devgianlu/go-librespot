@@ -188,11 +188,13 @@ func (d *Dealer) ReceiveMessage(uriPrefixes ...string) <-chan Message {
 	}
 
 	d.connMu.RLock()
-	if d.closed {
+	select {
+	case <-d.done:
 		d.connMu.RUnlock()
 		c := make(chan Message)
 		close(c)
 		return c
+	default:
 	}
 
 	d.messageReceiversLock.Lock()
@@ -231,28 +233,38 @@ func (d *Dealer) handleRequest(rawMsg *RawMessage) {
 	}
 
 	// dispatch request
-	resp := make(chan bool)
-	recv.c <- Request{
+	resp := make(chan bool, 1)
+	select {
+	case recv.c <- Request{
 		resp:         resp,
 		MessageIdent: rawMsg.MessageIdent,
 		Payload:      payload,
+	}:
+	case <-d.done:
+		return
 	}
 
 	// wait for response and send it
-	success := <-resp
-	if err := d.sendReply(rawMsg.Key, success); err != nil {
-		log.WithError(err).Error("failed sending dealer reply")
+	select {
+	case success := <-resp:
+		if err := d.sendReply(rawMsg.Key, success); err != nil {
+			log.WithError(err).Error("failed sending dealer reply")
+			return
+		}
+	case <-d.done:
 		return
 	}
 }
 
 func (d *Dealer) ReceiveRequest(uri string) <-chan Request {
 	d.connMu.RLock()
-	if d.closed {
+	select {
+	case <-d.done:
 		d.connMu.RUnlock()
 		c := make(chan Request)
 		close(c)
 		return c
+	default:
 	}
 
 	d.requestReceiversLock.Lock()
