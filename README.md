@@ -60,13 +60,18 @@ Details about cross-compiling go-librespot are described [here](/CROSS_COMPILE.m
 
 ## Configuration
 
-The default directory for configuration files is `~/.config/go-librespot`. On macOS devices, this is
-`~/Library/Application Support/go-librespot`. You can change this directory with the
-`-config_dir` flag. The configuration directory contains:
+The main configuration files is `~/.config/go-librespot/config.yaml`. On macOS devices, this is
+`~/Library/Application Support/go-librespot/config.yaml`. It does not exist by default.
 
-- `config.yml`: The main configuration (does not exist by default)
+You can change this path with the `--config` flag.
+
+State files are stored in `~/.local/state/go-librespot` (`~/Library/Application Support/go-librespot` on macOS).
+
+You can change this directory with the `--state` flag.
+
+The state directory contains:
 - `state.json`: The player state and credentials
-- `lockfile`: A lockfile to prevent running multiple instances on the same configuration
+- `lockfile`: A lockfile to prevent multiple instances using the same state
 
 The full configuration schema is available [here](/config_schema.json), only the main options are detailed below.
 
