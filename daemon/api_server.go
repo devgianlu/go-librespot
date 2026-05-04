@@ -1,4 +1,4 @@
-package main
+package daemon
 
 import (
 	"context"
@@ -25,6 +25,7 @@ const timeout = 10 * time.Second
 type ApiServer interface {
 	Emit(ev *ApiEvent)
 	Receive() <-chan ApiRequest
+	Close() error
 }
 
 type ConcreteApiServer struct {
@@ -102,6 +103,22 @@ type ApiRequest struct {
 
 func (r *ApiRequest) Reply(data any, err error) {
 	r.resp <- apiResponse{data, err}
+}
+
+// NewApiRequest builds an ApiRequest pre-wired with a reply channel, plus a
+// wait function that blocks until the daemon calls Reply (or ctx is done).
+func NewApiRequest(t ApiRequestType, data any) (req ApiRequest, wait func(context.Context) (any, error)) {
+	ch := make(chan apiResponse, 1)
+	req = ApiRequest{Type: t, Data: data, resp: ch}
+	wait = func(ctx context.Context) (any, error) {
+		select {
+		case r := <-ch:
+			return r.data, r.err
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return
 }
 
 type ApiRequestDataSeek struct {
@@ -199,9 +216,9 @@ func (p *AppPlayer) newApiResponseStatusTrack(media *librespot.Media, position i
 			artists = append(artists, *a.Name)
 		}
 
-		albumCoverId := getBestImageIdForSize(track.Album.Cover, p.app.cfg.Server.ImageSize)
+		albumCoverId := getBestImageIdForSize(track.Album.Cover, p.app.cfg.ImageSize)
 		if albumCoverId == nil && track.Album.CoverGroup != nil {
-			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.Server.ImageSize)
+			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.ImageSize)
 		}
 
 		return &ApiResponseStatusTrack{
@@ -219,7 +236,7 @@ func (p *AppPlayer) newApiResponseStatusTrack(media *librespot.Media, position i
 	} else {
 		episode := media.Episode()
 
-		albumCoverId := getBestImageIdForSize(episode.CoverImage.Image, p.app.cfg.Server.ImageSize)
+		albumCoverId := getBestImageIdForSize(episode.CoverImage.Image, p.app.cfg.ImageSize)
 
 		return &ApiResponseStatusTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
@@ -353,6 +370,10 @@ func (s *StubApiServer) Emit(ev *ApiEvent) {
 
 func (s *StubApiServer) Receive() <-chan ApiRequest {
 	return make(<-chan ApiRequest)
+}
+
+func (s *StubApiServer) Close() error {
+	return nil
 }
 
 func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
@@ -680,7 +701,7 @@ func (s *ConcreteApiServer) serve() {
 		return
 	} else if err != nil {
 		s.log.WithError(err).Error("failed serving api")
-		s.Close()
+		_ = s.Close()
 	}
 }
 
@@ -705,7 +726,7 @@ func (s *ConcreteApiServer) Receive() <-chan ApiRequest {
 	return s.requests
 }
 
-func (s *ConcreteApiServer) Close() {
+func (s *ConcreteApiServer) Close() error {
 	s.close = true
 
 	// close all websocket clients
@@ -717,4 +738,5 @@ func (s *ConcreteApiServer) Close() {
 
 	// close the listener
 	_ = s.listener.Close()
+	return nil
 }

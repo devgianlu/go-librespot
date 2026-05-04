@@ -1,4 +1,4 @@
-package main
+package daemon
 
 import (
 	"context"
@@ -731,7 +731,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 
 	// Save the volume to the state
 	p.app.state.LastVolume = &newVal
-	if err := p.app.state.Write(); err != nil {
+	if err := p.app.persistState(); err != nil {
 		p.app.log.WithError(err).Error("failed writing state after volume change")
 	}
 
