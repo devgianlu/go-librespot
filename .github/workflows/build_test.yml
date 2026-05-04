@@ -37,7 +37,7 @@ jobs:
         run: test -z "$(gofmt -l .)"
 
       - name: Build daemon
-        run: go build -v ./cmd/daemon
+        run: go build -v -o /dev/null ./cmd/daemon
 
       - name: Test
         run: go test -v -tags "test_unit test_integration" ./...
