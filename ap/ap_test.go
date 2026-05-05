@@ -2,9 +2,9 @@ package ap
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
-	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -17,36 +17,15 @@ type stubAddr string
 func (a stubAddr) Network() string { return string(a) }
 func (a stubAddr) String() string  { return string(a) }
 
-type countingConn struct {
-	mu     sync.Mutex
-	closes int
-}
-
-func (c *countingConn) Read([]byte) (int, error)         { return 0, io.EOF }
-func (c *countingConn) Write(b []byte) (int, error)      { return len(b), nil }
-func (c *countingConn) Close() error                     { c.mu.Lock(); c.closes++; c.mu.Unlock(); return nil }
-func (c *countingConn) LocalAddr() net.Addr              { return stubAddr("local") }
-func (c *countingConn) RemoteAddr() net.Addr             { return stubAddr("remote") }
-func (c *countingConn) SetDeadline(time.Time) error      { return nil }
-func (c *countingConn) SetReadDeadline(time.Time) error  { return nil }
-func (c *countingConn) SetWriteDeadline(time.Time) error { return nil }
-
-func (c *countingConn) CloseCount() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.closes
-}
-
 type blockingConn struct {
-	started sync.Once
-	startCh chan struct{}
-	blockCh chan struct{}
+	startCh  chan struct{}
+	closedCh chan struct{}
 }
 
 func newBlockingConn() *blockingConn {
 	return &blockingConn{
-		startCh: make(chan struct{}),
-		blockCh: make(chan struct{}),
+		startCh:  make(chan struct{}),
+		closedCh: make(chan struct{}),
 	}
 }
 
@@ -57,13 +36,14 @@ func (c *blockingConn) SetDeadline(time.Time) error      { return nil }
 func (c *blockingConn) SetReadDeadline(time.Time) error  { return nil }
 func (c *blockingConn) SetWriteDeadline(time.Time) error { return nil }
 
-func (c *blockingConn) Write(b []byte) (int, error) {
-	c.started.Do(func() { close(c.startCh) })
-	<-c.blockCh
-	return len(b), nil
+func (c *blockingConn) Write([]byte) (int, error) {
+	close(c.startCh)
+	<-c.closedCh
+	return 0, io.ErrClosedPipe
 }
 
 func (c *blockingConn) Close() error {
+	close(c.closedCh)
 	return nil
 }
 
@@ -117,7 +97,7 @@ func TestDoneChannelClosesOnClose(t *testing.T) {
 	}
 }
 
-func TestCloseWaitsForInFlightSend(t *testing.T) {
+func TestCloseSignalsAndUnblocksInFlightSend(t *testing.T) {
 	conn := newBlockingConn()
 	ap := NewAccesspoint(&librespot.NullLogger{}, nil, "")
 	ap.conn = conn
@@ -141,25 +121,23 @@ func TestCloseWaitsForInFlightSend(t *testing.T) {
 	}()
 
 	select {
-	case <-closeDone:
-		t.Fatal("close returned before in-flight send finished")
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	close(conn.blockCh)
-
-	select {
-	case err := <-sendDone:
-		if err != nil {
-			t.Fatalf("send error = %v", err)
-		}
+	case <-ap.Done():
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for send to finish")
+		t.Fatal("timed out waiting for done channel to close")
 	}
 
 	select {
 	case <-closeDone:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for close to finish")
+	}
+
+	select {
+	case err := <-sendDone:
+		if !errors.Is(err, ErrAccesspointClosed) {
+			t.Fatalf("expected ErrAccesspointClosed, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for send to finish")
 	}
 }

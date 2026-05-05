@@ -52,15 +52,14 @@ type Accesspoint struct {
 	encConn *shannonConn
 
 	done            chan struct{}
+	closeOnce       sync.Once
 	recvLoopOnce    sync.Once
 	recvChans       map[PacketType][]chan Packet
 	recvChansLock   sync.RWMutex
 	lastPongAck     time.Time
 	lastPongAckLock sync.Mutex
 
-	// connMu is held for writing when performing reconnection and for reading mainly when accessing welcome
-	// or sending packets. If it's not held, a valid connection (and APWelcome) is available. Be careful not to deadlock
-	// anything with this.
+	// connMu protects conn, encConn, and welcome pointer state.
 	connMu  sync.RWMutex
 	welcome *pb.APWelcome
 }
@@ -243,30 +242,34 @@ func (ap *Accesspoint) connect(ctx context.Context, creds *pb.LoginCredentials) 
 }
 
 func (ap *Accesspoint) Close() {
-	ap.connMu.Lock()
-	defer ap.connMu.Unlock()
-
-	select {
-	case <-ap.done:
-		return
-	default:
-	}
-
-	close(ap.done)
-	ap.closeConnLocked()
+	ap.closeOnce.Do(func() {
+		close(ap.done)
+		ap.closeConn()
+	})
 }
 
 func (ap *Accesspoint) Send(ctx context.Context, pktType PacketType, payload []byte) error {
 	ap.connMu.RLock()
-	defer ap.connMu.RUnlock()
-
 	select {
 	case <-ap.done:
+		ap.connMu.RUnlock()
 		return ErrAccesspointClosed
 	default:
 	}
 
-	return ap.encConn.sendPacket(ctx, pktType, payload)
+	encConn := ap.encConn
+	ap.connMu.RUnlock()
+
+	if err := encConn.sendPacket(ctx, pktType, payload); err != nil {
+		select {
+		case <-ap.done:
+			return ErrAccesspointClosed
+		default:
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
@@ -453,14 +456,12 @@ func (ap *Accesspoint) timeSinceLastPongAck() time.Duration {
 }
 
 func (ap *Accesspoint) closeConn() {
-	ap.connMu.Lock()
-	ap.closeConnLocked()
-	ap.connMu.Unlock()
-}
+	ap.connMu.RLock()
+	conn := ap.conn
+	ap.connMu.RUnlock()
 
-func (ap *Accesspoint) closeConnLocked() {
-	if ap.conn != nil {
-		_ = ap.conn.Close()
+	if conn != nil {
+		_ = conn.Close()
 	}
 }
 

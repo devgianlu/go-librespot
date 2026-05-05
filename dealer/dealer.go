@@ -33,12 +33,12 @@ type Dealer struct {
 	conn *websocket.Conn
 
 	done         chan struct{}
+	closeOnce    sync.Once
 	recvLoopOnce sync.Once
 	lastPong     time.Time
 	lastPongLock sync.Mutex
 
-	// connMu is held for writing when performing reconnection and for reading when accessing the conn.
-	// If it's not held, a valid connection is available. Be careful not to deadlock anything with this.
+	// connMu protects conn pointer state.
 	connMu sync.RWMutex
 
 	messageReceivers     []messageReceiver
@@ -113,21 +113,10 @@ func (d *Dealer) connect(ctx context.Context) error {
 }
 
 func (d *Dealer) Close() {
-	d.connMu.Lock()
-	select {
-	case <-d.done:
-		d.connMu.Unlock()
-		return
-	default:
-	}
-
-	close(d.done)
-	conn := d.conn
-	d.connMu.Unlock()
-
-	if conn != nil {
-		_ = conn.Close(websocket.StatusGoingAway, "")
-	}
+	d.closeOnce.Do(func() {
+		close(d.done)
+		d.closeConn(websocket.StatusGoingAway)
+	})
 }
 
 func (d *Dealer) startReceiving() {
@@ -336,7 +325,6 @@ func (d *Dealer) closeConnRef(conn *websocket.Conn, status websocket.StatusCode)
 
 func (d *Dealer) writeConn(ctx context.Context, typ websocket.MessageType, payload []byte) (*websocket.Conn, error) {
 	d.connMu.RLock()
-
 	select {
 	case <-d.done:
 		d.connMu.RUnlock()
@@ -345,14 +333,21 @@ func (d *Dealer) writeConn(ctx context.Context, typ websocket.MessageType, paylo
 	}
 
 	conn := d.conn
+	d.connMu.RUnlock()
 
 	if conn == nil {
-		d.connMu.RUnlock()
 		return nil, fmt.Errorf("dealer connection not established")
 	}
 
 	err := conn.Write(ctx, typ, payload)
-	d.connMu.RUnlock()
+	if err != nil {
+		select {
+		case <-d.done:
+			return conn, ErrDealerClosed
+		default:
+		}
+	}
+
 	return conn, err
 }
 
