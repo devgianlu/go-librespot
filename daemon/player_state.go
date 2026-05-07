@@ -144,12 +144,13 @@ func (p *AppPlayer) initState() {
 				SupportsSetBackendMetadata: true,
 				SupportsTransferCommand:    true,
 				SupportsCommandRequest:     true,
-				IsVoiceEnabled:             false,
+				IsVoiceEnabled:             true,
 				NeedsFullPlayerState:       false,
 				SupportsGzipPushes:         true,
 				SupportsSetOptionsCommand:  true,
 				SupportsHifi:               nil, // TODO: nice to have?
 				ConnectCapabilities:        "",
+				SupportsDj:                 true,
 			},
 		},
 	}
@@ -189,6 +190,15 @@ func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutSta
 	if p.state.lastCommand != nil {
 		putStateReq.LastCommandMessageId = p.state.lastCommand.MessageId
 		putStateReq.LastCommandSentByDeviceId = p.state.lastCommand.SentByDeviceId
+	}
+
+	// Debug: log DJ-relevant fields in player state
+	if p.state.player.PlayOrigin != nil && p.state.player.PlayOrigin.FeatureIdentifier == "dynamic-sessions" {
+		djEnabled := p.state.player.ContextMetadata["dj.interactivity_enabled"]
+		jumpBtn := p.state.player.ContextMetadata["dj.interactivity.localized_jump_button"]
+		p.app.log.Debugf("putConnectState DJ: reason=%v nextTracks=%d isPlaying=%t isBuffering=%t djEnabled=%q jumpBtn=%q contextUri=%s",
+			reason, len(p.state.player.NextTracks), p.state.player.IsPlaying, p.state.player.IsBuffering,
+			djEnabled, jumpBtn, p.state.player.ContextUri)
 	}
 
 	// finally send the state update
