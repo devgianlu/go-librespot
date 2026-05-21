@@ -66,6 +66,7 @@ const (
 	ApiRequestTypePrev                ApiRequestType = "prev"
 	ApiRequestTypeNext                ApiRequestType = "next"
 	ApiRequestTypePlay                ApiRequestType = "play"
+	ApiRequestTypeStop                ApiRequestType = "stop"
 	ApiRequestTypeGetVolume           ApiRequestType = "get_volume"
 	ApiRequestTypeSetVolume           ApiRequestType = "set_volume"
 	ApiRequestTypeSetRepeatingContext ApiRequestType = "repeating_context"
@@ -493,6 +494,14 @@ func (s *ConcreteApiServer) serve() {
 		}
 
 		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
+	})
+	m.HandleFunc("/player/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+
+		s.handleRequest(ApiRequest{Type: ApiRequestTypeStop}, w)
 	})
 	m.HandleFunc("/player/playpause", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
