@@ -479,6 +479,9 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	case ApiRequestTypePause:
 		_ = p.pause(ctx)
 		return nil, nil
+	case ApiRequestTypeStop:
+		_ = p.stopPlayback(ctx)
+		return nil, nil
 	case ApiRequestTypePlayPause:
 		if p.state.player.IsPaused {
 			_ = p.play(ctx)
