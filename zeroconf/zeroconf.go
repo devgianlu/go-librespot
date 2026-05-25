@@ -99,6 +99,14 @@ func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, de
 	return z, nil
 }
 
+func (z *Zeroconf) SetDeviceName(name string) {
+	z.deviceName = name
+
+	if err := z.registrar.UpdateName(name); err != nil {
+		z.log.WithError(err).Errorf("failed updating zeroconf service name to %q", name)
+	}
+}
+
 func (z *Zeroconf) SetCurrentUser(username string) {
 	z.userLock.Lock()
 	z.currentUser = username
