@@ -109,6 +109,22 @@ paths:
                     type: boolean
                   track:
                     $ref: '#/components/schemas/track'
+  /set_device_name:
+    post:
+      description: Set the player device name
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ name ]
+              properties:
+                name:
+                  description: The new device name
+                  type: string
+      responses:
+        200:
+          description: Successful response
   /player/play:
     post:
       description: Starts playing new content
