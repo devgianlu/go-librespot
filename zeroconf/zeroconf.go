@@ -27,6 +27,7 @@ type Zeroconf struct {
 
 	listener  net.Listener
 	registrar ServiceRegistrar
+	closed    bool
 
 	dh *dh.DiffieHellman
 
@@ -116,6 +117,11 @@ func (z *Zeroconf) SetCurrentUser(username string) {
 // Close stops the zeroconf responder and HTTP listener,
 // but does not close the last opened session.
 func (z *Zeroconf) Close() {
+	if z.closed {
+		return
+	}
+
+	z.closed = true
 	z.registrar.Shutdown()
 	_ = z.listener.Close()
 }
@@ -307,6 +313,10 @@ func (z *Zeroconf) Serve(handler HandleNewRequestFunc) error {
 	for {
 		select {
 		case err := <-serveErr:
+			if z.closed {
+				return nil
+			}
+
 			return err
 		case req := <-z.reqsChan:
 			req.result <- handler(req)
