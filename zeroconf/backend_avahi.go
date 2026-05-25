@@ -24,9 +24,14 @@ const (
 // Compatibility: Requires avahi-daemon 0.6.x or later (uses stable D-Bus API).
 // Tested with avahi 0.7 and 0.8.
 type AvahiRegistrar struct {
-	conn       *dbus.Conn
-	entryGroup dbus.BusObject
-	version    string
+	conn    *dbus.Conn
+	version string
+
+	entryGroup  dbus.BusObject
+	serviceType string
+	domain      string
+	port        int
+	txt         []string
 }
 
 // NewAvahiRegistrar creates a new avahi-daemon service registrar.
@@ -80,13 +85,15 @@ func (a *AvahiRegistrar) Register(name, serviceType, domain string, port int, tx
 	server := a.conn.Object(avahiService, avahiServerPath)
 
 	// Create a new entry group for our service
-	var groupPath dbus.ObjectPath
-	err := server.Call(avahiServerIface+".EntryGroupNew", 0).Store(&groupPath)
-	if err != nil {
-		return fmt.Errorf("failed to create entry group: %w", err)
-	}
+	if a.entryGroup == nil {
+		var groupPath dbus.ObjectPath
+		err := server.Call(avahiServerIface+".EntryGroupNew", 0).Store(&groupPath)
+		if err != nil {
+			return fmt.Errorf("failed to create entry group: %w", err)
+		}
 
-	a.entryGroup = a.conn.Object(avahiService, groupPath)
+		a.entryGroup = a.conn.Object(avahiService, groupPath)
+	}
 
 	// Convert TXT records to [][]byte format required by avahi
 	txtBytes := make([][]byte, len(txt))
@@ -104,7 +111,7 @@ func (a *AvahiRegistrar) Register(name, serviceType, domain string, port int, tx
 	// host (s): hostname, empty for default
 	// port (q): port number (uint16)
 	// txt (aay): TXT record data as array of byte arrays
-	err = a.entryGroup.Call(avahiEntryGroupIface+".AddService", 0,
+	if err := a.entryGroup.Call(avahiEntryGroupIface+".AddService", 0,
 		avahiIfUnspec,    // interface
 		avahiProtoUnspec, // protocol
 		uint32(0),        // flags
@@ -114,18 +121,30 @@ func (a *AvahiRegistrar) Register(name, serviceType, domain string, port int, tx
 		"",               // host (empty = use default hostname)
 		uint16(port),     // port
 		txtBytes,         // TXT records
-	).Err
-	if err != nil {
+	).Err; err != nil {
 		return fmt.Errorf("failed to add service: %w", err)
 	}
 
+	a.serviceType = serviceType
+	a.domain = domain
+	a.port = port
+	a.txt = txt
+
 	// Commit the entry group to publish the service
-	err = a.entryGroup.Call(avahiEntryGroupIface+".Commit", 0).Err
-	if err != nil {
+	if err := a.entryGroup.Call(avahiEntryGroupIface+".Commit", 0).Err; err != nil {
 		return fmt.Errorf("failed to commit entry group: %w", err)
 	}
 
 	return nil
+}
+
+// UpdateName updates the advertised instance service name.
+func (a *AvahiRegistrar) UpdateName(name string) error {
+	if a.entryGroup != nil {
+		_ = a.entryGroup.Call(avahiEntryGroupIface+".Reset", 0).Err
+	}
+
+	return a.Register(name, a.serviceType, a.domain, a.port, a.txt)
 }
 
 // Shutdown removes the service from avahi and releases resources.

@@ -11,6 +11,9 @@ type ServiceRegistrar interface {
 	// txt: TXT record key=value pairs
 	Register(name, serviceType, domain string, port int, txt []string) error
 
+	// UpdateName updates teh service instance name.
+	UpdateName(name string) error
+
 	// Shutdown stops advertising the service and releases resources.
 	Shutdown()
 }
