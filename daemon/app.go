@@ -146,6 +146,13 @@ func (app *App) SetDeviceName(name string) {
 // error occurs. The credential type configured in cfg.Credentials.Type
 // determines which login flow is used.
 func (app *App) Run(ctx context.Context) error {
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = app.Close()
+		}
+	}()
+
 	switch app.cfg.Credentials.Type {
 	case "zeroconf":
 		// Zeroconf mode unconditionally needs zeroconf to be enabled.
@@ -167,18 +174,22 @@ func (app *App) Close() error {
 	}
 	app.closed = true
 
-	var firstErr error
+	var errs []error
 	if app.server != nil {
-		if err := app.server.Close(); err != nil && firstErr == nil {
-			firstErr = err
+		if err := app.server.Close(); err != nil {
+			errs = append(errs, err)
 		}
 	}
 	if app.mpris != nil {
-		if err := app.mpris.Close(); err != nil && firstErr == nil {
-			firstErr = err
+		if err := app.mpris.Close(); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return firstErr
+	if app.zeroconf != nil {
+		app.zeroconf.Close()
+	}
+
+	return errors.Join(errs...)
 }
 
 func (app *App) persistState() error {
@@ -362,6 +373,14 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				if currentPlayer != nil {
+					currentPlayer.Close()
+					currentPlayer = nil
+
+					close(apiCh)
+				}
+				return
 			case p := <-app.logoutCh:
 				if p != currentPlayer {
 					continue
