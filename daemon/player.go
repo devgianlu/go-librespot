@@ -593,9 +593,19 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		return &ApiResponseToken{
 			Token: accessToken,
 		}, nil
+	case ApiRequestSetDeviceName:
+		p.setDeviceName(ctx, req.Data.(string))
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}
+}
+
+func (p *AppPlayer) setDeviceName(ctx context.Context, name string) {
+	p.app.SetDeviceName(name)
+
+	p.state.device.Name = name
+	p.updateState(ctx)
 }
 
 func pointer[T any](d T) *T {

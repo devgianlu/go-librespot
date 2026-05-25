@@ -30,6 +30,7 @@ type App struct {
 	client *http.Client
 
 	resolver *apresolve.ApResolver
+	zeroconf *zeroconf.Zeroconf
 
 	deviceId    string
 	deviceType  devicespb.DeviceType
@@ -127,6 +128,18 @@ func New(opts *Options) (*App, error) {
 	}
 
 	return app, nil
+}
+
+func (app *App) SetDeviceName(name string) {
+	if app.cfg.DeviceName == name {
+		return
+	}
+
+	app.cfg.DeviceName = name
+
+	if app.zeroconf != nil {
+		app.zeroconf.SetDeviceName(name)
+	}
 }
 
 // Run starts the daemon. It blocks until ctx is cancelled or an unrecoverable
@@ -306,7 +319,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 		return fmt.Errorf("failed getting endpoints from resolver: %w", err)
 	}
 
-	z, err := zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType, app.cfg.ZeroconfInterfacesToAdvertise, app.cfg.ZeroconfBackend == "avahi")
+	app.zeroconf, err = zeroconf.NewZeroconf(app.log, app.cfg.ZeroconfPort, app.cfg.DeviceName, app.deviceId, app.deviceType, app.cfg.ZeroconfInterfacesToAdvertise, app.cfg.ZeroconfBackend == "avahi")
 	if err != nil {
 		return fmt.Errorf("failed initializing zeroconf: %w", err)
 	}
@@ -325,7 +338,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 		apiCh = make(chan ApiRequest)
 		go currentPlayer.Run(ctx, apiCh, app.mpris.Receive())
 
-		z.SetCurrentUser(currentPlayer.sess.Username())
+		app.zeroconf.SetCurrentUser(currentPlayer.sess.Username())
 	}
 
 	go func() {
@@ -363,16 +376,16 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				if err != nil {
 					app.log.WithError(err).Errorf("failed restoring session after logout")
 
-					z.SetCurrentUser("")
+					app.zeroconf.SetCurrentUser("")
 				} else if newAppPlayer == nil {
-					z.SetCurrentUser("")
+					app.zeroconf.SetCurrentUser("")
 				} else {
 					apiCh = make(chan ApiRequest)
 					currentPlayer = newAppPlayer
 
 					go newAppPlayer.Run(ctx, apiCh, app.mpris.Receive())
 
-					z.SetCurrentUser(newAppPlayer.sess.Username())
+					app.zeroconf.SetCurrentUser(newAppPlayer.sess.Username())
 
 					app.log.WithField("username", librespot.ObfuscateUsername(currentPlayer.sess.Username())).
 						Debugf("restored session after logout")
@@ -381,7 +394,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 		}
 	}()
 
-	return z.Serve(func(req zeroconf.NewUserRequest) bool {
+	return app.zeroconf.Serve(func(req zeroconf.NewUserRequest) bool {
 		if currentPlayer != nil {
 			currentPlayer.Close()
 			currentPlayer = nil
