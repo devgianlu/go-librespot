@@ -8,5 +8,5 @@ import (
 )
 
 type Interface interface {
-	NewEventManager(log librespot.Logger, state *librespot.AppState, hg *mercury.Client, sp *spclient.Spclient, username string) (player.EventManager, error)
+	NewEventManager(log librespot.Logger, stateStore librespot.StateStore, hg *mercury.Client, sp *spclient.Spclient, username string) (player.EventManager, error)
 }
