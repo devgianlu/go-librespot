@@ -219,7 +219,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		ClientToken: app.clientToken,
 		Resolver:    app.resolver,
 		Client:      app.client,
-		AppState:    app.state,
+		StateStore:  app.stateStore,
 		Credentials: creds,
 	}); err != nil {
 		return nil, err

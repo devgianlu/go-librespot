@@ -1,10 +1,11 @@
 package session
 
 import (
+	"net/http"
+
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/apresolve"
 	devicespb "github.com/devgianlu/go-librespot/proto/spotify/connectstate/devices"
-	"net/http"
 )
 
 type Options struct {
@@ -26,8 +27,8 @@ type Options struct {
 	// Client is the HTTP client to use for the session, leave empty for a new one.
 	Client *http.Client
 
-	// AppState is the app state to use.
-	AppState *librespot.AppState
+	// StateStore is the state store to use for the session.
+	StateStore librespot.StateStore
 }
 
 type InteractiveCredentials struct {

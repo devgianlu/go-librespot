@@ -13,7 +13,7 @@ import (
 type Impl struct {
 }
 
-func (p Impl) NewEventManager(librespot.Logger, *librespot.AppState, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
+func (p Impl) NewEventManager(librespot.Logger, librespot.StateStore, *mercury.Client, *spclient.Spclient, string) (player.EventManager, error) {
 	return dummyEventManager{}, nil
 }
 
