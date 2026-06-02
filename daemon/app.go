@@ -25,7 +25,7 @@ type App struct {
 	log librespot.Logger
 	cfg *Config
 
-	stateStore StateStore
+	stateStore librespot.StateStore
 
 	client *http.Client
 
