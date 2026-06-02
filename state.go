@@ -5,6 +5,11 @@ import (
 	"sync"
 )
 
+type StateStore interface {
+	Load() (*AppState, error)
+	Save(*AppState) error
+}
+
 type AppState struct {
 	sync.Mutex
 

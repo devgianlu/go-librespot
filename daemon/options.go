@@ -9,7 +9,7 @@ import (
 type Options struct {
 	Logger     librespot.Logger
 	Config     *Config
-	StateStore StateStore
+	StateStore librespot.StateStore
 
 	APIServer   ApiServer
 	MediaPlayer mpris.Server
