@@ -253,8 +253,9 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		ExternalVolume: app.cfg.ExternalVolume,
 		VolumeUpdate:   appPlayer.volumeUpdate,
 
-		AudioOutputPipe:       app.cfg.AudioOutputPipe,
-		AudioOutputPipeFormat: app.cfg.AudioOutputPipeFormat,
+		AudioOutputPipe:            app.cfg.AudioOutputPipe,
+		AudioOutputPipeFormat:      app.cfg.AudioOutputPipeFormat,
+		AudioOutputPipePassthrough: app.cfg.AudioOutputPipePassthrough,
 	},
 	); err != nil {
 		return nil, fmt.Errorf("failed initializing player: %w", err)

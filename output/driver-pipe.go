@@ -30,6 +30,11 @@ type pipeOutput struct {
 	err          chan error
 
 	transform func([]float32, []byte) int
+
+	// passthrough writes the raw encoded stream untouched (no decode, no
+	// volume); preader is the byte source used in that mode.
+	passthrough bool
+	preader     librespot.AudioSourcePassthrough
 }
 
 func newPipeOutput(opts *NewOutputOptions) (out *pipeOutput, err error) {
@@ -39,9 +44,19 @@ func newPipeOutput(opts *NewOutputOptions) (out *pipeOutput, err error) {
 		err:            make(chan error, 2),
 		externalVolume: opts.ExternalVolume,
 		volumeUpdate:   opts.VolumeUpdate,
+		passthrough:    opts.Passthrough,
 	}
 
 	out.cond = sync.NewCond(&out.lock)
+
+	if opts.Passthrough {
+		pr, ok := opts.Reader.(librespot.AudioSourcePassthrough)
+		if !ok {
+			return nil, fmt.Errorf("passthrough requires an AudioSourcePassthrough reader")
+		}
+		out.preader = pr
+		goto openPipe
+	}
 
 	switch opts.OutputPipeFormat {
 	case "s16le":
@@ -72,6 +87,7 @@ func newPipeOutput(opts *NewOutputOptions) (out *pipeOutput, err error) {
 		return nil, fmt.Errorf("unknown output pipe format: %s", opts.OutputPipeFormat)
 	}
 
+openPipe:
 	// Open the FIFO for writing as non-blocking to cause an error if there is no reader.
 	out.file, err = os.OpenFile(opts.OutputPipe, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -83,9 +99,57 @@ func newPipeOutput(opts *NewOutputOptions) (out *pipeOutput, err error) {
 		return nil, fmt.Errorf("failed to set blocking mode on fifo: %w", err)
 	}
 
-	go out.outputLoop()
+	if out.passthrough {
+		go out.passthroughLoop()
+	} else {
+		go out.outputLoop()
+	}
 
 	return out, nil
+}
+
+// passthroughLoop mirrors outputLoop but writes the raw encoded stream from
+// preader straight to the pipe: no decode, no volume, no format transform.
+func (out *pipeOutput) passthroughLoop() {
+	buf := make([]byte, 16*1024)
+
+	for {
+		out.lock.Lock()
+
+		for out.paused && !out.closed {
+			out.cond.Wait()
+		}
+
+		if out.closed {
+			out.lock.Unlock()
+			break
+		}
+
+		n, err := out.preader.ReadBytes(buf)
+
+		if n > 0 {
+			if _, werr := out.file.Write(buf[:n]); werr != nil {
+				out.err <- werr
+				out.closed = true
+				out.lock.Unlock()
+				break
+			}
+		}
+
+		if errors.Is(err, io.EOF) {
+			// Reached EOF, move to a "paused" state.
+			out.paused = true
+		} else if err != nil {
+			out.err <- err
+			out.closed = true
+			out.lock.Unlock()
+			break
+		}
+
+		out.lock.Unlock()
+	}
+
+	_ = out.Close()
 }
 
 func (out *pipeOutput) outputLoop() {

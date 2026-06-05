@@ -34,15 +34,16 @@ type cliConfig struct {
 	DeviceType  string `koanf:"device_type"`
 	ClientToken string `koanf:"client_token"`
 
-	AudioBackend              string `koanf:"audio_backend"`
-	AudioBackendRuntimeSocket string `koanf:"audio_backend_runtime_socket"`
-	AudioDevice               string `koanf:"audio_device"`
-	MixerDevice               string `koanf:"mixer_device"`
-	MixerControlName          string `koanf:"mixer_control_name"`
-	AudioBufferTime           int    `koanf:"audio_buffer_time"`
-	AudioPeriodCount          int    `koanf:"audio_period_count"`
-	AudioOutputPipe           string `koanf:"audio_output_pipe"`
-	AudioOutputPipeFormat     string `koanf:"audio_output_pipe_format"`
+	AudioBackend               string `koanf:"audio_backend"`
+	AudioBackendRuntimeSocket  string `koanf:"audio_backend_runtime_socket"`
+	AudioDevice                string `koanf:"audio_device"`
+	MixerDevice                string `koanf:"mixer_device"`
+	MixerControlName           string `koanf:"mixer_control_name"`
+	AudioBufferTime            int    `koanf:"audio_buffer_time"`
+	AudioPeriodCount           int    `koanf:"audio_period_count"`
+	AudioOutputPipe            string `koanf:"audio_output_pipe"`
+	AudioOutputPipeFormat      string `koanf:"audio_output_pipe_format"`
+	AudioOutputPipePassthrough bool   `koanf:"audio_output_pipe_passthrough"`
 
 	Bitrate                       int      `koanf:"bitrate"`
 	VolumeSteps                   uint32   `koanf:"volume_steps"`
@@ -93,15 +94,16 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 		DeviceType:  c.DeviceType,
 		ClientToken: c.ClientToken,
 
-		AudioBackend:              c.AudioBackend,
-		AudioBackendRuntimeSocket: c.AudioBackendRuntimeSocket,
-		AudioDevice:               c.AudioDevice,
-		MixerDevice:               c.MixerDevice,
-		MixerControlName:          c.MixerControlName,
-		AudioBufferTime:           c.AudioBufferTime,
-		AudioPeriodCount:          c.AudioPeriodCount,
-		AudioOutputPipe:           c.AudioOutputPipe,
-		AudioOutputPipeFormat:     c.AudioOutputPipeFormat,
+		AudioBackend:               c.AudioBackend,
+		AudioBackendRuntimeSocket:  c.AudioBackendRuntimeSocket,
+		AudioDevice:                c.AudioDevice,
+		MixerDevice:                c.MixerDevice,
+		MixerControlName:           c.MixerControlName,
+		AudioBufferTime:            c.AudioBufferTime,
+		AudioPeriodCount:           c.AudioPeriodCount,
+		AudioOutputPipe:            c.AudioOutputPipe,
+		AudioOutputPipeFormat:      c.AudioOutputPipeFormat,
+		AudioOutputPipePassthrough: c.AudioOutputPipePassthrough,
 
 		Bitrate:                   c.Bitrate,
 		VolumeSteps:               c.VolumeSteps,

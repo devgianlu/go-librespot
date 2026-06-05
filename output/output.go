@@ -112,9 +112,17 @@ type NewOutputOptions struct {
 	//
 	// This is only supported on the pipe backend.
 	OutputPipeFormat string
+
+	// Passthrough writes the raw encoded (Ogg/Vorbis) stream to the pipe
+	// instead of decoded PCM. The Reader must implement AudioSourcePassthrough.
+	// OutputPipeFormat is ignored. Only supported on the pipe backend.
+	Passthrough bool
 }
 
 func NewOutput(options *NewOutputOptions) (Output, error) {
+	if options.Passthrough && options.Backend != "pipe" {
+		return nil, fmt.Errorf("passthrough is only supported on the pipe backend, not %q", options.Backend)
+	}
 	switch options.Backend {
 	case "alsa":
 		out, err := newAlsaOutput(options)

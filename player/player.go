@@ -41,6 +41,7 @@ type Player struct {
 	log librespot.Logger
 
 	flacEnabled               bool
+	passthrough               bool
 	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
 	normalisationPregain      float32
@@ -160,6 +161,11 @@ type Options struct {
 	//
 	// This is only supported on the pipe backend.
 	AudioOutputPipeFormat string
+
+	// AudioOutputPipePassthrough writes the raw encoded Ogg/Vorbis stream to
+	// the pipe instead of decoded PCM (no decode, no volume). Only supported
+	// on the pipe backend.
+	AudioOutputPipePassthrough bool
 }
 
 func NewPlayer(opts *Options) (*Player, error) {
@@ -170,6 +176,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		events:                    opts.Events,
 		cdnQuarantine:             make(map[string]time.Time),
 		flacEnabled:               opts.FlacEnabled,
+		passthrough:               opts.AudioOutputPipePassthrough,
 		normalisationEnabled:      opts.NormalisationEnabled,
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain:      opts.NormalisationPregain,
@@ -192,6 +199,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 				VolumeUpdate:     opts.VolumeUpdate,
 				OutputPipe:       opts.AudioOutputPipe,
 				OutputPipeFormat: opts.AudioOutputPipeFormat,
+				Passthrough:      opts.AudioOutputPipePassthrough,
 			})
 		},
 
@@ -681,23 +689,38 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 
 	audioFormat := GetAudioFileFormatAudioFormat(*file.Format)
 	if audioFormat == AudioFormatOGGVorbis {
-		audioStream, meta, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
-		if err != nil {
-			return nil, fmt.Errorf("failed reading metadata page: %w", err)
-		}
+		if p.passthrough {
+			// Passthrough: skip the Vorbis decoder and hand the raw Ogg
+			// bitstream to the pipe. The decrypted stream starts with a
+			// Spotify-specific metadata page (0x81), not Vorbis, so we still
+			// run ExtractMetadataPage and pass on the audio stream it returns
+			// (a clean Vorbis Ogg). Consecutive tracks are concatenated into a
+			// chained Ogg by the switching source, which a downstream decoder
+			// plays continuously. Normalisation/replay gain is not applied.
+			audioStream, _, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
+			if err != nil {
+				return nil, fmt.Errorf("failed reading metadata page: %w", err)
+			}
+			stream = newPassthroughSource(audioStream, audioStream.Size(), int64(media.Duration()))
+		} else {
+			audioStream, meta, err := vorbis.ExtractMetadataPage(p.log, decryptedStream, rawStream.Size())
+			if err != nil {
+				return nil, fmt.Errorf("failed reading metadata page: %w", err)
+			}
 
-		vorbisStream, err := vorbis.New(log, audioStream, meta, normalisationFactor)
-		if err != nil {
-			return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
-		}
+			vorbisStream, err := vorbis.New(log, audioStream, meta, normalisationFactor)
+			if err != nil {
+				return nil, fmt.Errorf("failed initializing ogg vorbis stream: %w", err)
+			}
 
-		if vorbisStream.SampleRate != SampleRate {
-			return nil, fmt.Errorf("unsupported sample rate: %d", vorbisStream.SampleRate)
-		} else if vorbisStream.Channels != Channels {
-			return nil, fmt.Errorf("unsupported channels: %d", vorbisStream.Channels)
-		}
+			if vorbisStream.SampleRate != SampleRate {
+				return nil, fmt.Errorf("unsupported sample rate: %d", vorbisStream.SampleRate)
+			} else if vorbisStream.Channels != Channels {
+				return nil, fmt.Errorf("unsupported channels: %d", vorbisStream.Channels)
+			}
 
-		stream = vorbisStream
+			stream = vorbisStream
+		}
 	} else if audioFormat == AudioFormatFLAC {
 		audioStream := io.NewSectionReader(decryptedStream, 0, rawStream.Size())
 		flacStream, err := flac.New(log, audioStream, normalisationFactor)
