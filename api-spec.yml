@@ -127,7 +127,12 @@ paths:
           description: Successful response
   /player/play:
     post:
-      description: Starts playing new content
+      description: >-
+        Starts playing new content. To start a context shuffled (on a random
+        track), enable shuffle first via /player/shuffle_context and then call
+        this. Calling /player/shuffle_context after play only shuffles the
+        upcoming queue and keeps the current (first) track, so play alone (or
+        shuffle after play) always begins on the context's first track.
       requestBody:
         $ref: '#/components/schemas/play'
       responses:
@@ -268,7 +273,10 @@ paths:
           description: Successful response
   /player/shuffle_context:
     post:
-      description: Toggle shuffling context
+      description: >-
+        Toggle shuffling the context. Enabling it BEFORE /player/play makes
+        playback start on a random track; enabling it after play only reshuffles
+        the upcoming queue and keeps the current (first) track.
       requestBody:
         content:
           application/json:
