@@ -13,6 +13,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -1018,8 +1019,19 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 
 	// load current track into stream
 	isDJSession := p.state.player.PlayOrigin != nil && p.state.player.PlayOrigin.FeatureIdentifier == "dynamic-sessions"
-	if err := p.loadCurrentTrack(ctx, !hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || (isDJSession && err != nil && !forceNext) {
-		p.app.log.WithError(err).Infof("skipping unplayable media: %s", uri)
+	// BAND-AID: Spotify makes a per-track, context-dependent decision on granting the legacy
+	// AES audio key. License-gated tracks are refused (AesKeyError, e.g. code 1) in ordinary
+	// playlist playback — even though they play in DJ/dynamic-session mode and on official
+	// clients, which establish a licensed context. We cannot decrypt a refused track, so skip
+	// it instead of freezing the player. Remove once proper key licensing (PlayPlay /
+	// dynamic-session context) is implemented — tracked separately.
+	var keyErr *audio.KeyProviderError
+	if err := p.loadCurrentTrack(ctx, !hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || errors.As(err, &keyErr) || (isDJSession && err != nil && !forceNext) {
+		if keyErr != nil {
+			p.app.log.WithError(err).Warnf("skipping track: Spotify refused the audio key (code %d) for this playback context: %s", keyErr.Code, uri)
+		} else {
+			p.app.log.WithError(err).Infof("skipping unplayable media: %s", uri)
+		}
 		if forceNext {
 			if isDJSession {
 				// Two consecutive unplayable DJ tracks (e.g. back-to-back narration clips).
