@@ -14,6 +14,8 @@ type SwitchingAudioSource struct {
 	cond   *sync.Cond
 
 	done chan struct{}
+
+	eofReported bool
 }
 
 func NewSwitchingAudioSource() *SwitchingAudioSource {
@@ -28,6 +30,7 @@ func (s *SwitchingAudioSource) SetPrimary(source librespot.AudioSource) {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 	s.source[s.which] = source
+	s.eofReported = false
 	s.cond.Broadcast()
 }
 
@@ -53,7 +56,14 @@ func (s *SwitchingAudioSource) Read(p []float32) (n int, err error) {
 	n, err = s.source[s.which].Read(p)
 	if errors.Is(err, io.EOF) {
 		// notify this source is done
-		s.done <- struct{}{}
+		if !s.eofReported {
+			s.eofReported = true
+
+			select {
+			case s.done <- struct{}{}:
+			default:
+			}
+		}
 
 		// if there's no other source just let the EOF through
 		if s.source[!s.which] == nil {
