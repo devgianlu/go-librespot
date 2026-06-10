@@ -411,24 +411,33 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 	p.state.player.Index = ctxTracks.Index()
 
-	// load current track into stream. If the very first track of the context is unplayable
-	// (restricted/unsupported, or Spotify refused its audio key — see advanceNext), skip
-	// forward to the next playable one instead of failing the whole load. Without this, a
-	// cast/transfer that lands on a refused track freezes the player (advanceNext's skip only
-	// covers track-to-track advancement, not the initial context load).
-	var keyErr *audio.KeyProviderError
-	if err := p.loadCurrentTrack(ctx, paused, drop); err != nil {
-		if errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || errors.As(err, &keyErr) {
-			p.app.log.WithError(err).Warnf("first context track unplayable, skipping forward: %s", p.state.player.Track.Uri)
-			if _, aerr := p.advanceNext(ctx, true, drop); aerr != nil {
-				return fmt.Errorf("failed advancing past unplayable context track: %w", aerr)
-			}
-			return nil
-		}
+	// load current track into stream — skip forward if it (or a run of tracks) is unplayable.
+	if err := p.loadCurrentTrackOrSkip(ctx, paused, drop); err != nil {
 		return fmt.Errorf("failed loading current track (load context): %w", err)
 	}
 
 	return nil
+}
+
+// loadCurrentTrackOrSkip loads the current track; if it is unplayable (restricted/unsupported,
+// or Spotify refused its audio key), it advances forward to the first playable track instead of
+// returning the error — so a transfer/cast/context-load that lands on a refused track does not
+// freeze the player. advanceNext walks through a run of unplayable tracks (bounded). Non-
+// skippable failures and "ran out of tracks" are returned as-is.
+func (p *AppPlayer) loadCurrentTrackOrSkip(ctx context.Context, paused, drop bool) error {
+	err := p.loadCurrentTrack(ctx, paused, drop)
+	if err == nil {
+		return nil
+	}
+	var keyErr *audio.KeyProviderError
+	if errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || errors.As(err, &keyErr) {
+		p.app.log.WithError(err).Warnf("current track unplayable, skipping forward: %s", p.state.player.Track.Uri)
+		if _, aerr := p.advanceNext(ctx, true, drop); aerr != nil {
+			return fmt.Errorf("failed advancing past unplayable track: %w", aerr)
+		}
+		return nil
+	}
+	return err
 }
 
 func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) error {

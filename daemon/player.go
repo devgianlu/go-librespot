@@ -581,8 +581,9 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 		p.state.player.Index = ctxTracks.Index()
 
-		// load current track into stream
-		if err := p.loadCurrentTrack(ctx, pause, true); err != nil {
+		// load current track into stream — skip forward if the transferred track is unplayable
+		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
+		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
 			return fmt.Errorf("failed loading current track (transfer): %w", err)
 		}
 
