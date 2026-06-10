@@ -72,6 +72,13 @@ type AppPlayer struct {
 	// This lets the ClusterUpdate handler distinguish "transitioning into DJ" (should load)
 	// from "already playing music within DJ" (should not reload).
 	djAwaitingLoad bool
+
+	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
+	// skip past (Spotify-refused audio keys / restricted media) before giving up — so a run
+	// of refused tracks (even at the very start of a playlist, or with RepeatingContext on)
+	// advances to the first playable one instead of freezing, and can never loop forever.
+	// Reset to 0 on any successful load.
+	consecutiveUnplayableSkips int
 }
 
 func (p *AppPlayer) playbackReady() bool {

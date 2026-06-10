@@ -411,8 +411,20 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 	p.state.player.Index = ctxTracks.Index()
 
-	// load current track into stream
+	// load current track into stream. If the very first track of the context is unplayable
+	// (restricted/unsupported, or Spotify refused its audio key — see advanceNext), skip
+	// forward to the next playable one instead of failing the whole load. Without this, a
+	// cast/transfer that lands on a refused track freezes the player (advanceNext's skip only
+	// covers track-to-track advancement, not the initial context load).
+	var keyErr *audio.KeyProviderError
 	if err := p.loadCurrentTrack(ctx, paused, drop); err != nil {
+		if errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || errors.As(err, &keyErr) {
+			p.app.log.WithError(err).Warnf("first context track unplayable, skipping forward: %s", p.state.player.Track.Uri)
+			if _, aerr := p.advanceNext(ctx, true, drop); aerr != nil {
+				return fmt.Errorf("failed advancing past unplayable context track: %w", aerr)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed loading current track (load context): %w", err)
 	}
 
@@ -897,6 +909,10 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 	}
 }
 
+// maxConsecutiveUnplayableSkips caps how many refused/restricted tracks advanceNext will skip
+// past in a row before stopping, so a fully-gated context can't loop forever.
+const maxConsecutiveUnplayableSkips = 50
+
 func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool, error) {
 	var uri string
 	var hasNextTrack bool
@@ -1032,29 +1048,38 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 		} else {
 			p.app.log.WithError(err).Infof("skipping unplayable media: %s", uri)
 		}
-		if forceNext {
-			if isDJSession {
-				// Two consecutive unplayable DJ tracks (e.g. back-to-back narration clips).
-				// Signal Spotify for a fresh queue rather than failing hard.
-				p.app.log.WithError(err).Warnf("DJ: consecutive unplayable tracks, signaling Spotify for more")
-				p.player.Stop()
-				p.primaryStream = nil
-				p.secondaryStream = nil
-				p.state.player.IsPlaying = false
-				p.state.player.IsBuffering = false
-				p.djAwaitingLoad = true
-				p.updateState(ctx)
-				return false, nil
-			}
-			// we failed in finding another track to play, just stop
-			return false, err
+		if isDJSession && forceNext {
+			// Two consecutive unplayable DJ tracks (e.g. back-to-back narration clips).
+			// Signal Spotify for a fresh queue rather than failing hard.
+			p.app.log.WithError(err).Warnf("DJ: consecutive unplayable tracks, signaling Spotify for more")
+			p.player.Stop()
+			p.primaryStream = nil
+			p.secondaryStream = nil
+			p.state.player.IsPlaying = false
+			p.state.player.IsBuffering = false
+			p.djAwaitingLoad = true
+			p.consecutiveUnplayableSkips = 0
+			p.updateState(ctx)
+			return false, nil
 		}
 
+		// Walk forward through a run of unplayable tracks — a non-DJ playlist where the first
+		// (or several) tracks are refused, or a DJ session's first skip — bounded so a fully
+		// gated or RepeatingContext context advances to the first playable track instead of
+		// freezing, and can never recurse forever.
+		p.consecutiveUnplayableSkips++
+		if p.consecutiveUnplayableSkips > maxConsecutiveUnplayableSkips {
+			p.app.log.WithError(err).Warnf("stopping after %d consecutive unplayable tracks", p.consecutiveUnplayableSkips)
+			p.consecutiveUnplayableSkips = 0
+			return false, err
+		}
 		return p.advanceNext(ctx, true, drop)
 	} else if err != nil {
+		p.consecutiveUnplayableSkips = 0
 		return false, fmt.Errorf("failed loading current track (advance to %s): %w", uri, err)
 	}
 
+	p.consecutiveUnplayableSkips = 0
 	return hasNextTrack, nil
 }
 
