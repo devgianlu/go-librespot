@@ -13,6 +13,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
@@ -290,12 +291,33 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 	p.state.player.Index = ctxTracks.Index()
 
-	// load current track into stream
-	if err := p.loadCurrentTrack(ctx, paused, drop); err != nil {
+	// load current track into stream — skip forward if it (or a run of tracks) is unplayable.
+	if err := p.loadCurrentTrackOrSkip(ctx, paused, drop); err != nil {
 		return fmt.Errorf("failed loading current track (load context): %w", err)
 	}
 
 	return nil
+}
+
+// loadCurrentTrackOrSkip loads the current track; if it is unplayable (restricted/unsupported,
+// or Spotify refused its audio key), it advances forward to the first playable track instead of
+// returning the error — so a transfer/cast/context-load that lands on a refused track does not
+// freeze the player. advanceNext walks through a run of unplayable tracks (bounded). Non-
+// skippable failures and "ran out of tracks" are returned as-is.
+func (p *AppPlayer) loadCurrentTrackOrSkip(ctx context.Context, paused, drop bool) error {
+	err := p.loadCurrentTrack(ctx, paused, drop)
+	if err == nil {
+		return nil
+	}
+	var keyErr *audio.KeyProviderError
+	if errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || errors.As(err, &keyErr) {
+		p.app.log.WithError(err).Warnf("current track unplayable, skipping forward: %s", p.state.player.Track.Uri)
+		if _, aerr := p.advanceNext(ctx, true, drop); aerr != nil {
+			return fmt.Errorf("failed advancing past unplayable track: %w", aerr)
+		}
+		return nil
+	}
+	return err
 }
 
 func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) error {
@@ -620,6 +642,10 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 	}
 }
 
+// maxConsecutiveUnplayableSkips caps how many refused/restricted tracks advanceNext will skip
+// past in a row before stopping, so a fully-gated context can't loop forever.
+const maxConsecutiveUnplayableSkips = 50
+
 func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool, error) {
 	var uri string
 	var hasNextTrack bool
@@ -696,19 +722,37 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 		p.state.player.IsBuffering = false
 	}
 
-	// load current track into stream
-	if err := p.loadCurrentTrack(ctx, !hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) {
-		p.app.log.WithError(err).Infof("skipping unplayable media: %s", uri)
-		if forceNext {
-			// we failed in finding another track to play, just stop
-			return false, err
+	// load current track into stream.
+	//
+	// BAND-AID: Spotify makes a per-track, context-dependent decision on granting the legacy
+	// AES audio key. License-gated tracks are refused (AesKeyError, e.g. code 1) in ordinary
+	// playlist playback — even though they play on official clients, which establish a licensed
+	// context. We cannot decrypt a refused track, so skip it instead of freezing the player.
+	// Remove once proper key licensing (PlayPlay) is implemented — tracked separately.
+	var keyErr *audio.KeyProviderError
+	if err := p.loadCurrentTrack(ctx, !hasNextTrack, drop); errors.Is(err, librespot.ErrMediaRestricted) || errors.Is(err, librespot.ErrNoSupportedFormats) || errors.As(err, &keyErr) {
+		if keyErr != nil {
+			p.app.log.WithError(err).Warnf("skipping track: Spotify refused the audio key (code %d) for this playback context: %s", keyErr.Code, uri)
+		} else {
+			p.app.log.WithError(err).Infof("skipping unplayable media: %s", uri)
 		}
 
+		// Walk forward through a run of unplayable tracks (a context whose first — or several —
+		// tracks are refused), bounded so a fully gated or RepeatingContext context advances to
+		// the first playable track instead of freezing, and can never recurse forever.
+		p.consecutiveUnplayableSkips++
+		if p.consecutiveUnplayableSkips > maxConsecutiveUnplayableSkips {
+			p.app.log.WithError(err).Warnf("stopping after %d consecutive unplayable tracks", p.consecutiveUnplayableSkips)
+			p.consecutiveUnplayableSkips = 0
+			return false, err
+		}
 		return p.advanceNext(ctx, true, drop)
 	} else if err != nil {
+		p.consecutiveUnplayableSkips = 0
 		return false, fmt.Errorf("failed loading current track (advance to %s): %w", uri, err)
 	}
 
+	p.consecutiveUnplayableSkips = 0
 	return hasNextTrack, nil
 }
 
