@@ -55,6 +55,12 @@ type AppPlayer struct {
 	secondaryStream *player.Stream
 
 	prefetchTimer *time.Timer
+
+	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
+	// skip past (Spotify-refused audio keys / restricted media) before giving up — so a run
+	// of refused tracks (even at the very start of a context) advances to the first playable
+	// one instead of freezing, and can never loop forever. Reset to 0 on any successful load.
+	consecutiveUnplayableSkips int
 }
 
 func (p *AppPlayer) playbackReady() bool {
@@ -271,8 +277,9 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 		p.state.player.Index = ctxTracks.Index()
 
-		// load current track into stream
-		if err := p.loadCurrentTrack(ctx, pause, true); err != nil {
+		// load current track into stream — skip forward if the transferred track is unplayable
+		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
+		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
 			return fmt.Errorf("failed loading current track (transfer): %w", err)
 		}
 
