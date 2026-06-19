@@ -65,7 +65,7 @@ func NewZeroconf(log librespot.Logger, port int, deviceName, deviceId string, de
 
 	// Select the mDNS backend based on configuration
 	if useAvahi {
-		avahiReg, err := NewAvahiRegistrar()
+		avahiReg, err := NewAvahiRegistrar(log)
 		if err != nil {
 			_ = z.listener.Close()
 			return nil, fmt.Errorf("failed initializing avahi registrar: %w", err)
