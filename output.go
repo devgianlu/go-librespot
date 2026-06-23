@@ -16,3 +16,16 @@ type AudioSource interface {
 	// Read reads 32bit little endian floats from the stream
 	Read([]float32) (int, error)
 }
+
+// AudioSourcePassthrough is an AudioSource that can additionally hand out the
+// raw encoded (Ogg/Vorbis) bytes instead of decoded float32 samples. It backs
+// the pipe backend's passthrough mode: the decoder is bypassed and the
+// container is written to the pipe untouched, so a downstream consumer (e.g.
+// a hardware decoder) does the decoding. ReadBytes and Read must not be mixed
+// on the same source.
+type AudioSourcePassthrough interface {
+	AudioSource
+
+	// ReadBytes reads the raw encoded stream until EOF.
+	ReadBytes([]byte) (int, error)
+}
