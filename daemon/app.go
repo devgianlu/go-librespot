@@ -239,6 +239,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		NormalisationUseAlbumGain: app.cfg.NormalisationUseAlbumGain,
 		NormalisationPregain:      app.cfg.NormalisationPregain,
 
+		CrossfadeDuration: time.Duration(app.cfg.CrossfadeDuration) * time.Millisecond,
+
 		CountryCode: appPlayer.countryCode,
 
 		AudioBackend:              app.cfg.AudioBackend,

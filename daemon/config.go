@@ -24,6 +24,7 @@ type Config struct {
 	NormalisationDisabled     bool
 	NormalisationUseAlbumGain bool
 	NormalisationPregain      float32
+	CrossfadeDuration         int
 	ExternalVolume            bool
 	DisableAutoplay           bool
 

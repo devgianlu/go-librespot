@@ -281,6 +281,12 @@
           "description": "The normalisation pregain to apply to track/album normalisation factors",
           "default": 0
         },
+        "crossfade_duration": {
+          "type": "integer",
+          "description": "Crossfade duration between tracks in milliseconds, 0 to disable",
+          "default": 0,
+          "minimum": 0
+        },
         "external_volume": {
           "type": "boolean",
           "description": "Whether volume is controlled externally, if true the app will not pre-multiply samples",
