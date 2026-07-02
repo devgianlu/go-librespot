@@ -40,6 +40,7 @@ func ptr[T any](v T) *T {
 type Player struct {
 	log librespot.Logger
 
+	crossfadeSamples          int
 	flacEnabled               bool
 	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
@@ -109,6 +110,10 @@ type Options struct {
 	// in dB. Use negative values to avoid clipping.
 	NormalisationPregain float32
 
+	// CrossfadeDuration specifies for how long tracks should overlap during
+	// a track change. Zero disables crossfading.
+	CrossfadeDuration time.Duration
+
 	// CountryCode specifies the country code to use for media restrictions.
 	CountryCode *string
 
@@ -165,6 +170,7 @@ type Options struct {
 func NewPlayer(opts *Options) (*Player, error) {
 	p := &Player{
 		log:                       opts.Log,
+		crossfadeSamples:          int(opts.CrossfadeDuration*SampleRate/time.Second) * Channels,
 		sp:                        opts.Spclient,
 		audioKey:                  opts.AudioKey,
 		events:                    opts.Events,
@@ -213,7 +219,7 @@ func (p *Player) manageLoop() {
 	volume := float32(1)
 
 	// init main source
-	source := NewSwitchingAudioSource()
+	source := NewSwitchingAudioSource(p.crossfadeSamples)
 
 loop:
 	for {
