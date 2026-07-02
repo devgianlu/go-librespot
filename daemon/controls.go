@@ -27,12 +27,22 @@ func (p *AppPlayer) prefetchNext(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	next := p.state.tracks.PeekNext(ctx)
-	if next == nil {
-		return
+	var nextUri string
+	if p.state.player.Options.RepeatingTrack {
+		// With repeat-track enabled the next thing to play is this same
+		// track again; prefetch it like any other upcoming track so the
+		// transition (including a crossfade) is seamless.
+		nextUri = p.state.player.Track.GetUri()
+	} else {
+		next := p.state.tracks.PeekNext(ctx)
+		if next == nil {
+			return
+		}
+
+		nextUri = next.Uri
 	}
 
-	if next.Uri == "" {
+	if nextUri == "" {
 		// It should be implemented some day (the ContextTrack has enough
 		// information to infer the track Uri) but it's hard to reproduce this
 		// issue.
@@ -40,9 +50,9 @@ func (p *AppPlayer) prefetchNext(ctx context.Context) {
 		return
 	}
 
-	nextId, err := librespot.SpotifyIdFromUri(next.Uri)
+	nextId, err := librespot.SpotifyIdFromUri(nextUri)
 	if err != nil {
-		p.app.log.WithError(err).WithField("uri", next.Uri).Warn("failed parsing prefetch uri")
+		p.app.log.WithError(err).WithField("uri", nextUri).Warn("failed parsing prefetch uri")
 		return
 	} else if p.secondaryStream != nil && p.secondaryStream.Is(*nextId) {
 		return
@@ -360,7 +370,11 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 		p.secondaryStream = nil
 		prefetched = true
 	} else {
+		// The prefetched stream (if any) is not the track being loaded: clear
+		// it from the player too, so an upcoming track change cannot switch
+		// or fade into a stale stream.
 		p.secondaryStream = nil
+		p.player.SetSecondaryStream(nil)
 		prefetched = false
 
 		var err error
@@ -448,6 +462,12 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 	}
 
 	if requiresUpdate {
+		// Repeat/shuffle changes alter which track comes next; a stream
+		// prefetched under the old plan must not be switched or faded into.
+		p.secondaryStream = nil
+		p.player.SetSecondaryStream(nil)
+		p.schedulePrefetchNext()
+
 		p.updateState(ctx)
 	}
 }
@@ -468,6 +488,11 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 	p.updateState(ctx)
+
+	// The queued track plays next: a stream prefetched under the old plan
+	// must not be switched or faded into.
+	p.secondaryStream = nil
+	p.player.SetSecondaryStream(nil)
 	p.schedulePrefetchNext()
 }
 
@@ -481,6 +506,11 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, next)
 	p.updateState(ctx)
+
+	// The upcoming track may have changed: a stream prefetched under the old
+	// plan must not be switched or faded into.
+	p.secondaryStream = nil
+	p.player.SetSecondaryStream(nil)
 	p.schedulePrefetchNext()
 }
 

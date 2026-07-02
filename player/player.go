@@ -40,6 +40,7 @@ func ptr[T any](v T) *T {
 type Player struct {
 	log librespot.Logger
 
+	crossfadeSamples          int
 	flacEnabled               bool
 	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
@@ -109,6 +110,10 @@ type Options struct {
 	// in dB. Use negative values to avoid clipping.
 	NormalisationPregain float32
 
+	// CrossfadeDuration specifies for how long tracks should overlap during
+	// a track change. Zero disables crossfading.
+	CrossfadeDuration time.Duration
+
 	// CountryCode specifies the country code to use for media restrictions.
 	CountryCode *string
 
@@ -165,6 +170,7 @@ type Options struct {
 func NewPlayer(opts *Options) (*Player, error) {
 	p := &Player{
 		log:                       opts.Log,
+		crossfadeSamples:          int(opts.CrossfadeDuration*SampleRate/time.Second) * Channels,
 		sp:                        opts.Spclient,
 		audioKey:                  opts.AudioKey,
 		events:                    opts.Events,
@@ -213,7 +219,7 @@ func (p *Player) manageLoop() {
 	volume := float32(1)
 
 	// init main source
-	source := NewSwitchingAudioSource()
+	source := NewSwitchingAudioSource(p.crossfadeSamples)
 
 loop:
 	for {
@@ -577,6 +583,10 @@ func (p *Player) getUnrestrictedTrack(ctx context.Context, spotId librespot.Spot
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := p.log.WithField("uri", spotId.Uri())
 
+	// Remember the id the caller asked for: spotId is reassigned below when a
+	// restricted track is relinked to an alternative.
+	requestedId := spotId
+
 	playbackId := make([]byte, 16)
 	_, _ = rand.Read(playbackId)
 
@@ -723,5 +733,5 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 	}
 
-	return &Stream{PlaybackId: playbackId, Source: stream, Media: media, File: file}, nil
+	return &Stream{PlaybackId: playbackId, RequestedId: requestedId, Source: stream, Media: media, File: file}, nil
 }
