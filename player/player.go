@@ -583,6 +583,10 @@ func (p *Player) getUnrestrictedTrack(ctx context.Context, spotId librespot.Spot
 func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId librespot.SpotifyId, bitrate int, mediaPosition int64) (*Stream, error) {
 	log := p.log.WithField("uri", spotId.Uri())
 
+	// Remember the id the caller asked for: spotId is reassigned below when a
+	// restricted track is relinked to an alternative.
+	requestedId := spotId
+
 	playbackId := make([]byte, 16)
 	_, _ = rand.Read(playbackId)
 
@@ -729,5 +733,5 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 	}
 
-	return &Stream{PlaybackId: playbackId, Source: stream, Media: media, File: file}, nil
+	return &Stream{PlaybackId: playbackId, RequestedId: requestedId, Source: stream, Media: media, File: file}, nil
 }
