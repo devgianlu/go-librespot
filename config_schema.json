@@ -165,6 +165,27 @@
             }
           }
         },
+        "cache": {
+          "type": "object",
+          "description": "On-disk cache for downloaded (encrypted) audio files",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether to cache downloaded audio files on disk to avoid re-downloading them from the CDN",
+              "default": true
+            },
+            "dir": {
+              "type": "string",
+              "description": "Directory to store cached audio files (defaults to a 'cache' subdirectory of the config directory)",
+              "default": ""
+            },
+            "size_limit": {
+              "type": "string",
+              "description": "Maximum total size of the audio cache before the least-recently-used files are evicted (e.g. '1GB', '500MB'; '0' for unlimited)",
+              "default": "1GB"
+            }
+          }
+        },
         "zeroconf_enabled": {
           "type": "boolean",
           "description": "Whether Zeroconf discovery should always be enabled (even when logging in with credentials)",
