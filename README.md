@@ -158,6 +158,20 @@ server:
 
 For detailed API documentation see [here](/API.md).
 
+### Audio cache
+
+Downloaded audio files are cached on disk so that replaying a track does not download it again from the CDN. Only the
+raw, still-encrypted files are stored: a cached file is useless without a valid Spotify account, since the audio key is
+retrieved again on every playback. The cache is enabled by default with a 1 GB limit, after which the least-recently-used
+files are evicted.
+
+```yaml
+cache:
+  enabled: true # Whether to cache downloaded audio files (default: true)
+  dir: '' # Directory for cached files (default: a 'cache' subdirectory of the config directory)
+  size_limit: '1GB' # Maximum total cache size before evicting least-recently-used files ('0' for unlimited)
+```
+
 ### Volume synchronization
 
 Various configurations for volume control are available:
