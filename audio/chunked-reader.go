@@ -72,6 +72,11 @@ type HttpChunkedReader struct {
 	ctx        context.Context
 	cancel     context.CancelFunc
 
+	completeMu      sync.Mutex
+	completedChunks int
+	onComplete      func(io.ReaderAt, int64)
+	onCompleteFired bool
+
 	latMu     sync.Mutex
 	latencies []time.Duration
 }
@@ -122,6 +127,9 @@ func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl st
 	if err != nil {
 		return nil, fmt.Errorf("failed reading first chunk: %w", err)
 	}
+
+	// The first chunk is fetched eagerly here, so count it towards completion.
+	r.completedChunks = 1
 
 	log.Debugf("fetched first chunk of %d, total size is %d bytes", len(r.chunks), r.len)
 	return r, nil
@@ -230,6 +238,8 @@ func (r *HttpChunkedReader) fetchChunk(idx int) ([]byte, error) {
 	chunk.fetching = false
 	chunk.Broadcast()
 	chunk.L.Unlock()
+
+	r.markChunkComplete()
 
 	r.log.Debugf("fetched chunk %d/%d, size: %d", idx, len(r.chunks)-1, len(data))
 	if r.isClosed() {
@@ -372,6 +382,39 @@ func (r *HttpChunkedReader) latencySnapshot() []time.Duration {
 
 func (r *HttpChunkedReader) Size() int64 {
 	return r.len
+}
+
+// OnComplete registers a callback invoked once, in a separate goroutine, as
+// soon as every chunk has been downloaded. The callback receives the reader as
+// an io.ReaderAt (serving the fully-buffered chunks) and the total size, which
+// allows the complete encrypted file to be persisted to a cache. If the file is
+// already fully downloaded, the callback fires immediately.
+func (r *HttpChunkedReader) OnComplete(cb func(io.ReaderAt, int64)) {
+	r.completeMu.Lock()
+	r.onComplete = cb
+	r.maybeFireComplete()
+	r.completeMu.Unlock()
+}
+
+// markChunkComplete records that one more chunk finished downloading and fires
+// the completion callback when all chunks are present.
+func (r *HttpChunkedReader) markChunkComplete() {
+	r.completeMu.Lock()
+	r.completedChunks++
+	r.maybeFireComplete()
+	r.completeMu.Unlock()
+}
+
+// maybeFireComplete fires the completion callback exactly once. The caller must
+// hold completeMu.
+func (r *HttpChunkedReader) maybeFireComplete() {
+	if r.onCompleteFired || r.onComplete == nil || r.completedChunks < len(r.chunks) {
+		return
+	}
+
+	r.onCompleteFired = true
+	cb := r.onComplete
+	go cb(r, r.len)
 }
 
 func (r *HttpChunkedReader) Url() *url.URL {

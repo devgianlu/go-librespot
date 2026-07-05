@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/devgianlu/go-librespot/daemon"
@@ -72,6 +73,12 @@ type cliConfig struct {
 		ImageSize string `koanf:"image_size"`
 	} `koanf:"server"`
 
+	Cache struct {
+		Enabled   bool   `koanf:"enabled"`
+		Dir       string `koanf:"dir"`
+		SizeLimit string `koanf:"size_limit"`
+	} `koanf:"cache"`
+
 	Credentials struct {
 		Type        string `koanf:"type"`
 		Interactive struct {
@@ -123,6 +130,13 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 		FlacEnabled: c.FlacEnabled,
 		ImageSize:   c.Server.ImageSize,
 	}
+	dc.Cache.Enabled = c.Cache.Enabled
+	dc.Cache.Dir = c.Cache.Dir
+	if dc.Cache.Dir == "" {
+		dc.Cache.Dir = filepath.Join(c.ConfigDir, "cache")
+	}
+	// The value is validated in loadCLIConfig, so the error is unreachable here.
+	dc.Cache.SizeLimit, _ = parseSize(c.Cache.SizeLimit)
 	dc.Credentials.Type = c.Credentials.Type
 	dc.Credentials.Interactive.CallbackPort = c.Credentials.Interactive.CallbackPort
 	dc.Credentials.SpotifyToken.Username = c.Credentials.SpotifyToken.Username
@@ -181,6 +195,9 @@ func loadCLIConfig(cfg *cliConfig) error {
 
 		"credentials.type": "zeroconf",
 
+		"cache.enabled":    true,
+		"cache.size_limit": "1GB",
+
 		"zeroconf_backend": "builtin",
 
 		"server.address":    "localhost",
@@ -236,5 +253,48 @@ func loadCLIConfig(cfg *cliConfig) error {
 		}
 	}
 
+	if _, err := parseSize(cfg.Cache.SizeLimit); err != nil {
+		return fmt.Errorf("invalid cache.size_limit: %w", err)
+	}
+
 	return nil
+}
+
+// parseSize parses a human-readable size string such as "1GB", "500MB" or a
+// plain byte count. An empty string or "0" means no limit (returns 0).
+func parseSize(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+
+	upper := strings.ToUpper(s)
+	var multiplier int64 = 1
+	// Ordered longest-first so "GB" is matched before the "B" suffix.
+	for _, unit := range []struct {
+		suffix string
+		factor int64
+	}{
+		{"TB", 1 << 40},
+		{"GB", 1 << 30},
+		{"MB", 1 << 20},
+		{"KB", 1 << 10},
+		{"B", 1},
+	} {
+		if strings.HasSuffix(upper, unit.suffix) {
+			multiplier = unit.factor
+			upper = strings.TrimSpace(strings.TrimSuffix(upper, unit.suffix))
+			break
+		}
+	}
+
+	value, err := strconv.ParseFloat(upper, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size %q", s)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("size cannot be negative: %q", s)
+	}
+
+	return int64(value * float64(multiplier)), nil
 }

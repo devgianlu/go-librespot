@@ -39,7 +39,21 @@ type Config struct {
 	// "default", "small", "medium", "large", "xlarge".
 	ImageSize string
 
+	Cache CacheConfig
+
 	Credentials CredentialsConfig
+}
+
+// CacheConfig configures the on-disk cache for downloaded (encrypted) audio
+// files.
+type CacheConfig struct {
+	// Enabled turns the audio file cache on or off.
+	Enabled bool
+	// Dir is the directory the cache is stored in.
+	Dir string
+	// SizeLimit is the maximum total size of the cached audio files in bytes.
+	// A value of zero disables eviction (unbounded cache).
+	SizeLimit int64
 }
 
 type CredentialsConfig struct {
