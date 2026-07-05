@@ -44,6 +44,39 @@ func TestEvictsLeastRecentlyUsed(t *testing.T) {
 	require.LessOrEqual(t, c.limiter.inUse, int64(25))
 }
 
+func TestRecencySurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	a := []byte{0x0a}
+	b := []byte{0x0b}
+	payload := bytes.Repeat([]byte("x"), 10)
+
+	c1, err := New(&librespot.NullLogger{}, dir, 100)
+	require.NoError(t, err)
+	require.NoError(t, c1.SaveFile(a, bytes.NewReader(payload)))
+	require.NoError(t, c1.SaveFile(b, bytes.NewReader(payload)))
+
+	// Age both files on disk, then access b: reading must persist the access
+	// time to disk, not just in memory.
+	old := time.Now().Add(-time.Hour)
+	require.NoError(t, os.Chtimes(c1.filePath(a), old, old))
+	require.NoError(t, os.Chtimes(c1.filePath(b), old.Add(-time.Hour), old.Add(-time.Hour)))
+
+	r, ok := c1.File(b)
+	require.True(t, ok)
+	_ = r.(interface{ Close() error }).Close()
+
+	// A fresh instance over the same directory, with a limit fitting only one
+	// file, must evict a (stale) and keep b (recently accessed), even though b
+	// was written last... i.e. the LRU order reflects access, not write order.
+	c2, err := New(&librespot.NullLogger{}, dir, 15)
+	require.NoError(t, err)
+
+	_, ok = c2.File(a)
+	require.False(t, ok, "stale file should have been evicted on startup")
+	_, ok = c2.File(b)
+	require.True(t, ok, "recently accessed file should survive a restart")
+}
+
 func TestNoEvictionWithoutLimit(t *testing.T) {
 	c := newTestCache(t, 0)
 	require.Nil(t, c.limiter)

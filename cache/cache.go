@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 )
@@ -82,6 +83,12 @@ func (c *Cache) File(fileId []byte) (librespot.SizedReadAtSeeker, bool) {
 	if c.limiter != nil {
 		c.limiter.touch(path)
 	}
+
+	// Persist the access on disk as well (like librespot does with filetime):
+	// the limiter seeds recency from the modification time on startup, so
+	// without this the LRU order would not survive a restart. Best-effort.
+	now := time.Now()
+	_ = os.Chtimes(path, now, now)
 
 	return &fileReader{File: f, size: fi.Size()}, true
 }
