@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -25,6 +26,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 )
 
@@ -38,6 +40,11 @@ type AppPlayer struct {
 	player            *player.Player
 	initialVolumeOnce sync.Once
 	volumeUpdate      chan float32
+
+	stateTimer        *time.Timer
+	stateDirty        bool
+	statePutScheduled bool
+	lastStatePut      time.Time
 
 	spotConnId string
 
@@ -711,6 +718,9 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 	volumeTimer := time.NewTimer(time.Minute)
 	volumeTimer.Stop() // don't emit a volume change event at start
 
+	p.stateTimer = time.NewTimer(time.Minute)
+	p.stateTimer.Stop() // armed on demand by updateState
+
 	for {
 		select {
 		case <-p.stop:
@@ -785,6 +795,30 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 		case <-volumeTimer.C:
 			// We've gone some time without update, send the new value now.
 			p.volumeUpdated(ctx)
+		case <-p.stateTimer.C:
+			p.statePutScheduled = false
+			if !p.stateDirty {
+				break
+			}
+			p.flushState(ctx)
+		}
+	}
+}
+
+// flushState PUTs the latest connect-state and records the send time. On a rate-limit it
+// schedules a coalesced resend after the cooldown. Runs on the Run goroutine.
+func (p *AppPlayer) flushState(ctx context.Context) {
+	p.stateDirty = false
+	p.lastStatePut = time.Now()
+	if err := p.putConnectState(ctx, connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
+		p.app.log.WithError(err).Error("failed put state after update")
+
+		// Rate-limited: resend the latest state after the cooldown instead of dropping it.
+		var rl *spclient.RateLimitedError
+		if errors.As(err, &rl) {
+			p.stateDirty = true
+			p.statePutScheduled = true
+			p.stateTimer.Reset(rl.RetryAfter)
 		}
 	}
 }
