@@ -190,7 +190,18 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 				return nil, fmt.Errorf("failed reading error response: %w", err)
 			}
 			c.log.Debugf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
-			return nil, fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
+			reqErr := fmt.Errorf("put state request failed with status %d: %s", resp.StatusCode, putError.Message)
+
+			// 4xx isn't transient: retrying (especially a 429) just adds load, and the next
+			// transition re-sends state anyway. Stop here; a 429 carries a cooldown for a
+			// coalesced resend. Only 5xx / network errors keep the retry budget.
+			if resp.StatusCode == http.StatusTooManyRequests {
+				return nil, backoff.Permanent(&RateLimitedError{RetryAfter: parseRetryAfter(resp.Header), err: reqErr})
+			}
+			if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+				return nil, backoff.Permanent(reqErr)
+			}
+			return nil, reqErr
 		} else {
 			c.log.Debugf("put connect state because %s", reqProto.PutStateReason)
 			return resp, nil
@@ -200,6 +211,36 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 		return err
 	}
 	return nil
+}
+
+// RateLimitedError reports a connect-state 429; RetryAfter is the advised cooldown.
+type RateLimitedError struct {
+	RetryAfter time.Duration
+	err        error
+}
+
+func (e *RateLimitedError) Error() string { return e.err.Error() }
+func (e *RateLimitedError) Unwrap() error { return e.err }
+
+// parseRetryAfter reads a Retry-After header (seconds or HTTP-date), with a default fallback.
+func parseRetryAfter(h http.Header) time.Duration {
+	const def = 10 * time.Second
+	v := h.Get("Retry-After")
+	if v == "" {
+		return def
+	}
+	if secs, err := strconv.Atoi(v); err == nil {
+		if secs <= 0 {
+			return def
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(v); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
+	}
+	return def
 }
 
 func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte, format *metadatapb.AudioFile_Format, prefetch bool) (*storagepb.StorageResolveResponse, error) {
