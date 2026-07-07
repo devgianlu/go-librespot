@@ -156,10 +156,22 @@ func (p *AppPlayer) initState() {
 	p.state.reset()
 }
 
+// statePutMinInterval is the minimum spacing between connect-state PUTs.
+const statePutMinInterval = 200 * time.Millisecond
+
+// updateState PUTs the latest connect-state, at most one per statePutMinInterval: immediately
+// and synchronously when the budget allows, else deferred to the timer so a burst coalesces.
 func (p *AppPlayer) updateState(ctx context.Context) {
-	if err := p.putConnectState(ctx, connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
-		p.app.log.WithError(err).Error("failed put state after update")
+	p.stateDirty = true
+	if p.statePutScheduled {
+		return
 	}
+	if wait := statePutMinInterval - time.Since(p.lastStatePut); wait > 0 {
+		p.statePutScheduled = true
+		p.stateTimer.Reset(wait)
+		return
+	}
+	p.flushState(ctx)
 }
 
 func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutStateReason) error {
