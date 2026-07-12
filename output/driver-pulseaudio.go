@@ -161,11 +161,9 @@ func (out *pulseAudioOutput) Resume() error {
 
 func (out *pulseAudioOutput) Drop() error {
 	if out.stream.Running() {
-		// Drop all samples while running. This happens when seeking.
-		// So we stop playback, flush the buffer, and restart it again to clear
-		// what's in the buffer. Presumably, all new samples from this point on
-		// are the new samples (isn't there a race condition here with
-		// SwitchingAudioSource?).
+		// Stop and flush the buffer. We do not restart here: the caller
+		// resumes once the new source is set. Restarting raced with the
+		// source switch and clipped the start of the track (#292).
 		out.stream.Stop()
 		err := out.client.RawRequest(&proto.FlushPlaybackStream{
 			StreamIndex: out.stream.StreamIndex(),
@@ -173,10 +171,8 @@ func (out *pulseAudioOutput) Drop() error {
 		if err != nil {
 			return fmt.Errorf("Drop: could not flush playback: %e", err)
 		}
-		out.stream.Start()
 	} else {
-		// This sometimes happens. But we don't need to do anything: we already
-		// flushed the buffer in Pause().
+		// Already stopped, e.g. flushed in Pause().
 	}
 	return nil
 }
