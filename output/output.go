@@ -13,7 +13,8 @@ type Output interface {
 	// Resume resumes the output.
 	Resume() error
 
-	// Drop empties the audio buffer without waiting.
+	// Drop empties the audio buffer without waiting. It must not resume or
+	// restart playback; the caller resumes explicitly when needed.
 	Drop() error
 
 	// DelayMs returns the output device delay in milliseconds.
