@@ -264,11 +264,16 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	}
 
 	// Replace (don't merge): this is a fresh context, so metadata from the
-	// previous one must not linger — otherwise keys the new context omits (e.g.
-	// context_description, which drives Spotify's "Next from:" label) keep their
-	// stale values.
+	// previous one must not linger. Copy the play command's metadata, then
+	// overlay the resolved context's metadata (ctxTracks.Metadata()), which
+	// carries context_description — the label Spotify renders as "Next from: …"
+	// (linked to ContextUri) — that the command alone usually omits. Mirrors the
+	// transfer path in player.go.
 	p.state.player.ContextMetadata = map[string]string{}
 	for k, v := range spotCtx.Metadata {
+		p.state.player.ContextMetadata[k] = v
+	}
+	for k, v := range ctxTracks.Metadata() {
 		p.state.player.ContextMetadata[k] = v
 	}
 
