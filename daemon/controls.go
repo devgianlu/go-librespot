@@ -263,9 +263,11 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 		}
 	}
 
-	if p.state.player.ContextMetadata == nil {
-		p.state.player.ContextMetadata = map[string]string{}
-	}
+	// Replace (don't merge): this is a fresh context, so metadata from the
+	// previous one must not linger — otherwise keys the new context omits (e.g.
+	// context_description, which drives Spotify's "Next from:" label) keep their
+	// stale values.
+	p.state.player.ContextMetadata = map[string]string{}
 	for k, v := range spotCtx.Metadata {
 		p.state.player.ContextMetadata[k] = v
 	}
