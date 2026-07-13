@@ -511,7 +511,15 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 
 	p.state.tracks.SetQueue(prev, next)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, next)
+	// Report upcoming tracks from our own list (queue + context iterator) rather
+	// than echoing the command's next_tracks hint. On a context switch the
+	// controller can send a set_queue whose next_tracks still lead with the
+	// previous context's leftovers; echoing them shows tracks under "Next from:"
+	// that will never play, since advanceNext follows this same list, not the
+	// hint. SetQueue above already captured the (is_queued) manual queue from the
+	// hint, so only the reorder-by-hint of context tracks is dropped — and that
+	// never affected playback anyway.
+	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 	p.updateState(ctx)
 
 	// The upcoming track may have changed: a stream prefetched under the old
