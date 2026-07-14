@@ -26,6 +26,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func isRetryableHTTPStatus(status int) bool {
+	switch status {
+	case http.StatusInternalServerError,
+		http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
+
 type Spclient struct {
 	log librespot.Logger
 
@@ -93,19 +105,40 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 
 		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 
+		// The request body is consumed and normally closed by Client.Do.
+		// Recreate it for every attempt.
+		if req.GetBody != nil {
+			req.Body, err = req.GetBody()
+			if err != nil {
+				return nil, backoff.Permanent(
+					fmt.Errorf("failed recreating request body: %w", err),
+				)
+			}
+		}
+
 		resp, err := c.client.Do(req.WithContext(ctx))
 		if err != nil {
 			return nil, err
-		} else if resp.StatusCode == 401 {
+		}
+
+		if resp.StatusCode == http.StatusUnauthorized {
 			_ = resp.Body.Close()
 
 			forceNewToken = true
 			return nil, fmt.Errorf("unauthorized")
-		} else if resp.StatusCode == 502 {
-			_ = resp.Body.Close()
+		}
 
-			c.log.Debugf("spclient request returned bad gateway, retrying...")
-			return nil, fmt.Errorf("bad gateway")
+		if isRetryableHTTPStatus(resp.StatusCode) {
+			status := resp.StatusCode
+			_ = resp.Body.Close()
+			c.log.Debugf(
+				"spclient request returned transient status %d, retrying...",
+				status,
+			)
+			return nil, fmt.Errorf(
+				"spclient request returned transient status %d",
+				status,
+			)
 		}
 
 		return resp, nil
