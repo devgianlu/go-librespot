@@ -338,9 +338,16 @@ func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 			// remember current track
 			currentTrack := tl.current()
 
-			// clear tracks and seek to the current track
+			// Clear tracks and re-fetch them in order, then seek to the current
+			// track. Snapshot the list first: a failed re-fetch (e.g. a transient
+			// error while paging the context) would otherwise leave the list
+			// stranded at pos -1, and the next access would panic. On failure we
+			// roll back to the previous (valid) state and report the error, so the
+			// shuffle toggle simply does not take effect.
+			savedList, savedPos := tl.tracks.list, tl.tracks.pos
 			tl.tracks.clear()
 			if err := tl.Seek(ctx, ContextTrackComparator(tl.ctx.Type(), currentTrack)); err != nil {
+				tl.tracks.list, tl.tracks.pos = savedList, savedPos
 				return fmt.Errorf("failed seeking to current track: %w", err)
 			}
 
