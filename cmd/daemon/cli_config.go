@@ -133,7 +133,13 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 	dc.Cache.Enabled = c.Cache.Enabled
 	dc.Cache.Dir = c.Cache.Dir
 	if dc.Cache.Dir == "" {
-		dc.Cache.Dir = filepath.Join(c.ConfigDir, "cache")
+		// Default to the XDG cache directory ($XDG_CACHE_HOME, falling back to
+		// $HOME/.cache), matching the reference librespot behaviour.
+		if cacheDir, err := os.UserCacheDir(); err == nil {
+			dc.Cache.Dir = filepath.Join(cacheDir, "go-librespot")
+		} else {
+			dc.Cache.Dir = filepath.Join(c.ConfigDir, "cache")
+		}
 	}
 	// The value is validated in loadCLIConfig, so the error is unreachable here.
 	dc.Cache.SizeLimit, _ = parseSize(c.Cache.SizeLimit)
@@ -195,7 +201,7 @@ func loadCLIConfig(cfg *cliConfig) error {
 
 		"credentials.type": "zeroconf",
 
-		"cache.enabled":    true,
+		"cache.enabled":    false,
 		"cache.size_limit": "1GB",
 
 		"zeroconf_backend": "builtin",
