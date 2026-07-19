@@ -160,15 +160,15 @@ For detailed API documentation see [here](/API.md).
 
 ### Audio cache
 
-Downloaded audio files are cached on disk so that replaying a track does not download it again from the CDN. Only the
+Downloaded audio files can be cached on disk so that replaying a track does not download it again from the CDN. Only the
 raw, still-encrypted files are stored: a cached file is useless without a valid Spotify account, since the audio key is
-retrieved again on every playback. The cache is enabled by default with a 1 GB limit, after which the least-recently-used
-files are evicted.
+retrieved again on every playback. The cache is disabled by default; once enabled it applies a 1 GB limit, after which the
+least-recently-used files are evicted.
 
 ```yaml
 cache:
-  enabled: true # Whether to cache downloaded audio files (default: true)
-  dir: '' # Directory for cached files (default: a 'cache' subdirectory of the config directory)
+  enabled: false # Whether to cache downloaded audio files (default: false)
+  dir: '' # Directory for cached files (default: the XDG cache directory, e.g. $XDG_CACHE_HOME/go-librespot or $HOME/.cache/go-librespot)
   size_limit: '1GB' # Maximum total cache size before evicting least-recently-used files ('0' for unlimited)
 ```
 

@@ -172,11 +172,11 @@
             "enabled": {
               "type": "boolean",
               "description": "Whether to cache downloaded audio files on disk to avoid re-downloading them from the CDN",
-              "default": true
+              "default": false
             },
             "dir": {
               "type": "string",
-              "description": "Directory to store cached audio files (defaults to a 'cache' subdirectory of the config directory)",
+              "description": "Directory to store cached audio files (defaults to the XDG cache directory, e.g. $XDG_CACHE_HOME/go-librespot or $HOME/.cache/go-librespot)",
               "default": ""
             },
             "size_limit": {
