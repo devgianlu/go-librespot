@@ -44,6 +44,11 @@ components:
         paused:
           description: Start playback as paused
           type: boolean
+        position:
+          description: >-
+            Position in milliseconds to start playback at within the selected
+            track (0 starts from the beginning)
+          type: integer
 paths:
   /:
     get:

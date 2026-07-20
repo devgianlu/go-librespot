@@ -143,6 +143,9 @@ type ApiRequestDataPlay struct {
 	Uri       string `json:"uri"`
 	SkipToUri string `json:"skip_to_uri"`
 	Paused    bool   `json:"paused"`
+	// Position is the position in milliseconds to start playback at within the
+	// selected track. Zero starts from the beginning.
+	Position int64 `json:"position"`
 }
 
 type ApiRequestDataNext struct {
