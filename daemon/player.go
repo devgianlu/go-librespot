@@ -560,8 +560,23 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 			}
 		}
 
-		if err := p.loadContext(ctx, spotCtx, skipTo, data.Paused, true); err != nil {
+		// When starting at a position, load paused and seek before unpausing so
+		// no audio plays from 0:00 while the track loads. loadContext returns
+		// once the track is loaded, so no polling is needed to time the seek.
+		loadPaused := data.Paused || data.Position > 0
+		if err := p.loadContext(ctx, spotCtx, skipTo, loadPaused, true); err != nil {
 			return nil, fmt.Errorf("failed loading context: %w", err)
+		}
+
+		if data.Position > 0 {
+			if err := p.seek(ctx, data.Position); err != nil {
+				p.app.log.WithError(err).Warnf("failed seeking to initial position %dms", data.Position)
+			}
+			if !data.Paused {
+				if err := p.play(ctx); err != nil {
+					p.app.log.WithError(err).Warnf("failed resuming after initial seek")
+				}
+			}
 		}
 
 		return nil, nil
