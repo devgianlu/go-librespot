@@ -156,6 +156,30 @@ paths:
       responses:
         200:
           description: Successful response
+  /player/output:
+    post:
+      description: >-
+        Reopen the audio output on a different device without touching the
+        Spotify session, preserving the current track, playback position,
+        paused state and volume. Useful for switching speakers (e.g. ALSA or
+        bluealsa) live without reconnecting. If playback is active it switches
+        devices immediately (with a brief audio gap); if nothing is playing the
+        device is recorded and takes effect on the next output open. An empty
+        device selects the configured default output device.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device:
+                  description: >-
+                    The output device name to open (backend-specific, e.g. an
+                    ALSA device). Empty selects the configured default.
+                  type: string
+      responses:
+        200:
+          description: Successful response
   /player/playpause:
     post:
       description: Resume playback when paused, or pause playback when playing

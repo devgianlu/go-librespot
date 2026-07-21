@@ -610,6 +610,11 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	case ApiRequestSetDeviceName:
 		p.setDeviceName(ctx, req.Data.(string))
 		return nil, nil
+	case ApiRequestTypeReopenOutput:
+		if err := p.player.ReopenOutput(req.Data.(string)); err != nil {
+			return nil, fmt.Errorf("failed reopening output: %w", err)
+		}
+		return nil, nil
 	default:
 		return nil, fmt.Errorf("unknown request type: %s", req.Type)
 	}
