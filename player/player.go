@@ -56,7 +56,12 @@ type Player struct {
 
 	cdnQuarantine map[string]time.Time
 
-	newOutput func(source librespot.Float32Reader, volume float32) (output.Output, error)
+	newOutput func(source librespot.Float32Reader, volume float32, device string) (output.Output, error)
+
+	// defaultAudioDevice is the output device to open initially. manageLoop
+	// tracks the current device from here and it can be changed at runtime via
+	// ReopenOutput.
+	defaultAudioDevice string
 
 	cmd chan playerCmd
 	ev  chan Event
@@ -76,6 +81,7 @@ const (
 	playerCmdSeek
 	playerCmdPosition
 	playerCmdVolume
+	playerCmdReopenOutput
 	playerCmdClose
 )
 
@@ -188,14 +194,15 @@ func NewPlayer(opts *Options) (*Player, error) {
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain:      opts.NormalisationPregain,
 		countryCode:               opts.CountryCode,
-		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
+		defaultAudioDevice:        opts.AudioDevice,
+		newOutput: func(reader librespot.Float32Reader, volume float32, device string) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
 				Log:              opts.Log,
 				Backend:          opts.AudioBackend,
 				Reader:           reader,
 				SampleRate:       SampleRate,
 				ChannelCount:     Channels,
-				Device:           opts.AudioDevice,
+				Device:           device,
 				RuntimeSocket:    opts.AudioBackendRuntimeSocket,
 				Mixer:            opts.MixerDevice,
 				Control:          opts.MixerControlName,
@@ -229,6 +236,9 @@ func (p *Player) manageLoop() {
 	// whether the output is paused, so seek knows whether to resume after Drop
 	paused := false
 
+	// current output device; can be changed at runtime via playerCmdReopenOutput
+	device := p.defaultAudioDevice
+
 	// init main source
 	source := NewSwitchingAudioSource(p.crossfadeSamples)
 
@@ -248,7 +258,7 @@ loop:
 				// create a new output device if needed
 				if out == nil {
 					var err error
-					out, err = p.newOutput(source, volume)
+					out, err = p.newOutput(source, volume, device)
 					if err != nil {
 						cmd.resp <- err
 						break
@@ -359,6 +369,56 @@ loop:
 				if out != nil {
 					out.SetVolume(volume)
 				}
+			case playerCmdReopenOutput:
+				// Reopen the output on a new device without touching the Spotify
+				// session, keeping the current source and playback position.
+				device = cmd.data.(string)
+
+				if out == nil {
+					// Nothing playing: the new device takes effect the next time
+					// an output is opened. Callers wanting audio to resume (e.g.
+					// recovery after the device died) should issue a play/resume
+					// afterwards.
+					cmd.resp <- nil
+					break
+				}
+
+				// Close the old device before opening the new one: some backends
+				// (e.g. pulseaudio) start reading from the source as soon as the
+				// output is constructed, so two live outputs would corrupt the
+				// stream. A sub-second gap from the discarded buffer is expected.
+				_ = out.Drop()
+				_ = out.Close()
+				out = nil
+				outErr = make(<-chan error)
+
+				newOut, err := p.newOutput(source, volume, device)
+				if err != nil {
+					// The old device is already gone; playback stays silent until
+					// an output is reopened. Surface the failure to the caller.
+					p.log.WithError(err).Warnf("failed reopening output on %q", device)
+					cmd.resp <- err
+					break
+				}
+
+				out = newOut
+				outErr = out.Error()
+
+				if paused {
+					err = out.Pause()
+				} else {
+					err = out.Resume()
+				}
+				if err != nil {
+					_ = out.Close()
+					out = nil
+					outErr = make(<-chan error)
+					cmd.resp <- err
+					break
+				}
+
+				p.log.Infof("reopened output device on %q", device)
+				cmd.resp <- nil
 			case playerCmdClose:
 				break loop
 			default:
@@ -455,6 +515,22 @@ func (p *Player) PositionMs() int64 {
 	p.cmd <- playerCmd{typ: playerCmdPosition, resp: resp}
 	pos := <-resp
 	return pos.(int64)
+}
+
+// ReopenOutput reopens the audio output on the given device without touching
+// the Spotify session, preserving the current playback position, paused state
+// and volume. If playback is currently active it switches devices live (with a
+// brief audio gap); if nothing is playing it just records the device for the
+// next output open. It returns an error if the new device fails to open, in
+// which case playback is left stopped.
+func (p *Player) ReopenOutput(device string) error {
+	resp := make(chan any, 1)
+	p.cmd <- playerCmd{typ: playerCmdReopenOutput, data: device, resp: resp}
+	if err := <-resp; err != nil {
+		return err.(error)
+	}
+
+	return nil
 }
 
 func (p *Player) SetPrimaryStream(source librespot.AudioSource, paused, drop bool) error {
