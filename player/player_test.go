@@ -23,6 +23,10 @@ type recordingOutput struct {
 	// dropPrimary records, once per Drop() call, the primary source observed
 	// right before the flush.
 	dropPrimary []librespot.AudioSource
+
+	// devices records, in order, the device names manageLoop opened the output
+	// on (captured by the newOutput hook).
+	devices []string
 }
 
 func (o *recordingOutput) record(name string) {
@@ -73,8 +77,11 @@ func newTestPlayer(t *testing.T, out *recordingOutput) *Player {
 		log: &librespot.NullLogger{},
 		cmd: make(chan playerCmd),
 		ev:  make(chan Event, 128),
-		newOutput: func(reader librespot.Float32Reader, volume float32) (output.Output, error) {
+		newOutput: func(reader librespot.Float32Reader, volume float32, device string) (output.Output, error) {
 			out.source = reader.(*SwitchingAudioSource)
+			out.mu.Lock()
+			out.devices = append(out.devices, device)
+			out.mu.Unlock()
 			return out, nil
 		},
 	}
@@ -177,5 +184,111 @@ func TestSeekResumesOnlyWhilePlaying(t *testing.T) {
 	}
 	if !slices.Contains(callsAfter, "Drop") {
 		t.Fatalf("expected Drop during a paused seek, got calls=%v", callsAfter)
+	}
+}
+
+// TestReopenOutputSwitchesDeviceLive locks in the output-recovery behavior:
+// ReopenOutput while playing must flush and close the old output, open a new
+// one on the requested device, and resume playback — all without touching the
+// Spotify source (the same primary stream stays selected).
+func TestReopenOutputSwitchesDeviceLive(t *testing.T) {
+	a := rampSource(1000, 0, 0)
+
+	out := &recordingOutput{}
+	p := newTestPlayer(t, out)
+
+	if err := p.SetPrimaryStream(a, false, false); err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+	preLen := len(out.snapshot())
+
+	if err := p.ReopenOutput("hifi"); err != nil {
+		t.Fatalf("reopen failed: %v", err)
+	}
+
+	calls := out.snapshot()[preLen:]
+	dropIdx := slices.Index(calls, "Drop")
+	closeIdx := slices.Index(calls, "Close")
+	resumeIdx := slices.Index(calls, "Resume")
+	if dropIdx == -1 || closeIdx == -1 || resumeIdx == -1 {
+		t.Fatalf("expected Drop, Close and Resume during a live reopen, got calls=%v", calls)
+	}
+	if !(dropIdx < closeIdx && closeIdx < resumeIdx) {
+		t.Fatalf("expected Drop -> Close -> Resume order during reopen, got calls=%v", calls)
+	}
+
+	// The output must have been reopened on the requested device.
+	out.mu.Lock()
+	devices := append([]string(nil), out.devices...)
+	out.mu.Unlock()
+	if len(devices) < 2 || devices[len(devices)-1] != "hifi" {
+		t.Fatalf("expected the output to be reopened on device \"hifi\", got devices=%v", devices)
+	}
+
+	// The primary source must be unchanged: reopening the output does not touch
+	// the Spotify session.
+	out.source.cond.L.Lock()
+	cur := out.source.source[out.source.which]
+	out.source.cond.L.Unlock()
+	if cur != librespot.AudioSource(a) {
+		t.Fatalf("expected the primary source to be unchanged after reopen, got %v", cur)
+	}
+}
+
+// TestReopenOutputPausedStaysPaused ensures a reopen while paused reopens the
+// device but does NOT resume playback.
+func TestReopenOutputPausedStaysPaused(t *testing.T) {
+	a := rampSource(1000, 0, 0)
+
+	out := &recordingOutput{}
+	p := newTestPlayer(t, out)
+
+	if err := p.SetPrimaryStream(a, true, false); err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+	preLen := len(out.snapshot())
+
+	if err := p.ReopenOutput("hifi"); err != nil {
+		t.Fatalf("reopen failed: %v", err)
+	}
+
+	calls := out.snapshot()[preLen:]
+	if slices.Contains(calls, "Resume") {
+		t.Fatalf("reopen while paused must not resume playback, got calls=%v", calls)
+	}
+	if !slices.Contains(calls, "Close") {
+		t.Fatalf("expected the old output to be closed during reopen, got calls=%v", calls)
+	}
+	if !slices.Contains(calls, "Pause") {
+		t.Fatalf("expected the reopened output to be paused, got calls=%v", calls)
+	}
+}
+
+// TestReopenOutputNothingPlaying ensures a reopen with no output open is a
+// no-op that just records the device for the next output open.
+func TestReopenOutputNothingPlaying(t *testing.T) {
+	out := &recordingOutput{}
+	p := newTestPlayer(t, out)
+
+	if err := p.ReopenOutput("hifi"); err != nil {
+		t.Fatalf("reopen with nothing playing failed: %v", err)
+	}
+
+	if calls := out.snapshot(); len(calls) != 0 {
+		t.Fatalf("expected no output calls when reopening with nothing playing, got calls=%v", calls)
+	}
+
+	// The device only takes effect on the next output open: loading a stream now
+	// must open on the recorded device.
+	a := rampSource(100, 0, 0)
+	if err := p.SetPrimaryStream(a, false, false); err != nil {
+		t.Fatalf("load failed: %v", err)
+	}
+
+	out.mu.Lock()
+	devices := append([]string(nil), out.devices...)
+	out.mu.Unlock()
+	if len(devices) != 1 || devices[0] != "hifi" {
+		t.Fatalf("expected the next output to open on device \"hifi\", got devices=%v", devices)
 	}
 }
