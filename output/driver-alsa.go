@@ -111,6 +111,18 @@ func (out *alsaOutput) isFormatSupported(hwparams *C.snd_pcm_hw_params_t, format
 }
 
 func (out *alsaOutput) setupPcm() error {
+	// Drop alsa-lib's in-process configuration cache before opening, so the
+	// device name re-resolves against the configuration files as they are NOW.
+	// A long-running daemon otherwise keeps resolving aliases against the tree
+	// cached at first use: alsa-lib's change detection compares file identity,
+	// timestamps and size, which misses in-place rewrites that keep the size
+	// (e.g. swapping one bluealsa device MAC for another — same string length)
+	// — observed in the field as every (re)open reaching the departed
+	// speaker's MAC with "PCM not found" until the process was restarted.
+	// Opens are rare (output creation and live reopens), so the re-parse cost
+	// is irrelevant.
+	C.snd_config_update_free_global()
+
 	cdevice := C.CString(out.device)
 	defer C.free(unsafe.Pointer(cdevice))
 	if err := C.snd_pcm_open(&out.pcmHandle, cdevice, C.SND_PCM_STREAM_PLAYBACK, 0); err < 0 {
