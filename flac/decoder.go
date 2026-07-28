@@ -233,7 +233,7 @@ func callbackWrite(
 	d := callbackGetDecoder(clientData)
 
 	s := unsafe.Slice(buffer, d.Channels)
-	norm := float32(uint32(1) << uint32(frame.header.bits_per_sample))
+	norm := float32(uint32(1) << (uint32(frame.header.bits_per_sample) - 1))
 
 	// Copy samples to the temporary buffer interleaving channels
 	for i := 0; i < int(frame.header.blocksize); i++ {
