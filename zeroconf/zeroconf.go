@@ -212,8 +212,7 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 
 	z.userLock.Lock()
 
-	// check if we are authenticating the same user that is holding the session
-	if z.currentUser == username || z.authenticatingUser == username {
+	if z.authenticatingUser == username {
 		z.userLock.Unlock()
 
 		writer.WriteHeader(http.StatusOK)
