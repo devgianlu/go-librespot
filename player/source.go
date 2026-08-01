@@ -20,6 +20,22 @@ const maxSampleValue = float32(0x7fff) / float32(0x8000)
 // available when the end of a track is discovered.
 const lookaheadHeadroom = 8 * 1024
 
+// oggFramedPassthrough is implemented by passthrough sources that track Ogg
+// page framing on the bytes they serve, allowing the switcher to hand
+// playback over to a new source exactly at a page boundary.
+type oggFramedPassthrough interface {
+	librespot.AudioSourcePassthrough
+
+	// MidPage reports whether the raw stream currently stands inside an Ogg
+	// page (including a partially served page header).
+	MidPage() bool
+
+	// PageBytesRemaining returns the number of bytes known to remain before
+	// the next page boundary; capping a read at it never overshoots the
+	// boundary.
+	PageBytesRemaining() int
+}
+
 type SwitchingAudioSource struct {
 	source map[bool]librespot.AudioSource
 	which  bool
@@ -28,6 +44,19 @@ type SwitchingAudioSource struct {
 	done chan struct{}
 
 	eofReported bool
+
+	// Page-aligned passthrough handoff state. When SetPrimary replaces a
+	// passthrough primary that stands mid Ogg page, the incoming source is
+	// parked here instead of being swapped in synchronously: ReadBytes keeps
+	// serving the old source only up to its current page boundary and then
+	// promotes the parked one. Swapping mid-page spliced the new track's BOS
+	// and header pages into the middle of the old, now truncated page
+	// downstream (field trace 2026-08-01). drainBudget bounds the drain to at
+	// most one maximum-size Ogg page, so a source with broken framing can
+	// never stall the handoff.
+	pendingPrimary librespot.AudioSource
+	pendingSet     bool
+	drainBudget    int
 
 	// Crossfade state. When crossfadeSamples is zero the source behaves
 	// exactly as it did before crossfade support was introduced.
@@ -89,11 +118,31 @@ func (s *SwitchingAudioSource) SetPrimary(source librespot.AudioSource) {
 	// by re-setting the source it was told is now playing: that must not
 	// disturb the fade that is still in progress.
 	if s.source[s.which] != source {
+		// A passthrough primary standing mid Ogg page must not be swapped
+		// out synchronously: the downstream consumer would read the new
+		// track's first pages as the tail of the old truncated page. Park the
+		// incoming source; ReadBytes drains the old one to its current page
+		// boundary and then promotes.
+		if fp, ok := s.source[s.which].(oggFramedPassthrough); ok && fp.MidPage() {
+			s.pendingPrimary = source
+			s.pendingSet = true
+			s.drainBudget = maxOggPageSize
+			s.eofReported = false
+			s.cond.Broadcast()
+			return
+		}
+
 		// A genuinely new source replaces whatever was there, including any
 		// in-flight crossfade tail.
 		s.resetCrossfade()
 		s.source[s.which] = source
 	}
+
+	// Reaching this point means the swap happened synchronously (or the
+	// current source was re-asserted): any previously parked handoff is
+	// superseded.
+	s.pendingPrimary = nil
+	s.pendingSet = false
 
 	// If the same source was also prefetched into the secondary slot (e.g. a
 	// manual skip straight to the prefetched track), drop the alias: switching
@@ -159,8 +208,11 @@ func (s *SwitchingAudioSource) readDirect(p []float32) (n int, err error) {
 
 // ReadBytes mirrors readDirect for passthrough mode: it hands out the current
 // source's raw encoded bytes and, on EOF, switches to the queued source. The
-// raw streams are simply concatenated, which for Ogg yields a chained
-// bitstream the downstream decoder plays continuously.
+// raw streams are concatenated only at Ogg page boundaries: the natural EOF
+// chain is page-aligned by construction (a track ends after its last page),
+// and a SetPrimary that arrives mid-page is parked and promoted by
+// drainToPageBoundary once the current page is fully served. The result is a
+// chained bitstream the downstream decoder plays continuously.
 //
 // Crossfading is impossible on the raw encoded stream (mixing requires
 // decoded samples), so ReadBytes always behaves like the crossfade-free
@@ -169,36 +221,102 @@ func (s *SwitchingAudioSource) ReadBytes(p []byte) (n int, err error) {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
-	for s.source[s.which] == nil {
-		s.cond.Wait()
-	}
+	for {
+		for s.source[s.which] == nil {
+			s.cond.Wait()
+		}
 
-	src, ok := s.source[s.which].(librespot.AudioSourcePassthrough)
-	if !ok {
-		return 0, errors.New("current source does not support passthrough")
-	}
+		src, ok := s.source[s.which].(librespot.AudioSourcePassthrough)
+		if !ok {
+			return 0, errors.New("current source does not support passthrough")
+		}
 
-	n, err = src.ReadBytes(p)
-	if errors.Is(err, io.EOF) {
-		// notify this source is done (non-blocking, deduplicated)
-		s.reportDone()
+		if s.pendingSet {
+			if n, served := s.drainToPageBoundary(src, p); served {
+				return n, nil
+			}
+			// The handoff completed without producing bytes: loop to serve
+			// the promoted source so the caller never sees a zero-byte read.
+			continue
+		}
 
-		// if there's no other source just let the EOF through
-		if s.source[!s.which] == nil {
+		n, err = src.ReadBytes(p)
+		if errors.Is(err, io.EOF) {
+			// notify this source is done (non-blocking, deduplicated)
+			s.reportDone()
+
+			// if there's no other source just let the EOF through
+			if s.source[!s.which] == nil {
+				return n, err
+			}
+
+			// delete current source and switch to the other one
+			delete(s.source, s.which)
+			s.which = !s.which
+
+			// ignore the EOF, we have more data
+			return n, nil
+		} else if err != nil {
 			return n, err
 		}
 
-		// delete current source and switch to the other one
-		delete(s.source, s.which)
-		s.which = !s.which
-
-		// ignore the EOF, we have more data
 		return n, nil
-	} else if err != nil {
-		return n, err
+	}
+}
+
+// drainToPageBoundary serves bytes from the outgoing passthrough primary
+// while a new primary is parked in pendingPrimary. Reads are capped so they
+// can never start a new page; once the current page boundary is reached, the
+// bounded drain budget is exhausted, or the outgoing source ends or fails,
+// the parked source is promoted. served is false when the handoff completed
+// without producing bytes, in which case the caller reads from the promoted
+// source instead. Must be called with s.cond.L held.
+func (s *SwitchingAudioSource) drainToPageBoundary(src librespot.AudioSourcePassthrough, p []byte) (n int, served bool) {
+	fp, ok := src.(oggFramedPassthrough)
+	if !ok || !fp.MidPage() || s.drainBudget <= 0 {
+		// Already at a boundary, or the source cannot report framing (it
+		// should not have been parked then), or the bounded drain is used up:
+		// hand over immediately.
+		s.promotePending()
+		return 0, false
 	}
 
-	return n, nil
+	limit := min(len(p), s.drainBudget)
+	if rem := fp.PageBytesRemaining(); rem > 0 {
+		limit = min(limit, rem)
+	}
+
+	n, err := src.ReadBytes(p[:limit])
+	s.drainBudget -= n
+
+	if n == 0 || err != nil || !fp.MidPage() || s.drainBudget <= 0 {
+		// The page boundary was reached, or the outgoing source stalled,
+		// ended, or failed mid-drain: promote now. Errors (including EOF)
+		// from a source that is being replaced anyway are deliberately
+		// dropped, and no done signal is sent: the daemon initiated this
+		// transition itself, reporting done would make it skip once more.
+		s.promotePending()
+	}
+
+	return n, n > 0
+}
+
+// promotePending replaces the current primary with the parked pending source,
+// dropping the outgoing source exactly like a synchronous SetPrimary would
+// have. Must be called with s.cond.L held.
+func (s *SwitchingAudioSource) promotePending() {
+	source := s.pendingPrimary
+	s.pendingPrimary = nil
+	s.pendingSet = false
+	s.drainBudget = 0
+
+	s.source[s.which] = source
+
+	// Drop a prefetched alias of the promoted source, mirroring SetPrimary:
+	// switching a source into itself would replay an exhausted stream.
+	if s.source[!s.which] == source {
+		delete(s.source, !s.which)
+	}
 }
 
 // readCrossfade is the read path used when crossfading is enabled. Playback
@@ -429,6 +547,13 @@ func (s *SwitchingAudioSource) SetPositionMs(pos int64) error {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
+	// While a page-aligned handoff is parked, the daemon is addressing the
+	// track it just set as primary, not the outgoing source whose final page
+	// is still draining.
+	if s.pendingSet && s.pendingPrimary != nil {
+		return s.pendingPrimary.SetPositionMs(pos)
+	}
+
 	if s.source[s.which] == nil {
 		return nil
 	}
@@ -455,6 +580,12 @@ func (s *SwitchingAudioSource) PositionMs() int64 {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
+	// See SetPositionMs: while a handoff is parked, report the position of
+	// the track the daemon believes is current.
+	if s.pendingSet && s.pendingPrimary != nil {
+		return s.pendingPrimary.PositionMs()
+	}
+
 	if s.source[s.which] == nil {
 		return 0
 	}
@@ -479,6 +610,9 @@ func (s *SwitchingAudioSource) Close() error {
 		err = errors.Join(err, source.Close())
 	}
 	if source, ok := s.source[false].(io.Closer); ok && source != nil {
+		err = errors.Join(err, source.Close())
+	}
+	if source, ok := s.pendingPrimary.(io.Closer); ok && source != nil {
 		err = errors.Join(err, source.Close())
 	}
 	return err

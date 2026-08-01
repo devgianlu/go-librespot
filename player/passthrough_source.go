@@ -6,12 +6,31 @@ import (
 	"sync"
 )
 
+// Ogg page framing constants.
+const (
+	// oggHeaderFixedSize is the fixed part of an Ogg page header: capture
+	// pattern through the segment-count byte. The segment table of up to 255
+	// lacing values follows.
+	oggHeaderFixedSize = 27
+
+	// oggCapturePattern starts every Ogg page.
+	oggCapturePattern = "OggS"
+
+	// maxOggPageSize is the largest possible Ogg page: 27 fixed header
+	// bytes, 255 segment-table bytes, and 255*255 payload bytes.
+	maxOggPageSize = oggHeaderFixedSize + 255 + 255*255 // 65307
+)
+
 // passthroughSource hands out a track's raw Ogg/Vorbis bytes for the
 // pipe_passthrough backend, bypassing the Vorbis decoder. The decrypted
 // Spotify stream is a complete Ogg bitstream starting at offset 0, so it is
 // written through untouched. Position is approximated from bytes consumed;
 // seeking is limited to a restart because a mid-page byte seek would corrupt
 // the Ogg stream.
+//
+// The source additionally tracks Ogg page framing on the bytes it serves, so
+// the switching source can hand playback over to another track exactly at a
+// page boundary instead of splicing a new stream into a half-written page.
 type passthroughSource struct {
 	r          *io.SectionReader
 	size       int64
@@ -19,6 +38,17 @@ type passthroughSource struct {
 
 	mu  sync.Mutex
 	pos int64 // bytes read so far
+
+	// Page framing state. pageLeft counts the bytes of the current page not
+	// yet served once the page's header has been parsed. At a boundary, hdr
+	// accumulates header bytes (the header itself may straddle multiple
+	// ReadBytes calls) until the page's total length is known. framingLost is
+	// set when the capture pattern does not match; tracking then stops and
+	// MidPage reports false, degrading handoffs to the old immediate-swap
+	// behavior instead of stalling them forever.
+	pageLeft    int
+	hdr         []byte
+	framingLost bool
 }
 
 func newPassthroughSource(r io.ReaderAt, size, durationMs int64) *passthroughSource {
@@ -34,7 +64,97 @@ func (p *passthroughSource) ReadBytes(b []byte) (int, error) {
 	defer p.mu.Unlock()
 	n, err := p.r.Read(b)
 	p.pos += int64(n)
+	p.trackFraming(b[:n])
 	return n, err
+}
+
+// trackFraming advances the Ogg page framing state over a chunk of bytes that
+// was just served. It is cheap for arbitrary read sizes: inside a page body it
+// only decrements a counter; header parsing touches at most 27+255 bytes per
+// page.
+func (p *passthroughSource) trackFraming(b []byte) {
+	if p.framingLost {
+		return
+	}
+
+	for len(b) > 0 {
+		if p.pageLeft > 0 {
+			// Inside the current page's payload.
+			n := min(p.pageLeft, len(b))
+			p.pageLeft -= n
+			b = b[n:]
+			continue
+		}
+
+		// At a page boundary: accumulate header bytes until the page's total
+		// length is known. Byte 26 holds the segment count; the segment table
+		// of that many lacing values follows, and their sum is the payload
+		// length.
+		need := oggHeaderFixedSize - len(p.hdr)
+		if len(p.hdr) >= oggHeaderFixedSize {
+			need = oggHeaderFixedSize + int(p.hdr[26]) - len(p.hdr)
+		}
+		n := min(need, len(b))
+		p.hdr = append(p.hdr, b[:n]...)
+		b = b[n:]
+
+		// Validate as much of the capture pattern as has arrived. Losing sync
+		// means the byte counts cannot be trusted, so stop tracking rather
+		// than mis-frame.
+		if lim := min(len(p.hdr), len(oggCapturePattern)); string(p.hdr[:lim]) != oggCapturePattern[:lim] {
+			p.framingLost = true
+			p.hdr = nil
+			return
+		}
+
+		if len(p.hdr) < oggHeaderFixedSize {
+			continue // rest of the fixed header not served yet
+		}
+		segs := int(p.hdr[26])
+		if len(p.hdr) < oggHeaderFixedSize+segs {
+			continue // rest of the segment table not served yet
+		}
+
+		body := 0
+		for _, v := range p.hdr[oggHeaderFixedSize:] {
+			body += int(v)
+		}
+		p.pageLeft = body
+		p.hdr = p.hdr[:0]
+	}
+}
+
+// MidPage reports whether the raw stream currently stands inside an Ogg page,
+// including a partially served page header. It is false exactly at page
+// boundaries (and when framing was lost, so a handoff never stalls).
+func (p *passthroughSource) MidPage() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return !p.framingLost && (p.pageLeft > 0 || len(p.hdr) > 0)
+}
+
+// PageBytesRemaining returns the number of bytes known to remain before the
+// next page boundary: the rest of the current page's payload, or, while the
+// header is still being served, the bytes needed to complete the header.
+// Capping reads at this value can therefore never overshoot a boundary, even
+// though mid-header the page's full length is not yet known.
+func (p *passthroughSource) PageBytesRemaining() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.framingLost {
+		return 0
+	}
+	if p.pageLeft > 0 {
+		return p.pageLeft
+	}
+	if len(p.hdr) == 0 {
+		return 0
+	}
+	if len(p.hdr) >= oggHeaderFixedSize {
+		return oggHeaderFixedSize + int(p.hdr[26]) - len(p.hdr)
+	}
+	return oggHeaderFixedSize - len(p.hdr)
 }
 
 // Read is never used in passthrough mode; it only satisfies AudioSource.
@@ -73,6 +193,10 @@ func (p *passthroughSource) SetPositionMs(posMs int64) error {
 	if posMs <= 0 {
 		_, err := p.r.Seek(0, io.SeekStart)
 		p.pos = 0
+		// The stream starts over at a page boundary: reset the framing state.
+		p.pageLeft = 0
+		p.hdr = nil
+		p.framingLost = false
 		return err
 	}
 	// A seek that lands (within tolerance) on the position we are already at
