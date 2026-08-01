@@ -523,7 +523,18 @@ func (p *AppPlayer) play(ctx context.Context) error {
 	seekPos := p.state.trackPosition()
 	seekPos = max(0, min(seekPos, int64(p.primaryStream.Media.Duration())))
 	if err := p.player.SeekMs(seekPos); err != nil {
-		return fmt.Errorf("failed seeking before play: %w", err)
+		// A passthrough source can only restart, never jump mid-stream. When
+		// the stored position cannot be honored, starting playback where the
+		// stream actually is beats not starting at all: failing here left
+		// the track loaded but never playing, and the player then moved past
+		// it, so a single Next press audibly skipped two tracks. The
+		// position report stays truthful either way, because a passthrough
+		// source derives PositionMs from the bytes actually consumed.
+		if errors.Is(err, player.ErrPassthroughCannotSeek) {
+			p.app.log.WithError(err).Warnf("cannot seek before play, starting from the stream's current position")
+		} else {
+			return fmt.Errorf("failed seeking before play: %w", err)
+		}
 	}
 
 	if err := p.player.Play(); err != nil {
