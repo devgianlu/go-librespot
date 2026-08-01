@@ -71,7 +71,8 @@
           "enum": [
             "alsa",
             "pulseaudio",
-            "pipe"
+            "pipe",
+            "pipe_passthrough"
           ],
           "default": "alsa"
         },
@@ -107,7 +108,7 @@
         },
         "audio_output_pipe": {
           "type": "string",
-          "description": "The path to an existing FIFO for the pipe audio backend",
+          "description": "The path to an existing FIFO for the pipe and pipe_passthrough audio backends",
           "default": ""
         },
         "audio_output_pipe_format": {

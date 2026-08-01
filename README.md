@@ -240,15 +240,15 @@ log_disable_timestamp: false # Whether to disable timestamps in log output
 device_id: '' # Spotify device ID (auto-generated)
 device_name: '' # Spotify device name
 device_type: computer # Spotify device type (icon)
-audio_backend: alsa # Audio backend to use (alsa, pipe, pulseaudio)
+audio_backend: alsa # Audio backend to use (alsa, pipe, pipe_passthrough, pulseaudio)
 audio_backend_runtime_socket: '' # Audio backends' runtime socket to use, if backend is pulseaudio
 audio_device: default # ALSA audio device to use for playback
 mixer_device: '' # ALSA mixer device for volume synchronization 
 mixer_control_name: Master # ALSA mixer control name for volume synchronization
 audio_buffer_time: 500000 # Audio buffer time in microseconds, ALSA only
 audio_period_count: 4 # Number of periods to request, ALSA only
-audio_output_pipe: '' # Path to a named pipe for audio output
-audio_output_pipe_format: s16le # Audio output pipe format (s16le, s32le, f32le)
+audio_output_pipe: '' # Path to a named pipe for audio output (pipe and pipe_passthrough backends)
+audio_output_pipe_format: s16le # Audio output pipe format (s16le, s32le, f32le), ignored by pipe_passthrough
 bitrate: 160 # Playback bitrate (96, 160, 320)
 crossfade_duration: 0 # Crossfade duration between tracks in milliseconds (0 to disable)
 volume_steps: 100 # Volume steps count

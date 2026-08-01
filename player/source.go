@@ -157,6 +157,50 @@ func (s *SwitchingAudioSource) readDirect(p []float32) (n int, err error) {
 	return n, nil
 }
 
+// ReadBytes mirrors readDirect for passthrough mode: it hands out the current
+// source's raw encoded bytes and, on EOF, switches to the queued source. The
+// raw streams are simply concatenated, which for Ogg yields a chained
+// bitstream the downstream decoder plays continuously.
+//
+// Crossfading is impossible on the raw encoded stream (mixing requires
+// decoded samples), so ReadBytes always behaves like the crossfade-free
+// path; the player disables crossfade when passthrough is enabled.
+func (s *SwitchingAudioSource) ReadBytes(p []byte) (n int, err error) {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+
+	for s.source[s.which] == nil {
+		s.cond.Wait()
+	}
+
+	src, ok := s.source[s.which].(librespot.AudioSourcePassthrough)
+	if !ok {
+		return 0, errors.New("current source does not support passthrough")
+	}
+
+	n, err = src.ReadBytes(p)
+	if errors.Is(err, io.EOF) {
+		// notify this source is done (non-blocking, deduplicated)
+		s.reportDone()
+
+		// if there's no other source just let the EOF through
+		if s.source[!s.which] == nil {
+			return n, err
+		}
+
+		// delete current source and switch to the other one
+		delete(s.source, s.which)
+		s.which = !s.which
+
+		// ignore the EOF, we have more data
+		return n, nil
+	} else if err != nil {
+		return n, err
+	}
+
+	return n, nil
+}
+
 // readCrossfade is the read path used when crossfading is enabled. Playback
 // is served from a lookahead ring buffer so the end of the current track is
 // known before it is audible. While the track is still decoding, a full
