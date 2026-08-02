@@ -1,3 +1,5 @@
+//go:build test_unit
+
 package go_librespot
 
 import "testing"
