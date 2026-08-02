@@ -746,12 +746,39 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 	p.stateTimer = time.NewTimer(time.Minute)
 	p.stateTimer.Stop() // armed on demand by updateState
 
+	// The accesspoint and the dealer only close their receivers after giving
+	// up on reconnecting, so losing either means the session is gone for good
+	// and cannot recover on its own. sessionLost hands the player back to the
+	// daemon to be torn down and rebuilt, exactly as a remote logout does.
+	sessionLost := false
+	loseSession := func() (stop bool) {
+		if sessionLost {
+			return false
+		}
+		sessionLost = true
+
+		p.app.log.Warn("lost session, tearing down player to start a new one")
+
+		select {
+		case p.logout <- p:
+			// The daemon calls Close, which signals p.stop and ends this loop.
+			return false
+		case <-p.stop:
+			// Already being torn down for another reason.
+			return true
+		}
+	}
+
 	for {
 		select {
 		case <-p.stop:
 			return
 		case pkt, ok := <-apRecv:
 			if !ok {
+				apRecv = nil
+				if loseSession() {
+					return
+				}
 				continue
 			}
 
@@ -760,6 +787,10 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			}
 		case msg, ok := <-msgRecv:
 			if !ok {
+				msgRecv = nil
+				if loseSession() {
+					return
+				}
 				continue
 			}
 
@@ -768,6 +799,10 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			}
 		case req, ok := <-reqRecv:
 			if !ok {
+				reqRecv = nil
+				if loseSession() {
+					return
+				}
 				continue
 			}
 
@@ -780,6 +815,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			}
 		case req, ok := <-apiRecv:
 			if !ok {
+				apiRecv = nil
 				continue
 			}
 
@@ -787,6 +823,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			req.Reply(data, err)
 		case mprisReq, ok := <-mprisRecv:
 			if !ok {
+				mprisRecv = nil
 				continue
 			}
 
@@ -803,6 +840,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			mprisReq.Reply(dbusError)
 		case ev, ok := <-playerRecv:
 			if !ok {
+				playerRecv = nil
 				continue
 			}
 
