@@ -464,7 +464,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 				if sess == nil {
 					switch req.Type {
 					case ApiRequestTypeRoot:
-						req.Reply(&ApiResponseRoot{}, nil)
+						req.Reply(&ApiRoot{}, nil)
 					case ApiRequestSetDeviceName:
 						// The device name drives the zeroconf advertisement, which
 						// runs independently of any player session, so handle it

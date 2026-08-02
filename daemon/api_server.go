@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -36,7 +37,9 @@ type ConcreteApiServer struct {
 	certFile    string
 	keyFile     string
 
-	close    bool
+	// close is read by the websocket loop and by serve while Close writes it
+	// from whichever goroutine shuts the daemon down.
+	close    atomic.Bool
 	listener net.Listener
 
 	requests chan ApiRequest
@@ -125,56 +128,20 @@ func NewApiRequest(t ApiRequestType, data any) (req ApiRequest, wait func(contex
 	return
 }
 
-type ApiRequestDataSeek struct {
-	Position int64 `json:"position"`
-	Relative bool  `json:"relative"`
-}
+// The request and response payloads are generated from api-spec.yml.
+// Only the payloads the spec cannot describe are declared here.
 
-type ApiRequestDataVolume struct {
-	Volume   int32 `json:"volume"`
-	Relative bool  `json:"relative"`
-}
-
+// ApiRequestDataWebApi is not in the spec: /web-api/ is a catch-all proxy
+// whose path continues for any number of segments, so it is routed by hand.
 type ApiRequestDataWebApi struct {
 	Method string
 	Path   string
 	Query  url.Values
 }
 
-type ApiRequestDataPlay struct {
-	Uri       string `json:"uri"`
-	SkipToUri string `json:"skip_to_uri"`
-	Paused    bool   `json:"paused"`
-	// Position is the position in milliseconds to start playback at within the
-	// selected track. Zero starts from the beginning.
-	Position int64 `json:"position"`
-}
-
-type ApiRequestDataNext struct {
-	Uri *string `json:"uri"`
-}
-
 type apiResponse struct {
 	data any
 	err  error
-}
-
-type ApiResponseStatusTrack struct {
-	Uri           string   `json:"uri"`
-	Name          string   `json:"name"`
-	ArtistNames   []string `json:"artist_names"`
-	AlbumName     string   `json:"album_name"`
-	AlbumCoverUrl *string  `json:"album_cover_url"`
-	Position      int64    `json:"position"`
-	Duration      int      `json:"duration"`
-	ReleaseDate   string   `json:"release_date"`
-	TrackNumber   int      `json:"track_number"`
-	DiscNumber    int      `json:"disc_number"`
-	Format        string   `json:"format"`
-	Codec         string   `json:"codec"`
-	Bitrate       *int     `json:"bitrate"`
-	SampleRate    *int     `json:"sample_rate"`
-	BitDepth      *int     `json:"bit_depth"`
 }
 
 func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
@@ -219,7 +186,7 @@ func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
 	return images[0].FileId
 }
 
-func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position int64) *ApiResponseStatusTrack {
+func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position int64) *ApiTrack {
 	media := stream.Media
 
 	resp := p.newApiResponseStatusMedia(media, position)
@@ -230,7 +197,7 @@ func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position in
 	if stream.File != nil && stream.File.Format != nil {
 		format := *stream.File.Format
 		resp.Format = format.String()
-		resp.Codec = player.GetFormatCodec(format)
+		resp.Codec = TrackCodec(player.GetFormatCodec(format))
 		if bitrate := player.GetFormatBitrate(format); bitrate > 0 {
 			resp.Bitrate = &bitrate
 		}
@@ -250,7 +217,7 @@ func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position in
 	return resp
 }
 
-func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position int64) *ApiResponseStatusTrack {
+func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position int64) *ApiTrack {
 	if media.IsTrack() {
 		track := media.Track()
 
@@ -264,7 +231,7 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.ImageSize)
 		}
 
-		return &ApiResponseStatusTrack{
+		return &ApiTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
 			Name:          *track.Name,
 			ArtistNames:   artists,
@@ -281,7 +248,7 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 
 		albumCoverId := getBestImageIdForSize(episode.CoverImage.Image, p.app.cfg.ImageSize)
 
-		return &ApiResponseStatusTrack{
+		return &ApiTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
 			Name:          *episode.Name,
 			ArtistNames:   []string{*episode.Show.Name},
@@ -296,44 +263,14 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 	}
 }
 
-type ApiResponseStatus struct {
-	Username       string                  `json:"username"`
-	DeviceId       string                  `json:"device_id"`
-	DeviceType     string                  `json:"device_type"`
-	DeviceName     string                  `json:"device_name"`
-	PlayOrigin     string                  `json:"play_origin"`
-	Stopped        bool                    `json:"stopped"`
-	Paused         bool                    `json:"paused"`
-	Buffering      bool                    `json:"buffering"`
-	Volume         uint32                  `json:"volume"`
-	VolumeSteps    uint32                  `json:"volume_steps"`
-	RepeatContext  bool                    `json:"repeat_context"`
-	RepeatTrack    bool                    `json:"repeat_track"`
-	ShuffleContext bool                    `json:"shuffle_context"`
-	Track          *ApiResponseStatusTrack `json:"track"`
-}
-
-type ApiResponseRoot struct {
-	PlaybackReady bool `json:"playback_ready"`
-}
-
-type ApiResponseVolume struct {
-	Value uint32 `json:"value"`
-	Max   uint32 `json:"max"`
-}
-
-type ApiResponseToken struct {
-	Token string `json:"token"`
-}
-
 type ApiEvent struct {
 	Type ApiEventType `json:"type"`
 	Data any          `json:"data"`
 }
 
-type ApiEventDataMetadata ApiResponseStatusTrack
+type ApiEventDataMetadata ApiTrack
 
-type ApiEventDataVolume ApiResponseVolume
+type ApiEventDataVolume ApiVolume
 
 type ApiEventDataPlaying struct {
 	ContextUri string `json:"context_uri"`
@@ -474,303 +411,239 @@ func jsonDecode(r *http.Request, v any) error {
 	return json.Unmarshal(data, v)
 }
 
+// The handlers below implement the generated ServerInterface; the routing that
+// dispatches to them is generated from api-spec.yml into api_gen.go. Each one
+// decodes and validates its payload, then hands an ApiRequest to the daemon and
+// blocks on the reply.
+
+var _ ServerInterface = (*ConcreteApiServer)(nil)
+
+func (s *ConcreteApiServer) GetRoot(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeRoot}, w)
+}
+
+func (s *ConcreteApiServer) GetStatus(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
+}
+
+func (s *ConcreteApiServer) GetToken(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeToken}, w)
+}
+
+func (s *ConcreteApiServer) PlayerResume(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeResume}, w)
+}
+
+func (s *ConcreteApiServer) PlayerPause(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
+}
+
+func (s *ConcreteApiServer) PlayerPlayPause(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlayPause}, w)
+}
+
+func (s *ConcreteApiServer) PlayerStop(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeStop}, w)
+}
+
+func (s *ConcreteApiServer) PlayerPrev(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePrev}, w)
+}
+
+func (s *ConcreteApiServer) PlayerGetVolume(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeGetVolume}, w)
+}
+
+func (s *ConcreteApiServer) PlayerPlay(w http.ResponseWriter, r *http.Request) {
+	var data ApiPlay
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if len(data.Uri) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlay, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlayerNext(w http.ResponseWriter, r *http.Request) {
+	var data ApiNext
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeNext, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlayerSeek(w http.ResponseWriter, r *http.Request) {
+	var data ApiSeek
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if !data.Relative && data.Position < 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlayerSetVolume(w http.ResponseWriter, r *http.Request) {
+	var data ApiSetVolume
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if !data.Relative && data.Volume < 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlayerRepeatContext(w http.ResponseWriter, r *http.Request) {
+	var data ApiRepeatContext
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingContext, Data: data.RepeatContext}, w)
+}
+
+func (s *ConcreteApiServer) PlayerRepeatTrack(w http.ResponseWriter, r *http.Request) {
+	var data ApiRepeatTrack
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingTrack, Data: data.RepeatTrack}, w)
+}
+
+func (s *ConcreteApiServer) PlayerShuffleContext(w http.ResponseWriter, r *http.Request) {
+	var data ApiShuffleContext
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.ShuffleContext}, w)
+}
+
+func (s *ConcreteApiServer) PlayerAddToQueue(w http.ResponseWriter, r *http.Request) {
+	var data ApiAddToQueue
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if len(data.Uri) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
+}
+
+func (s *ConcreteApiServer) SetDeviceName(w http.ResponseWriter, r *http.Request) {
+	var data ApiSetDeviceName
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if len(data.Name) == 0 {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestSetDeviceName, Data: data.Name}, w)
+}
+
+func (s *ConcreteApiServer) PlayerOutput(w http.ResponseWriter, r *http.Request) {
+	var data ApiOutput
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeReopenOutput, Data: data.Device}, w)
+}
+
+// handleWebApi proxies anything under /web-api/ to the Spotify Web API. It is
+// registered by hand rather than generated: the path continues for an
+// arbitrary number of segments, which an OpenAPI path template cannot express.
+func (s *ConcreteApiServer) handleWebApi(w http.ResponseWriter, r *http.Request) {
+	s.handleRequest(ApiRequest{
+		Type: ApiRequestTypeWebApi,
+		Data: ApiRequestDataWebApi{
+			Method: r.Method,
+			Path:   strings.TrimPrefix(r.URL.Path, "/web-api/"),
+			Query:  r.URL.Query(),
+		},
+	}, w)
+}
+
+func (s *ConcreteApiServer) GetEvents(w http.ResponseWriter, r *http.Request) {
+	opts := &websocket.AcceptOptions{}
+	if len(s.allowOrigin) > 0 {
+		allow := s.allowOrigin
+		allow = strings.TrimPrefix(allow, "http://")
+		allow = strings.TrimPrefix(allow, "https://")
+		allow = strings.TrimSuffix(allow, "/")
+		opts.OriginPatterns = []string{allow}
+	}
+
+	c, err := websocket.Accept(w, r, opts)
+	if err != nil {
+		s.log.WithError(err).Error("failed accepting websocket connection")
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// add the client to the list
+	s.clientsLock.Lock()
+	s.clients = append(s.clients, c)
+	s.clientsLock.Unlock()
+
+	s.log.Debugf("new websocket client")
+
+	for {
+		_, _, err := c.Read(context.Background())
+		if s.close.Load() {
+			return
+		} else if err != nil {
+			s.log.WithError(err).Error("websocket connection errored")
+
+			// remove the client from the list
+			s.clientsLock.Lock()
+			for i, cc := range s.clients {
+				if cc == c {
+					s.clients = append(s.clients[:i], s.clients[i+1:]...)
+					break
+				}
+			}
+			s.clientsLock.Unlock()
+			return
+		}
+	}
+}
+
 func (s *ConcreteApiServer) serve() {
 	m := http.NewServeMux()
-	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
 
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeRoot}, w)
-	})
-	m.Handle("/web-api/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.handleRequest(ApiRequest{
-			Type: ApiRequestTypeWebApi,
-			Data: ApiRequestDataWebApi{
-				Method: r.Method,
-				Path:   strings.TrimPrefix(r.URL.Path, "/web-api/"),
-				Query:  r.URL.Query(),
-			},
-		}, w)
-	}))
-	m.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "GET" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
-	})
-	m.HandleFunc("/player/play", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data ApiRequestDataPlay
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(data.Uri) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypePlay, Data: data}, w)
-	})
-	m.HandleFunc("/player/resume", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeResume}, w)
-	})
-	m.HandleFunc("/player/pause", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypePause}, w)
-	})
-	m.HandleFunc("/player/stop", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeStop}, w)
-	})
-	m.HandleFunc("/player/playpause", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypePlayPause}, w)
-	})
-	m.HandleFunc("/player/next", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data ApiRequestDataNext
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeNext, Data: data}, w)
-	})
-	m.HandleFunc("/player/prev", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypePrev}, w)
-	})
-	m.HandleFunc("/player/seek", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data ApiRequestDataSeek
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if !data.Relative && data.Position < 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeSeek, Data: data}, w)
-	})
-	m.HandleFunc("/player/volume", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeGetVolume}, w)
-		} else if r.Method == "POST" {
-			var data ApiRequestDataVolume
-			if err := jsonDecode(r, &data); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-			if !data.Relative && data.Volume < 0 {
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-
-			s.handleRequest(ApiRequest{Type: ApiRequestTypeSetVolume, Data: data}, w)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-		}
-	})
-	m.HandleFunc("/player/repeat_context", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data struct {
-			Repeat bool `json:"repeat_context"`
-		}
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingContext, Data: data.Repeat}, w)
-	})
-	m.HandleFunc("/player/repeat_track", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data struct {
-			Repeat bool `json:"repeat_track"`
-		}
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeSetRepeatingTrack, Data: data.Repeat}, w)
-	})
-	m.HandleFunc("/player/shuffle_context", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data struct {
-			Shuffle bool `json:"shuffle_context"`
-		}
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.Shuffle}, w)
-	})
-	m.HandleFunc("/player/add_to_queue", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data struct {
-			Uri string `json:"uri"`
-		}
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(data.Uri) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeAddToQueue, Data: data.Uri}, w)
-	})
-	m.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeToken}, w)
-	})
-	m.HandleFunc("/set_device_name", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data struct {
-			Name string `json:"name"`
-		}
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		if len(data.Name) == 0 {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestSetDeviceName, Data: data.Name}, w)
-	})
-	m.HandleFunc("/player/output", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-
-		var data struct {
-			Device string `json:"device"`
-		}
-		if err := jsonDecode(r, &data); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		s.handleRequest(ApiRequest{Type: ApiRequestTypeReopenOutput, Data: data.Device}, w)
-	})
-	m.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
-		opts := &websocket.AcceptOptions{}
-		if len(s.allowOrigin) > 0 {
-			allow := s.allowOrigin
-			allow = strings.TrimPrefix(allow, "http://")
-			allow = strings.TrimPrefix(allow, "https://")
-			allow = strings.TrimSuffix(allow, "/")
-			opts.OriginPatterns = []string{allow}
-		}
-
-		c, err := websocket.Accept(w, r, opts)
-		if err != nil {
-			s.log.WithError(err).Error("failed accepting websocket connection")
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		// add the client to the list
-		s.clientsLock.Lock()
-		s.clients = append(s.clients, c)
-		s.clientsLock.Unlock()
-
-		s.log.Debugf("new websocket client")
-
-		for {
-			_, _, err := c.Read(context.Background())
-			if s.close {
-				return
-			} else if err != nil {
-				s.log.WithError(err).Error("websocket connection errored")
-
-				// remove the client from the list
-				s.clientsLock.Lock()
-				for i, cc := range s.clients {
-					if cc == c {
-						s.clients = append(s.clients[:i], s.clients[i+1:]...)
-						break
-					}
-				}
-				s.clientsLock.Unlock()
-				return
-			}
-		}
-	})
+	// Routing comes from the spec; only the catch-all proxy is added by hand.
+	m.HandleFunc("/web-api/", s.handleWebApi)
+	handler := HandlerFromMux(s, m)
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:      []string{s.allowOrigin},
@@ -780,19 +653,18 @@ func (s *ConcreteApiServer) serve() {
 
 	var err error
 	if len(s.certFile) > 0 && len(s.keyFile) > 0 {
-		err = http.ServeTLS(s.listener, c.Handler(m), s.certFile, s.keyFile)
+		err = http.ServeTLS(s.listener, c.Handler(handler), s.certFile, s.keyFile)
 	} else {
-		err = http.Serve(s.listener, c.Handler(m))
+		err = http.Serve(s.listener, c.Handler(handler))
 	}
 
-	if s.close {
+	if s.close.Load() {
 		return
 	} else if err != nil {
 		s.log.WithError(err).Error("failed serving api")
 		_ = s.Close()
 	}
 }
-
 func (s *ConcreteApiServer) Emit(ev *ApiEvent) {
 	s.clientsLock.RLock()
 	defer s.clientsLock.RUnlock()
@@ -815,7 +687,7 @@ func (s *ConcreteApiServer) Receive() <-chan ApiRequest {
 }
 
 func (s *ConcreteApiServer) Close() error {
-	s.close = true
+	s.close.Store(true)
 
 	// close all websocket clients
 	s.clientsLock.RLock()
