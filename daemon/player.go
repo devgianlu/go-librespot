@@ -34,8 +34,9 @@ type AppPlayer struct {
 	app  *App
 	sess *session.Session
 
-	stop   chan struct{}
-	logout chan *AppPlayer
+	stop      chan struct{}
+	closeOnce sync.Once
+	logout    chan *AppPlayer
 
 	player            *player.Player
 	initialVolumeOnce sync.Once
@@ -721,10 +722,13 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 	return nil
 }
 
+// Close stops the player and releases its session.
 func (p *AppPlayer) Close() {
-	p.stop <- struct{}{}
-	p.player.Close()
-	p.sess.Close()
+	p.closeOnce.Do(func() {
+		p.stop <- struct{}{}
+		p.player.Close()
+		p.sess.Close()
+	})
 }
 
 func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaPlayer2PlayerCommand) {
