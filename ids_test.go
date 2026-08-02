@@ -12,7 +12,8 @@ func TestContextUriType(t *testing.T) {
 		{"spotify:collection:tracks", "collection"},
 		// User scoped URIs carry the username where the type usually sits.
 		{"spotify:user:someone:playlist:37i9dQZF1E36KLdUfLiuUo", "playlist"},
-		{"spotify:user:someone:collection", "user"},
+		{"spotify:user:someone:collection", "collection"},
+		{"spotify:user:someone:collection:your-episodes", "collection"},
 		{"", ""},
 		{"not-a-uri", ""},
 		{"spotify:album", ""},
@@ -38,6 +39,7 @@ func TestInferSpotifyIdTypeTrackContexts(t *testing.T) {
 		"spotify:dailymix:xxx",
 		"spotify:collection:tracks",
 		"spotify:user:someone:playlist:37i9dQZF1E36KLdUfLiuUo",
+		"spotify:user:11145089019:collection",
 	}
 
 	for _, uri := range uris {
@@ -52,6 +54,7 @@ func TestInferSpotifyIdTypeEpisodeContexts(t *testing.T) {
 		"spotify:show:5CnDmMUG0S5bSSw612fs8C",
 		"spotify:episode:0Jv8TUEkzMplSPfX3ynBXu",
 		"spotify:collection:your-episodes",
+		"spotify:user:someone:collection:your-episodes",
 	}
 
 	for _, uri := range uris {

@@ -16,13 +16,17 @@ var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{21,22})$")
 // of "spotify:album:xxx". User scoped URIs such as
 // "spotify:user:someone:playlist:xxx" carry the username in that position, so
 // for those the segment after it is the meaningful one.
+//
+// The type is the last segment for a user scoped context that needs no id of
+// its own — Liked Songs is "spotify:user:someone:collection" — so four segments
+// are enough, not five.
 func ContextUriType(uri string) string {
 	parts := strings.Split(uri, ":")
 	if len(parts) < 3 || parts[0] != "spotify" {
 		return ""
 	}
 
-	if parts[1] == "user" && len(parts) >= 5 {
+	if parts[1] == "user" && len(parts) >= 4 {
 		return parts[3]
 	}
 
@@ -42,11 +46,12 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 		return SpotifyIdTypeEpisode
 
 	// Contexts made of tracks. "collection" is Liked Songs; its saved episodes
-	// variant is spotify:collection:your-episodes, handled below.
+	// variant is handled below. Both come user scoped as well, as
+	// spotify:user:someone:collection[:your-episodes].
 	case "album", "artist", "playlist", "track", "station", "dailymix",
 		"collection", "top", "trackset", "list", "local", "concept",
 		"running", "genre", "radio", "folder":
-		if uri == "spotify:collection:your-episodes" {
+		if strings.HasSuffix(uri, ":collection:your-episodes") {
 			return SpotifyIdTypeEpisode
 		}
 		return SpotifyIdTypeTrack
@@ -99,6 +104,9 @@ const (
 	SpotifyIdTypeTrack    SpotifyIdType = "track"
 	SpotifyIdTypeEpisode  SpotifyIdType = "episode"
 	SpotifyIdTypePlaylist SpotifyIdType = "playlist"
+	SpotifyIdTypeAlbum    SpotifyIdType = "album"
+	SpotifyIdTypeArtist   SpotifyIdType = "artist"
+	SpotifyIdTypeShow     SpotifyIdType = "show"
 	SpotifyIdTypeUnknown  SpotifyIdType = ""
 )
 
