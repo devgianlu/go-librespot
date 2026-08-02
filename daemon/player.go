@@ -61,6 +61,11 @@ type AppPlayer struct {
 	primaryStream   *player.Stream
 	secondaryStream *player.Stream
 
+	// resumeFinishedPlaybackId is the playback id of the stream most recently
+	// reported as listened to the end, so that unloading it cannot overwrite
+	// that with a position a moment short of the end.
+	resumeFinishedPlaybackId []byte
+
 	prefetchTimer *time.Timer
 
 	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
