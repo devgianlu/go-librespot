@@ -1,3 +1,5 @@
+//go:build test_unit
+
 package mp3
 
 import (
