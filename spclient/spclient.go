@@ -423,6 +423,10 @@ func (c *Spclient) PlaylistSignals(ctx context.Context, playlist librespot.Spoti
 }
 
 func (c *Spclient) ContextResolve(ctx context.Context, uri string) (*connectpb.Context, error) {
+	if librespot.InferSpotifyIdTypeFromContextUri(uri) == librespot.SpotifyIdTypeUnknown {
+		return nil, fmt.Errorf("unsupported context type: %s", uri)
+	}
+
 	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
 	if err != nil {
 		return nil, err

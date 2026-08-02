@@ -12,12 +12,55 @@ import (
 
 var UriRegexp = regexp.MustCompile("^spotify:([a-z]+):([0-9a-zA-Z]{21,22})$")
 
-func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
-	if strings.HasPrefix(uri, "spotify:episode:") || strings.HasPrefix(uri, "spotify:show:") {
-		return SpotifyIdTypeEpisode
+// ContextUriType extracts the type segment of a context URI, that is the "album"
+// of "spotify:album:xxx". User scoped URIs such as
+// "spotify:user:someone:playlist:xxx" carry the username in that position, so
+// for those the segment after it is the meaningful one.
+func ContextUriType(uri string) string {
+	parts := strings.Split(uri, ":")
+	if len(parts) < 3 || parts[0] != "spotify" {
+		return ""
 	}
 
-	return SpotifyIdTypeTrack
+	if parts[1] == "user" && len(parts) >= 5 {
+		return parts[3]
+	}
+
+	return parts[1]
+}
+
+// InferSpotifyIdTypeFromContextUri returns the type of the *items* a context
+// holds. A ContextTrack often carries only a gid, and a gid does not say what it
+// identifies, so the context is what decides how to turn it back into a URI.
+//
+// Anything unrecognised returns SpotifyIdTypeUnknown instead of being assumed to
+// be a track.
+func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
+	switch ContextUriType(uri) {
+	// Contexts made of podcast episodes or audiobook chapters.
+	case "episode", "show", "chapter", "audiobook":
+		return SpotifyIdTypeEpisode
+
+	// Contexts made of tracks. "collection" is Liked Songs; its saved episodes
+	// variant is spotify:collection:your-episodes, handled below.
+	case "album", "artist", "playlist", "track", "station", "dailymix",
+		"collection", "top", "trackset", "list", "local", "concept",
+		"running", "genre", "radio", "folder":
+		if uri == "spotify:collection:your-episodes" {
+			return SpotifyIdTypeEpisode
+		}
+		return SpotifyIdTypeTrack
+
+	case "ad", "app", "audio", "audiofile", "author", "clip", "conceptclass",
+		"concert", "image", "instance", "internal", "interruption", "licensor",
+		"localfileimage", "media", "meta", "mosaic", "partner", "prerelease",
+		"promotion", "room", "search", "socialsession", "suggest", "transition",
+		"user", "userimage", "zerotap":
+		return SpotifyIdTypeUnknown
+
+	default:
+		return SpotifyIdTypeUnknown
+	}
 }
 
 func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
@@ -56,6 +99,7 @@ const (
 	SpotifyIdTypeTrack    SpotifyIdType = "track"
 	SpotifyIdTypeEpisode  SpotifyIdType = "episode"
 	SpotifyIdTypePlaylist SpotifyIdType = "playlist"
+	SpotifyIdTypeUnknown  SpotifyIdType = ""
 )
 
 type SpotifyId struct {
