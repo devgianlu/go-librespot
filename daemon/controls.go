@@ -195,6 +195,11 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 	case player.EventTypeNotPlaying:
 		p.sess.Events().OnPlayerEnd(p.primaryStream, p.state.trackPosition())
 
+		// Played to the end: clear the resume point before advancing, so that
+		// playing this episode again (repeat, or picking it from a show later)
+		// starts it over instead of resuming a second before the end.
+		p.reportResumeFinished(ctx, p.primaryStream)
+
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
@@ -301,6 +306,8 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 	p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 	p.state.player.Index = ctxTracks.Index()
 
+	p.resumeCurrentEpisode(ctx)
+
 	// load current track into stream — skip forward if it (or a run of tracks) is unplayable.
 	if err := p.loadCurrentTrackOrSkip(ctx, paused, drop); err != nil {
 		return fmt.Errorf("failed loading current track (load context): %w", err)
@@ -332,7 +339,12 @@ func (p *AppPlayer) loadCurrentTrackOrSkip(ctx context.Context, paused, drop boo
 
 func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) error {
 	if p.primaryStream != nil {
-		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream, p.player.PositionMs())
+		unloadPosition := p.player.PositionMs()
+		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream, unloadPosition)
+
+		// Whatever replaces this stream, the listener stopped here: remember
+		// the spot before losing track of the outgoing episode.
+		p.reportResumePosition(ctx, p.primaryStream, unloadPosition)
 
 		p.primaryStream = nil
 	}
@@ -381,6 +393,16 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 		p.primaryStream, err = p.player.NewStream(ctx, p.app.client, *spotId, p.app.cfg.Bitrate, trackPosition)
 		if err != nil {
 			return fmt.Errorf("failed creating stream for %s: %w", spotId, err)
+		}
+	}
+
+	// A prefetched stream was created at position zero, so a non-zero start
+	// position (an episode's resume point, or a transfer) has to be applied
+	// here — unlike the freshly created stream above, which is already there.
+	if prefetched && trackPosition > 0 {
+		seekTo := max(0, min(trackPosition, int64(p.primaryStream.Media.Duration())))
+		if err := p.primaryStream.Source.SetPositionMs(seekTo); err != nil {
+			return fmt.Errorf("failed seeking prefetched stream for %s: %w", spotId, err)
 		}
 	}
 
@@ -554,6 +576,10 @@ func (p *AppPlayer) pause(ctx context.Context) error {
 		return fmt.Errorf("failed pausing playback: %w", err)
 	}
 
+	// Pausing is the usual way of stopping mid-episode, so this is the report
+	// that matters most for picking the episode back up elsewhere.
+	p.reportResumePosition(ctx, p.primaryStream, streamPos)
+
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.setPaused(true)
@@ -623,6 +649,8 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
+	p.resumeCurrentEpisode(ctx)
+
 	// load current track into stream
 	if err := p.loadCurrentTrack(ctx, p.state.player.IsPaused, true); err != nil {
 		return fmt.Errorf("failed loading current track (skip prev): %w", err)
@@ -647,6 +675,8 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
 		p.state.player.Index = p.state.tracks.Index()
+
+		p.resumeCurrentEpisode(ctx)
 
 		if err := p.loadCurrentTrack(ctx, p.state.player.IsPaused, true); err != nil {
 			return err
@@ -751,6 +781,8 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 		p.state.player.IsPaused = false
 		p.state.player.IsBuffering = false
 	}
+
+	p.resumeCurrentEpisode(ctx)
 
 	// load current track into stream.
 	//
