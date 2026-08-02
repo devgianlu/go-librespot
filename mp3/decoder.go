@@ -13,6 +13,7 @@ import (
 
 // #cgo pkg-config: libmpg123
 // #include <mpg123.h>
+// #include <stdint.h>
 // #include <stdio.h>
 // #include <stdlib.h>
 //
