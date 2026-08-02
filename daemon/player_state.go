@@ -2,12 +2,15 @@ package daemon
 
 import (
 	"context"
+	"encoding/hex"
+	"maps"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/dealer"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/tracks"
 )
 
@@ -205,4 +208,90 @@ func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutSta
 
 	// finally send the state update
 	return p.sess.Spclient().PutConnectState(ctx, p.spotConnId, putStateReq)
+}
+
+// coverImageSizes maps the ProvidedTrack metadata keys Spotify's clients look
+// for to the image size each should resolve to. Every key is filled from the
+// closest size the media actually carries.
+var coverImageSizes = map[string]string{
+	"image_small_url":  "small",
+	"image_url":        "default",
+	"image_large_url":  "large",
+	"image_xlarge_url": "xlarge",
+}
+
+// enrichTrackMetadata adds the metadata controllers use to draw the
+// now-playing view: the title, album and artwork of the media that is actually
+// loaded.
+//
+// Only the context resolver's own metadata reaches us through
+// ContextTrackToProvidedTrack, and it never carries any of this: an album
+// context arrives with nothing at all, a playlist context with bookkeeping like
+// added_at. The values here come from the media fetched to play the audio.
+func enrichTrackMetadata(provided *connectpb.ProvidedTrack, media *librespot.Media) {
+	if provided == nil || media == nil {
+		return
+	}
+
+	// ContextTrackToProvidedTrack hands over the ContextTrack's own map, so
+	// copy before adding: writing in place would edit the track list too.
+	metadata := make(map[string]string, len(provided.Metadata)+len(coverImageSizes)+4)
+	maps.Copy(metadata, provided.Metadata)
+
+	set := func(key, value string) {
+		if len(value) > 0 {
+			metadata[key] = value
+		}
+	}
+	setUri := func(key string, typ librespot.SpotifyIdType, gid []byte) string {
+		// SpotifyIdFromGid panics on a malformed gid, and metadata off the
+		// wire is not worth trusting that far.
+		if len(gid) != 16 {
+			return ""
+		}
+
+		uri := librespot.SpotifyIdFromGid(typ, gid).Uri()
+		set(key, uri)
+		return uri
+	}
+
+	var covers []*metadatapb.Image
+	if media.IsTrack() {
+		track := media.Track()
+		set("title", track.GetName())
+
+		if album := track.GetAlbum(); album != nil {
+			set("album_title", album.GetName())
+			provided.AlbumUri = setUri("album_uri", librespot.SpotifyIdTypeAlbum, album.GetGid())
+
+			covers = album.GetCover()
+			if len(covers) == 0 {
+				covers = album.GetCoverGroup().GetImage()
+			}
+		}
+
+		if artists := track.GetArtist(); len(artists) > 0 {
+			provided.ArtistUri = setUri("artist_uri", librespot.SpotifyIdTypeArtist, artists[0].GetGid())
+		}
+	} else {
+		episode := media.Episode()
+		set("title", episode.GetName())
+
+		// An episode has no album; controllers show the show in its place,
+		// which is also what the API response does.
+		if show := episode.GetShow(); show != nil {
+			set("album_title", show.GetName())
+			provided.AlbumUri = setUri("album_uri", librespot.SpotifyIdTypeShow, show.GetGid())
+		}
+
+		covers = episode.GetCoverImage().GetImage()
+	}
+
+	for key, size := range coverImageSizes {
+		if id := getBestImageIdForSize(covers, size); id != nil {
+			set(key, "spotify:image:"+hex.EncodeToString(id))
+		}
+	}
+
+	provided.Metadata = metadata
 }

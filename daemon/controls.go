@@ -417,6 +417,11 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 			strconv.QuoteToGraphic(p.primaryStream.Media.Name()), paused, trackPosition, p.primaryStream.Media.Duration(),
 			prefetched)
 
+	// Now that the media is known, publish what controllers need to draw the
+	// track. This has to happen after the assignments above, which replace
+	// Track wholesale with a fresh ProvidedTrack from the track list.
+	enrichTrackMetadata(p.state.player.Track, p.primaryStream.Media)
+
 	p.state.updateTimestamp()
 	p.state.player.PlaybackId = hex.EncodeToString(p.primaryStream.PlaybackId)
 	p.state.player.Duration = int64(p.primaryStream.Media.Duration())
