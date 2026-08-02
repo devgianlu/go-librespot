@@ -2,6 +2,7 @@
   "dependencies": [
     "alsa",
     "libvorbis",
-    "libflac"
+    "libflac",
+    "mpg123"
   ]
 }
