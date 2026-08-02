@@ -13,6 +13,7 @@ import (
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/cache"
 	"github.com/devgianlu/go-librespot/flac"
+	"github.com/devgianlu/go-librespot/mp3"
 	"github.com/devgianlu/go-librespot/output"
 	"github.com/devgianlu/go-librespot/playplay"
 	downloadpb "github.com/devgianlu/go-librespot/proto/spotify/download"
@@ -861,6 +862,20 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 
 		stream = flacStream
+	} else if audioFormat == AudioFormatMP3 {
+		audioStream := io.NewSectionReader(decryptedStream, 0, rawStream.Size())
+		mp3Stream, err := mp3.New(log, audioStream, normalisationFactor)
+		if err != nil {
+			return nil, fmt.Errorf("failed initializing mp3 stream: %w", err)
+		}
+
+		if mp3Stream.SampleRate != SampleRate {
+			return nil, fmt.Errorf("unsupported sample rate: %d", mp3Stream.SampleRate)
+		} else if mp3Stream.Channels != Channels {
+			return nil, fmt.Errorf("unsupported channels: %d", mp3Stream.Channels)
+		}
+
+		stream = mp3Stream
 	} else {
 		return nil, fmt.Errorf("unsupported audio format: %s", *file.Format)
 	}

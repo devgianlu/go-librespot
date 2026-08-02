@@ -1,6 +1,6 @@
 FROM alpine:3.23 AS build
 
-RUN apk update && apk -U --no-cache add go alsa-lib-dev libogg-dev libvorbis-dev flac-dev gcc musl-dev
+RUN apk update && apk -U --no-cache add go alsa-lib-dev libogg-dev libvorbis-dev flac-dev mpg123-dev gcc musl-dev
 
 WORKDIR /src
 

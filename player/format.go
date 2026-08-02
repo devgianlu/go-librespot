@@ -6,6 +6,14 @@ import (
 
 func GetFormatBitrate(format metadatapb.AudioFile_Format) int {
 	switch format {
+	case metadatapb.AudioFile_MP3_96:
+		return 96
+	case metadatapb.AudioFile_MP3_160:
+		return 160
+	case metadatapb.AudioFile_MP3_256:
+		return 256
+	case metadatapb.AudioFile_MP3_320:
+		return 320
 	case metadatapb.AudioFile_OGG_VORBIS_96:
 		return 96
 	case metadatapb.AudioFile_OGG_VORBIS_160:
