@@ -6,6 +6,12 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 )
 
+// BackendPipePassthrough is the audio backend that writes the raw encoded
+// (Ogg/Vorbis) stream to a named pipe instead of decoded PCM. It is served
+// by its own driver, separate from the pipe backend; the Reader must
+// implement AudioSourcePassthrough and OutputPipeFormat is ignored.
+const BackendPipePassthrough = "pipe_passthrough"
+
 type Output interface {
 	// Pause pauses the output.
 	Pause() error
@@ -131,6 +137,12 @@ func NewOutput(options *NewOutputOptions) (Output, error) {
 		return out, nil
 	case "pipe":
 		out, err := newPipeOutput(options)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	case BackendPipePassthrough:
+		out, err := newPipePassthroughOutput(options)
 		if err != nil {
 			return nil, err
 		}
