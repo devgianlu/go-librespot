@@ -197,6 +197,22 @@ cache:
   size_limit: '1GB' # Maximum total cache size before evicting least-recently-used files ('0' for unlimited)
 ```
 
+### Track metadata cache
+
+Optionally, the daemon can cache track metadata (name, artists, cover art) in memory and fetch it — via the same
+internal API playback uses, not the rate-limited public Web API — for the tracks around the playback position. This
+enables a `next_track` field in `GET /status` and a `GET /context/tracks?uri=...` endpoint that lists any playable
+context (playlist, album, artist) in order with metadata, so a client can render a browsable song list and start any
+entry via `POST /player/play` with `skip_to_uri`. Everything is opt-in and disabled by default: a headless speaker has
+no use for metadata beyond the playing track and should not pay network requests for it.
+
+```yaml
+metadata:
+  enabled: false # Cache + fetch metadata around the playback position; enables next_track and /context/tracks
+  context_sweep: false # Also resolve metadata for the whole context when one starts playing (requires enabled)
+  max_tracks: 800 # Maximum number of tracks of a context to enumerate and sweep
+```
+
 ### Volume synchronization
 
 Various configurations for volume control are available:

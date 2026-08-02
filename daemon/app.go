@@ -223,6 +223,13 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.prefetchTimer.Stop()
 
+	// The metadata cache is opt-in: left nil, every metadata helper is a no-op
+	// and the daemon performs no metadata request playback does not need.
+	if app.cfg.Metadata.Enabled {
+		appPlayer.metaCache = newTrackMetaCache()
+		appPlayer.contextLists = newContextListCache()
+	}
+
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,
 		DeviceType:  app.deviceType,

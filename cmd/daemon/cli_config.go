@@ -79,6 +79,12 @@ type cliConfig struct {
 		SizeLimit string `koanf:"size_limit"`
 	} `koanf:"cache"`
 
+	Metadata struct {
+		Enabled      bool `koanf:"enabled"`
+		ContextSweep bool `koanf:"context_sweep"`
+		MaxTracks    int  `koanf:"max_tracks"`
+	} `koanf:"metadata"`
+
 	Credentials struct {
 		Type        string `koanf:"type"`
 		Interactive struct {
@@ -143,6 +149,10 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 	}
 	// The value is validated in loadCLIConfig, so the error is unreachable here.
 	dc.Cache.SizeLimit, _ = parseSize(c.Cache.SizeLimit)
+
+	dc.Metadata.Enabled = c.Metadata.Enabled
+	dc.Metadata.ContextSweep = c.Metadata.ContextSweep
+	dc.Metadata.MaxTracks = c.Metadata.MaxTracks
 	dc.Credentials.Type = c.Credentials.Type
 	dc.Credentials.Interactive.CallbackPort = c.Credentials.Interactive.CallbackPort
 	dc.Credentials.SpotifyToken.Username = c.Credentials.SpotifyToken.Username
@@ -203,6 +213,10 @@ func loadCLIConfig(cfg *cliConfig) error {
 
 		"cache.enabled":    false,
 		"cache.size_limit": "1GB",
+
+		"metadata.enabled":       false,
+		"metadata.context_sweep": false,
+		"metadata.max_tracks":    800,
 
 		"zeroconf_backend": "builtin",
 

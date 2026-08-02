@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/devgianlu/go-librespot/mpris"
@@ -68,6 +69,21 @@ type AppPlayer struct {
 	resumeFinishedPlaybackId []byte
 
 	prefetchTimer *time.Timer
+
+	// metaCache holds metadata for tracks around the playback position so /status
+	// can describe the upcoming track before its stream loads. Nil when
+	// metadata.enabled is false — every helper treats a nil cache as a no-op.
+	metaCache *trackMetaCache
+	// contextLists holds the enumerated track uris of recently listed contexts, so a
+	// client polling a filling sweep does not re-page the context on every poll.
+	contextLists *contextListCache
+	// metaFetchInFlight single-flights the background window metadata fetch.
+	metaFetchInFlight atomic.Bool
+	// metaSweeps serialises the background full-context metadata sweeps.
+	metaSweeps metaSweepQueue
+	// lastFullMetaContext is the context uri the last full sweep ran for, so
+	// replaying the same playlist does not re-sweep it. Run goroutine only.
+	lastFullMetaContext string
 
 	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
 	// skip past (Spotify-refused audio keys / restricted media) before giving up — so a run
@@ -290,6 +306,11 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 		p.state.player.Index = ctxTracks.Index()
 
+		// Fetch metadata for the transferred window in the background while the
+		// track loads, and, when configured, sweep the whole context.
+		p.scheduleMetaPrefetch()
+		p.scheduleContextMetaPrefetch(p.state.player.ContextUri)
+
 		// load current track into stream — skip forward if the transferred track is unplayable
 		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
 		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
@@ -490,6 +511,51 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 		if p.primaryStream != nil && p.prodInfo != nil {
 			resp.Track = p.newApiResponseStatusTrack(p.primaryStream, p.state.trackPosition())
+		}
+
+		// Describe the upcoming track when its metadata is cached, so a client
+		// can pre-warm its name and cover art before the user skips to it.
+		if len(p.state.player.NextTracks) > 0 {
+			if media := p.metaCache.get(p.state.player.NextTracks[0].Uri); media != nil && p.prodInfo != nil {
+				resp.NextTrack = p.newApiResponseStatusMedia(media, 0)
+			}
+		}
+
+		return resp, nil
+	case ApiRequestTypeContextTracks:
+		if p.metaCache == nil {
+			return nil, ErrNotFound
+		}
+
+		data := req.Data.(ApiRequestDataContextTracks)
+		if !isListableContextUri(data.Uri) {
+			return nil, ErrBadRequest
+		}
+
+		// The context resolver enumerates any context the player can play, so
+		// playlists, albums and artists all take the same path. Both halves fill
+		// in behind the response rather than blocking it: enumeration pages over
+		// the network and the metadata sweep is batched and paced, and this runs
+		// on the same goroutine as playback control. So answer with whatever is
+		// known — ready reports whether the track list itself is enumerated,
+		// cached how many of those tracks carry metadata — and let the client
+		// poll until ready is true and cached == length.
+		p.scheduleContextEnumerate(data.Uri)
+
+		uris, ready := p.contextLists.get(data.Uri)
+		resp := &ApiContextTracks{
+			Uri:    data.Uri,
+			Ready:  ready,
+			Length: len(uris),
+			Tracks: make([]ApiContextTrackItem, 0, len(uris)),
+		}
+		for _, uri := range uris {
+			entry := ApiContextTrackItem{Uri: uri}
+			if media := p.metaCache.get(uri); media != nil && p.prodInfo != nil {
+				entry.Track = p.newApiResponseStatusMedia(media, 0)
+				resp.Cached++
+			}
+			resp.Tracks = append(resp.Tracks, entry)
 		}
 
 		return resp, nil
