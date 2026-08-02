@@ -252,6 +252,7 @@ audio_output_pipe: '' # Path to a named pipe for audio output
 audio_output_pipe_format: s16le # Audio output pipe format (s16le, s32le, f32le)
 bitrate: 160 # Playback bitrate (96, 160, 320)
 crossfade_duration: 0 # Crossfade duration between tracks in milliseconds (0 to disable)
+skip_debounce_ms: 600 # Coalesce rapid next/prev presses; the selected track loads once presses stop (0 to disable)
 volume_steps: 100 # Volume steps count
 initial_volume: 100 # Initial volume in steps (not applied to the mixer device)
 ignore_last_volume: false # Whether to ignore the last saved volume and always use initial_volume

@@ -69,6 +69,19 @@ type AppPlayer struct {
 
 	prefetchTimer *time.Timer
 
+	// settleTimer defers the expensive part of a skip (audio key + stream load) while the
+	// user is still browsing: every next/prev in a burst just moves the track pointer and
+	// re-arms this timer, and only the track the pointer lands on gets loaded. Fires in
+	// Run's select loop.
+	settleTimer *time.Timer
+	// settlePending is true while a pointer move (or key retry) awaits its deferred load.
+	settlePending bool
+	// settleAtEnd records that the pointer ran past the end of the context during the
+	// settle window, so the deferred load runs the end-of-context (autoplay/stop) path.
+	settleAtEnd bool
+	// lastSkipDone is when the previous skip command finished processing; a skip arriving
+	// within SkipDebounce of it is part of a burst and gets deferred.
+	lastSkipDone time.Time
 	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
 	// skip past (Spotify-refused audio keys / restricted media) before giving up — so a run
 	// of refused tracks (even at the very start of a context) advances to the first playable
@@ -205,6 +218,9 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
 		}
 		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
+
+		// The transferred remote state supersedes any deferred skip.
+		p.cancelSettle()
 
 		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), transferState.CurrentSession.Context)
 		if err != nil {
@@ -490,6 +506,12 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 		if p.primaryStream != nil && p.prodInfo != nil {
 			resp.Track = p.newApiResponseStatusTrack(p.primaryStream, p.state.trackPosition())
+		}
+
+		// While a deferred skip awaits its load, the track object above still
+		// describes the last loaded stream; expose the pointer's target too.
+		if p.settlePending && p.state.player.Track != nil {
+			resp.PendingTrackUri = &p.state.player.Track.Uri
 		}
 
 		return resp, nil
@@ -851,6 +873,31 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			p.handlePlayerEvent(ctx, &ev)
 		case <-p.prefetchTimer.C:
 			p.prefetchNext(ctx)
+		case <-p.settleTimer.C:
+			// e.g. cancelled between Reset and fire
+			if !p.settlePending {
+				break
+			}
+
+			// Limit ourselves to 30 seconds like every other load path: a
+			// hanging network call here would block the whole control loop.
+			settleCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			if err := p.settleNow(settleCtx); err != nil {
+				p.app.log.WithError(err).Error("failed loading settled track")
+
+				// No caller sees this error: tell clients audio is not coming
+				// instead of stranding them on a forever-buffering state.
+				if p.state.player.IsPlaying {
+					p.state.player.IsPlaying = false
+					p.state.player.IsBuffering = false
+					p.updateState(settleCtx)
+					p.app.server.Emit(&ApiEvent{
+						Type: ApiEventTypeStopped,
+						Data: ApiEventDataStopped{PlayOrigin: p.state.playOrigin()},
+					})
+				}
+			}
+			cancel()
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.

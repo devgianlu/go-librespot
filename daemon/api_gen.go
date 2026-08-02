@@ -118,6 +118,9 @@ type ApiStatus struct {
 	// Paused Whether the player is paused
 	Paused bool `json:"paused"`
 
+	// PendingTrackUri The track selected by a not-yet-settled skip: rapid next/prev presses move the selection immediately but defer loading it until the presses stop (skip_debounce_ms), so while browsing this holds the target track URI and the track object still describes the last loaded one. Absent when no skip is pending.
+	PendingTrackUri *string `json:"pending_track_uri,omitempty"`
+
 	// PlayOrigin Who started the playback, "go-librespot" identifies the API as the play origin, everything else is Spotify own stuff
 	PlayOrigin string `json:"play_origin"`
 

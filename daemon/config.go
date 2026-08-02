@@ -1,5 +1,7 @@
 package daemon
 
+import "time"
+
 // Config carries the runtime configuration for a daemon instance.
 type Config struct {
 	DeviceId    string
@@ -27,6 +29,12 @@ type Config struct {
 	CrossfadeDuration         int
 	ExternalVolume            bool
 	DisableAutoplay           bool
+
+	// SkipDebounce is how long to wait after a burst of next/prev commands
+	// before actually loading the track the pointer landed on, so mashing the
+	// skip button costs one audio-key request instead of one per press. Zero
+	// disables debouncing (every skip loads immediately).
+	SkipDebounce time.Duration
 
 	ZeroconfEnabled               bool
 	ZeroconfPort                  int
