@@ -33,6 +33,12 @@ jobs:
           go mod tidy
           git diff --exit-code go.mod go.sum
 
+      - name: Check generated code is up to date
+        if: runner.os == 'Linux'
+        run: |
+          go generate ./...
+          git diff --exit-code
+
       - name: Format
         run: test -z "$(gofmt -l .)"
 
