@@ -4,11 +4,37 @@ info:
   title: go-librespot API
   description: go-librespot daemon API
 
+# This spec is the source of truth for the API: the request/response models and
+# the HTTP routing in daemon/api_gen.go are generated from it by oapi-codegen.
+# Changing a payload here and regenerating is the way to change the API.
+#
+# Response schemas mark every field required so the generated structs keep
+# emitting them; request schemas use x-go-type-skip-optional-pointer so optional
+# fields stay plain values that default to their zero value, matching how the
+# daemon has always read them.
+
 components:
   schemas:
     track:
-      description: A track
+      x-go-name: ApiTrack
+      description: A track or podcast episode
       type: object
+      required:
+        - uri
+        - name
+        - artist_names
+        - album_name
+        - album_cover_url
+        - position
+        - duration
+        - release_date
+        - track_number
+        - disc_number
+        - format
+        - codec
+        - bitrate
+        - sample_rate
+        - bit_depth
       properties:
         uri:
           description: URI
@@ -20,16 +46,30 @@ components:
           description: Artists name
           type: array
           items:
-            - description: Artist name
-              type: string
+            description: Artist name
+            type: string
         album_name:
           description: Album name
           type: string
         album_cover_url:
           description: Album cover URL
           type: string
+          nullable: true
+        position:
+          description: Playback position in milliseconds
+          type: integer
+          format: int64
         duration:
           description: Duration in milliseconds
+          type: integer
+        release_date:
+          description: Album release date, empty for episodes
+          type: string
+        track_number:
+          description: Track number within the disc, zero for episodes
+          type: integer
+        disc_number:
+          description: Disc number within the album, zero for episodes
           type: integer
         format:
           description: >-
@@ -45,6 +85,7 @@ components:
             - mp3
             - aac
             - unknown
+            - ''
         bitrate:
           description: >-
             Nominal bitrate in kbps, null for formats without a fixed one such
@@ -61,9 +102,113 @@ components:
             have no meaningful source bit depth
           type: integer
           nullable: true
+    status:
+      x-go-name: ApiStatus
+      description: The player status
+      type: object
+      required:
+        - username
+        - device_id
+        - device_type
+        - device_name
+        - play_origin
+        - stopped
+        - paused
+        - buffering
+        - volume
+        - volume_steps
+        - repeat_context
+        - repeat_track
+        - shuffle_context
+        - track
+      properties:
+        username:
+          description: Currently active account's username
+          type: string
+        device_id:
+          description: The player device ID
+          type: string
+        device_type:
+          description: The player device type, for example COMPUTER or SPEAKER
+          type: string
+        device_name:
+          description: The player device name
+          type: string
+        play_origin:
+          description: >-
+            Who started the playback, "go-librespot" identifies the API as the
+            play origin, everything else is Spotify own stuff
+          type: string
+        stopped:
+          description: Whether the player is stopped
+          type: boolean
+        paused:
+          description: Whether the player is paused
+          type: boolean
+        buffering:
+          description: Whether the player is buffering
+          type: boolean
+        volume:
+          description: The player current volume from 0 to max
+          type: integer
+          format: uint32
+          minimum: 0
+        volume_steps:
+          description: The player max volume value
+          type: integer
+          format: uint32
+        repeat_context:
+          description: Whether the repeat context feature is enabled
+          type: boolean
+        repeat_track:
+          description: Whether the repeat track feature is enabled
+          type: boolean
+        shuffle_context:
+          description: Whether the shuffle context feature is enabled
+          type: boolean
+        track:
+          allOf:
+            - $ref: '#/components/schemas/track'
+          nullable: true
+    root:
+      x-go-name: ApiRoot
+      description: API reachability and playback readiness
+      type: object
+      required: [ playback_ready ]
+      properties:
+        playback_ready:
+          description: >-
+            Whether the daemon is fully bootstrapped and ready to accept
+            /player/play
+          type: boolean
+    volume:
+      x-go-name: ApiVolume
+      description: The player volume settings
+      type: object
+      required: [ value, max ]
+      properties:
+        value:
+          description: The current volume, ranging from 0 to max
+          type: integer
+          format: uint32
+        max:
+          description: The max volume value
+          type: integer
+          format: uint32
+    token:
+      x-go-name: ApiToken
+      description: A Spotify access token for the active session
+      type: object
+      required: [ token ]
+      properties:
+        token:
+          description: The access token
+          type: string
     play:
+      x-go-name: ApiPlay
       description: An initiate playback payload
       type: object
+      required: [ uri ]
       properties:
         uri:
           description: Spotify URI to start playing
@@ -71,17 +216,122 @@ components:
         skip_to_uri:
           description: Spotify URI to skip to (when playing playlists)
           type: string
+          x-go-type-skip-optional-pointer: true
         paused:
           description: Start playback as paused
           type: boolean
+          x-go-type-skip-optional-pointer: true
         position:
           description: >-
             Position in milliseconds to start playback at within the selected
             track (0 starts from the beginning)
           type: integer
+          format: int64
+          x-go-type-skip-optional-pointer: true
+    next:
+      x-go-name: ApiNext
+      description: A skip to next payload
+      type: object
+      properties:
+        uri:
+          description: >-
+            The track URI to skip to. When omitted the next track in the
+            context is played.
+          type: string
+    seek:
+      x-go-name: ApiSeek
+      description: A seek payload
+      type: object
+      required: [ position ]
+      properties:
+        position:
+          description: >-
+            Seek position in milliseconds. Must not be negative unless relative
+            is set.
+          type: integer
+          format: int64
+        relative:
+          description: Whether the seek position is relative to the current one
+          type: boolean
+          default: false
+          x-go-type-skip-optional-pointer: true
+    setVolume:
+      x-go-name: ApiSetVolume
+      description: A set volume payload
+      type: object
+      required: [ volume ]
+      properties:
+        volume:
+          description: >-
+            Volume from 0 to max. Must not be negative unless relative is set.
+          type: integer
+          format: int32
+        relative:
+          description: Whether to change the volume relative to the current volume
+          type: boolean
+          default: false
+          x-go-type-skip-optional-pointer: true
+    repeatContext:
+      x-go-name: ApiRepeatContext
+      description: A toggle repeating context payload
+      type: object
+      required: [ repeat_context ]
+      properties:
+        repeat_context:
+          description: Whether repeating context should be enabled
+          type: boolean
+    repeatTrack:
+      x-go-name: ApiRepeatTrack
+      description: A toggle repeating track payload
+      type: object
+      required: [ repeat_track ]
+      properties:
+        repeat_track:
+          description: Whether repeating track should be enabled
+          type: boolean
+    shuffleContext:
+      x-go-name: ApiShuffleContext
+      description: A toggle shuffling context payload
+      type: object
+      required: [ shuffle_context ]
+      properties:
+        shuffle_context:
+          description: Whether shuffling context should be enabled
+          type: boolean
+    addToQueue:
+      x-go-name: ApiAddToQueue
+      description: An add to queue payload
+      type: object
+      required: [ uri ]
+      properties:
+        uri:
+          description: The URI for the track that should be added
+          type: string
+    setDeviceName:
+      x-go-name: ApiSetDeviceName
+      description: A set device name payload
+      type: object
+      required: [ name ]
+      properties:
+        name:
+          description: The new device name
+          type: string
+    output:
+      x-go-name: ApiOutput
+      description: A reopen audio output payload
+      type: object
+      properties:
+        device:
+          description: >-
+            The output device name to open (backend-specific, e.g. an ALSA
+            device). Empty selects the configured default.
+          type: string
+          x-go-type-skip-optional-pointer: true
+
 paths:
   /:
     get:
+      operationId: getRoot
       description: Returns API reachability and playback readiness
       responses:
         200:
@@ -89,13 +339,10 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  playback_ready:
-                    description: Whether the daemon is fully bootstrapped and ready to accept /player/play
-                    type: boolean
+                $ref: '#/components/schemas/root'
   /status:
     get:
+      operationId: getStatus
       description: Returns the player status
       responses:
         200:
@@ -103,65 +350,110 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  username:
-                    description: Currently active account's username
-                    type: string
-                  device_id:
-                    description: The player device ID
-                    type: string
-                  device_name:
-                    description: The player device name
-                    type: string
-                  play_origin:
-                    description: Who started the playback, "go-librespot" identifies the API as the play origin, everything else is Spotify own stuff
-                    type: string
-                  stopped:
-                    description: Whether the player is stopped
-                    type: boolean
-                  paused:
-                    description: Whether the player is paused
-                    type: boolean
-                  buffering:
-                    description: Whether the player is buffering
-                    type: boolean
-                  volume:
-                    description: The player current volume from 0 to max
-                    type: number
-                    minimum: 0
-                  volume_steps:
-                    description: The player max volume value
-                    type: number
-                  repeat_context:
-                    description: Whether the repeat context feature is enabled
-                    type: boolean
-                  repeat_track:
-                    description: Whether the repeat track feature is enabled
-                    type: boolean
-                  shuffle_context:
-                    description: Whether the shuffle context feature is enabled
-                    type: boolean
-                  track:
-                    $ref: '#/components/schemas/track'
-  /set_device_name:
+                $ref: '#/components/schemas/status'
+        204:
+          description: No active session
+  /token:
     post:
-      description: Set the player device name
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [ name ]
-              properties:
-                name:
-                  description: The new device name
-                  type: string
+      operationId: getToken
+      description: Returns a Spotify access token for the active session
       responses:
         200:
           description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/token'
+        204:
+          description: No active session
+  /events:
+    get:
+      operationId: getEvents
+      description: >-
+        WebSocket endpoint streaming player events as JSON objects of the form
+        `{"type": "...", "data": {...}}`. This is a protocol upgrade, not a
+        plain HTTP response.
+      responses:
+        101:
+          description: Switching protocols to WebSocket
+  # Everything under /web-api/ is proxied verbatim to api.spotify.com with the
+  # session's bearer token attached, so the path continues for an arbitrary
+  # number of segments and every method is forwarded. OpenAPI can only describe
+  # a single path segment, so these operations are excluded from route
+  # generation (see api-codegen.yml) and the prefix is registered by hand; they
+  # are documented here so the spec still describes the whole API.
+  /web-api/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        description: >-
+          The Spotify Web API path to call, for example `v1/me/player`. May
+          span several segments. The query string is forwarded as-is.
+        schema:
+          type: string
+    get:
+      operationId: webApiGet
+      description: Proxy a GET to the Spotify Web API
+      responses:
+        200:
+          description: The response from the Spotify Web API, forwarded verbatim
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+    post:
+      operationId: webApiPost
+      description: Proxy a POST to the Spotify Web API
+      responses:
+        200:
+          description: The response from the Spotify Web API, forwarded verbatim
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+    put:
+      operationId: webApiPut
+      description: Proxy a PUT to the Spotify Web API
+      responses:
+        200:
+          description: The response from the Spotify Web API, forwarded verbatim
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+    delete:
+      operationId: webApiDelete
+      description: Proxy a DELETE to the Spotify Web API
+      responses:
+        200:
+          description: The response from the Spotify Web API, forwarded verbatim
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+  /set_device_name:
+    post:
+      operationId: setDeviceName
+      description: Set the player device name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/setDeviceName'
+      responses:
+        200:
+          description: Successful response
+        400:
+          description: The name is missing or empty
   /player/play:
     post:
+      operationId: playerPlay
       description: >-
         Starts playing new content. To start a context shuffled (on a random
         track), enable shuffle first via /player/shuffle_context and then call
@@ -169,30 +461,47 @@ paths:
         upcoming queue and keeps the current (first) track, so play alone (or
         shuffle after play) always begins on the context's first track.
       requestBody:
-        $ref: '#/components/schemas/play'
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/play'
       responses:
         200:
           description: Successful response
+        400:
+          description: The uri is missing or empty
   /player/resume:
     post:
+      operationId: playerResume
       description: Resume playback (from paused state)
       responses:
         200:
           description: Successful response
   /player/pause:
     post:
+      operationId: playerPause
       description: Pause playback (from playing state)
+      responses:
+        200:
+          description: Successful response
+  /player/playpause:
+    post:
+      operationId: playerPlayPause
+      description: Resume playback when paused, or pause playback when playing
       responses:
         200:
           description: Successful response
   /player/stop:
     post:
+      operationId: playerStop
       description: Stop playback and disconnect session
       responses:
         200:
           description: Successful response
   /player/output:
     post:
+      operationId: playerOutput
       description: >-
         Reopen the audio output on a different device without touching the
         Spotify session, preserving the current track, playback position,
@@ -205,65 +514,47 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                device:
-                  description: >-
-                    The output device name to open (backend-specific, e.g. an
-                    ALSA device). Empty selects the configured default.
-                  type: string
-      responses:
-        200:
-          description: Successful response
-  /player/playpause:
-    post:
-      description: Resume playback when paused, or pause playback when playing
+              $ref: '#/components/schemas/output'
       responses:
         200:
           description: Successful response
   /player/next:
     post:
+      operationId: playerNext
       description: Skip to next track
       requestBody:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                uri:
-                  type: string
-                  description: The track URI to skip to
+              $ref: '#/components/schemas/next'
       responses:
         200:
           description: Successful response
   /player/prev:
     post:
+      operationId: playerPrev
       description: Skip to previous track (or rewind current track)
       responses:
         200:
           description: Successful response
   /player/seek:
     post:
+      operationId: playerSeek
       description: Seek current track
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [ position ]
-              properties:
-                position:
-                  description: Seek position in milliseconds
-                  type: integer
-                relative:
-                  description: Whether the seek position is relative to the current one
-                  type: boolean
-                  default: false
+              $ref: '#/components/schemas/seek'
       responses:
         200:
           description: Successful response
+        400:
+          description: The position is negative and the seek is not relative
   /player/volume:
     get:
+      operationId: playerGetVolume
       description: Get player volume
       responses:
         200:
@@ -271,97 +562,75 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  value:
-                    type: integer
-                    description: The current volume, ranging from 0 to max
-                  max:
-                    type: integer
-                    description: The max volume value
+                $ref: '#/components/schemas/volume'
     post:
+      operationId: playerSetVolume
       description: Set player volume
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [ volume ]
-              properties:
-                volume:
-                  description: Volume from 0 to max
-                  type: number
-                relative:
-                  description: Whether to change the volume relative to the current volume
-                  type: boolean
-                  default: false
+              $ref: '#/components/schemas/setVolume'
       responses:
         200:
           description: Successful response
+        400:
+          description: The volume is negative and the change is not relative
   /player/repeat_context:
     post:
+      operationId: playerRepeatContext
       description: Toggle repeating context
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [ repeat_context ]
-              properties:
-                repeat_context:
-                  description: Whether repeating context should be enabled
-                  type: boolean
+              $ref: '#/components/schemas/repeatContext'
       responses:
         200:
           description: Successful response
   /player/repeat_track:
     post:
+      operationId: playerRepeatTrack
       description: Toggle repeating track
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [ repeat_track ]
-              properties:
-                repeat_track:
-                  description: Whether repeating track should be enabled
-                  type: boolean
+              $ref: '#/components/schemas/repeatTrack'
       responses:
         200:
           description: Successful response
   /player/shuffle_context:
     post:
+      operationId: playerShuffleContext
       description: >-
         Toggle shuffling the context. Enabling it BEFORE /player/play makes
         playback start on a random track; enabling it after play only reshuffles
         the upcoming queue and keeps the current (first) track.
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [ shuffle_context ]
-              properties:
-                shuffle_context:
-                  description: Whether shuffling context should be enabled
-                  type: boolean
+              $ref: '#/components/schemas/shuffleContext'
       responses:
         200:
           description: Successful response
   /player/add_to_queue:
     post:
+      operationId: playerAddToQueue
       description: Add a track to the queue
       requestBody:
+        required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [ uri ]
-              properties:
-                uri:
-                  description: The URI for the track that should be added
-                  type: string
+              $ref: '#/components/schemas/addToQueue'
       responses:
         200:
           description: Successful response
+        400:
+          description: The uri is missing or empty

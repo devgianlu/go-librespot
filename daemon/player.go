@@ -430,7 +430,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 	switch req.Type {
 	case ApiRequestTypeRoot:
-		return &ApiResponseRoot{PlaybackReady: p.playbackReady()}, nil
+		return &ApiRoot{PlaybackReady: p.playbackReady()}, nil
 	case ApiRequestTypeWebApi:
 		data := req.Data.(ApiRequestDataWebApi)
 		resp, err := p.sess.WebApi(ctx, data.Method, data.Path, data.Query, nil, nil)
@@ -472,7 +472,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 		return respJson, nil
 	case ApiRequestTypeStatus:
-		resp := &ApiResponseStatus{
+		resp := &ApiStatus{
 			Username:       p.sess.Username(),
 			DeviceId:       p.app.deviceId,
 			DeviceType:     p.app.deviceType.String(),
@@ -510,7 +510,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		}
 		return nil, nil
 	case ApiRequestTypeSeek:
-		data := req.Data.(ApiRequestDataSeek)
+		data := req.Data.(ApiSeek)
 
 		var position int64
 		if data.Relative {
@@ -525,7 +525,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		_ = p.skipPrev(ctx, true)
 		return nil, nil
 	case ApiRequestTypeNext:
-		data := req.Data.(ApiRequestDataNext)
+		data := req.Data.(ApiNext)
 		if data.Uri != nil {
 			_ = p.skipNext(ctx, &connectpb.ContextTrack{Uri: *data.Uri})
 		} else {
@@ -533,7 +533,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		}
 		return nil, nil
 	case ApiRequestTypePlay:
-		data := req.Data.(ApiRequestDataPlay)
+		data := req.Data.(ApiPlay)
 		spotCtx, err := p.sess.Spclient().ContextResolve(ctx, data.Uri)
 		if err != nil {
 			return nil, fmt.Errorf("failed resolving context: %w", err)
@@ -587,12 +587,12 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 		return nil, nil
 	case ApiRequestTypeGetVolume:
-		return &ApiResponseVolume{
+		return &ApiVolume{
 			Max:   p.app.cfg.VolumeSteps,
 			Value: p.apiVolume(),
 		}, nil
 	case ApiRequestTypeSetVolume:
-		data := req.Data.(ApiRequestDataVolume)
+		data := req.Data.(ApiSetVolume)
 
 		var volume int32
 		if data.Relative {
@@ -625,7 +625,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		if err != nil {
 			return nil, fmt.Errorf("failed getting access token: %w", err)
 		}
-		return &ApiResponseToken{
+		return &ApiToken{
 			Token: accessToken,
 		}, nil
 	case ApiRequestSetDeviceName:
