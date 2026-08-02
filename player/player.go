@@ -828,6 +828,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	}
 
 	var stream librespot.AudioSource
+	var sampleRate, bitDepth int32
 
 	audioFormat := GetAudioFileFormatAudioFormat(*file.Format)
 	if audioFormat == AudioFormatOGGVorbis {
@@ -848,6 +849,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 
 		stream = vorbisStream
+		sampleRate = vorbisStream.SampleRate
 	} else if audioFormat == AudioFormatFLAC {
 		audioStream := io.NewSectionReader(decryptedStream, 0, rawStream.Size())
 		flacStream, err := flac.New(log, audioStream, normalisationFactor)
@@ -862,6 +864,8 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 
 		stream = flacStream
+		sampleRate = flacStream.SampleRate
+		bitDepth = flacStream.BitDepth
 	} else if audioFormat == AudioFormatMP3 {
 		audioStream := io.NewSectionReader(decryptedStream, 0, rawStream.Size())
 		mp3Stream, err := mp3.New(log, audioStream, normalisationFactor)
@@ -876,6 +880,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 
 		stream = mp3Stream
+		sampleRate = mp3Stream.SampleRate
 	} else {
 		return nil, fmt.Errorf("unsupported audio format: %s", *file.Format)
 	}
@@ -888,5 +893,13 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	}
 
 	streamHandedOff = true
-	return &Stream{PlaybackId: playbackId, RequestedId: requestedId, Source: stream, Media: media, File: file}, nil
+	return &Stream{
+		PlaybackId:  playbackId,
+		RequestedId: requestedId,
+		Source:      stream,
+		Media:       media,
+		File:        file,
+		SampleRate:  sampleRate,
+		BitDepth:    bitDepth,
+	}, nil
 }
