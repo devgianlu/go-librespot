@@ -50,6 +50,9 @@ func isTracksComplete(ctx *connectpb.Context) bool {
 
 func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
+	if typ == librespot.SpotifyIdTypeUnknown {
+		return nil, fmt.Errorf("unsupported context type: %s", spotCtx.Uri)
+	}
 
 	if len(spotCtx.Pages) == 0 || !isTracksComplete(spotCtx) {
 		newSpotCtx, err := sp.ContextResolve(ctx, spotCtx.Uri)
