@@ -78,6 +78,7 @@ type Decoder struct {
 
 	SampleRate int32
 	Channels   int32
+	BitDepth   int32
 
 	gain float32
 
@@ -258,7 +259,9 @@ func callbackMetadata(
 		streamInfo := (*C.FLAC__StreamMetadata_StreamInfo)(unsafe.Pointer(&metadata.data[0]))
 		d.SampleRate = int32(streamInfo.sample_rate)
 		d.Channels = int32(streamInfo.channels)
-		d.log.Infof("FLAC stream info: sample rate = %d, channels = %d", d.SampleRate, d.Channels)
+		d.BitDepth = int32(streamInfo.bits_per_sample)
+		d.log.Infof("FLAC stream info: sample rate = %d, channels = %d, bit depth = %d",
+			d.SampleRate, d.Channels, d.BitDepth)
 	} else {
 		d.log.Debugf("seen FLAC metadata type: %d", metadata._type)
 	}

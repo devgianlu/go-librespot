@@ -18,6 +18,14 @@ type Stream struct {
 	Source librespot.AudioSource
 	Media  *librespot.Media
 	File   *metadatapb.AudioFile
+
+	// SampleRate of the decoded audio, in Hz.
+	SampleRate int32
+
+	// BitDepth of the source audio, in bits per sample. Only lossless formats
+	// have one: the lossy codecs decode to floats with no meaningful source
+	// depth, and report zero.
+	BitDepth int32
 }
 
 func (s *Stream) Is(id librespot.SpotifyId) bool {

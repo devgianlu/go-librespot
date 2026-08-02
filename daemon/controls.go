@@ -428,7 +428,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeMetadata,
-		Data: ApiEventDataMetadata(*p.newApiResponseStatusTrack(p.primaryStream.Media, trackPosition)),
+		Data: ApiEventDataMetadata(*p.newApiResponseStatusTrack(p.primaryStream, trackPosition)),
 	})
 	return nil
 }

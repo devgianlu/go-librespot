@@ -31,6 +31,36 @@ components:
         duration:
           description: Duration in milliseconds
           type: integer
+        format:
+          description: >-
+            Spotify name of the audio file being decoded, for example
+            OGG_VORBIS_160
+          type: string
+        codec:
+          description: Codec family of the audio file
+          type: string
+          enum:
+            - vorbis
+            - flac
+            - mp3
+            - aac
+            - unknown
+        bitrate:
+          description: >-
+            Nominal bitrate in kbps, null for formats without a fixed one such
+            as FLAC
+          type: integer
+          nullable: true
+        sample_rate:
+          description: Sample rate of the decoded audio in Hz
+          type: integer
+          nullable: true
+        bit_depth:
+          description: >-
+            Bits per sample of the source audio, null for lossy formats which
+            have no meaningful source bit depth
+          type: integer
+          nullable: true
     play:
       description: An initiate playback payload
       type: object

@@ -25,6 +25,23 @@ func GetFormatBitrate(format metadatapb.AudioFile_Format) int {
 	}
 }
 
+// GetFormatCodec returns the codec name of a format, for reporting through the
+// API. Note that a format may be named here without being decodable.
+func GetFormatCodec(format metadatapb.AudioFile_Format) string {
+	switch GetAudioFileFormatAudioFormat(format) {
+	case AudioFormatOGGVorbis:
+		return "vorbis"
+	case AudioFormatFLAC:
+		return "flac"
+	case AudioFormatMP3:
+		return "mp3"
+	case AudioFormatAAC:
+		return "aac"
+	default:
+		return "unknown"
+	}
+}
+
 type AudioFormat int
 
 const (

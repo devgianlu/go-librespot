@@ -16,6 +16,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/rs/cors"
 )
@@ -169,6 +170,11 @@ type ApiResponseStatusTrack struct {
 	ReleaseDate   string   `json:"release_date"`
 	TrackNumber   int      `json:"track_number"`
 	DiscNumber    int      `json:"disc_number"`
+	Format        string   `json:"format"`
+	Codec         string   `json:"codec"`
+	Bitrate       *int     `json:"bitrate"`
+	SampleRate    *int     `json:"sample_rate"`
+	BitDepth      *int     `json:"bit_depth"`
 }
 
 func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
@@ -213,7 +219,38 @@ func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
 	return images[0].FileId
 }
 
-func (p *AppPlayer) newApiResponseStatusTrack(media *librespot.Media, position int64) *ApiResponseStatusTrack {
+func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position int64) *ApiResponseStatusTrack {
+	media := stream.Media
+
+	resp := p.newApiResponseStatusMedia(media, position)
+
+	// The file is what actually got decoded, so report from it rather than from
+	// the requested bitrate: they differ whenever the preferred format was not
+	// on offer.
+	if stream.File != nil && stream.File.Format != nil {
+		format := *stream.File.Format
+		resp.Format = format.String()
+		resp.Codec = player.GetFormatCodec(format)
+		if bitrate := player.GetFormatBitrate(format); bitrate > 0 {
+			resp.Bitrate = &bitrate
+		}
+	}
+
+	// Taken from the decoder rather than the format name so they stay honest if
+	// the player ever stops requiring 44100Hz.
+	if stream.SampleRate > 0 {
+		sampleRate := int(stream.SampleRate)
+		resp.SampleRate = &sampleRate
+	}
+	if stream.BitDepth > 0 {
+		bitDepth := int(stream.BitDepth)
+		resp.BitDepth = &bitDepth
+	}
+
+	return resp
+}
+
+func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position int64) *ApiResponseStatusTrack {
 	if media.IsTrack() {
 		track := media.Track()
 

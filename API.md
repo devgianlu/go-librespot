@@ -21,6 +21,11 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `album_cover_url`: Track album cover image URL
     - `position`: Track position in milliseconds
     - `duration`: Track duration in milliseconds
+    - `format`: Spotify name of the audio file being decoded, e.g. `OGG_VORBIS_160`
+    - `codec`: Codec family of that file: `vorbis`, `flac`, `mp3`, `aac` or `unknown`
+    - `bitrate`: Nominal bitrate in kbps, `null` for formats without a fixed one such as FLAC
+    - `sample_rate`: Sample rate of the decoded audio in Hz
+    - `bit_depth`: Bits per sample of the source audio, `null` for lossy formats
 - `will_play`: The player is about to play the specified track
     - `context_uri`: The context URI
     - `uri`: The track URI
