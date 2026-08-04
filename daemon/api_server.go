@@ -80,6 +80,7 @@ const (
 	ApiRequestTypeToken               ApiRequestType = "token"
 	ApiRequestSetDeviceName           ApiRequestType = "set_device_name"
 	ApiRequestTypeReopenOutput        ApiRequestType = "reopen_output"
+	ApiRequestTypeContextTracks       ApiRequestType = "context_tracks"
 )
 
 type ApiEventType string
@@ -133,6 +134,12 @@ func NewApiRequest(t ApiRequestType, data any) (req ApiRequest, wait func(contex
 
 // ApiRequestDataWebApi is not in the spec: /web-api/ is a catch-all proxy
 // whose path continues for any number of segments, so it is routed by hand.
+// ApiRequestDataContextTracks carries the uri query parameter of the context
+// listing request.
+type ApiRequestDataContextTracks struct {
+	Uri string `json:"uri"`
+}
+
 type ApiRequestDataWebApi struct {
 	Method string
 	Path   string
@@ -424,6 +431,10 @@ func (s *ConcreteApiServer) GetRoot(w http.ResponseWriter, _ *http.Request) {
 
 func (s *ConcreteApiServer) GetStatus(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
+}
+
+func (s *ConcreteApiServer) GetContextTracks(w http.ResponseWriter, _ *http.Request, params GetContextTracksParams) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeContextTracks, Data: ApiRequestDataContextTracks{Uri: params.Uri}}, w)
 }
 
 func (s *ConcreteApiServer) GetToken(w http.ResponseWriter, _ *http.Request) {

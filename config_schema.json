@@ -327,6 +327,28 @@
           "type": "boolean",
           "description": "Whether FLAC files should be preferred over other formats when available",
           "default": false
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Opt-in in-memory track metadata cache behind the next_track status field and the GET /context/tracks listing",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether to cache track metadata and batch-fetch it for the tracks around the playback position, enabling the next_track status field and the /context/tracks endpoint. Disabled, the daemon performs no metadata request playback does not need",
+              "default": false
+            },
+            "context_sweep": {
+              "type": "boolean",
+              "description": "Whether to additionally resolve metadata for the whole context when one starts playing, so every track is known before the user skips anywhere. Requires enabled",
+              "default": false
+            },
+            "max_tracks": {
+              "type": "integer",
+              "description": "Maximum number of tracks of a context to enumerate and sweep",
+              "default": 800,
+              "minimum": 1
+            }
+          }
         }
       },
       "required": [

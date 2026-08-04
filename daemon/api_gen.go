@@ -8,6 +8,8 @@ package daemon
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Defines values for TrackCodec.
@@ -23,6 +25,31 @@ const (
 // ApiAddToQueue An add to queue payload
 type ApiAddToQueue struct {
 	// Uri The URI for the track that should be added
+	Uri string `json:"uri"`
+}
+
+// ApiContextTrackItem One entry of a context listing
+type ApiContextTrackItem struct {
+	// Track Full track metadata, or null while the background sweep has not resolved this entry yet
+	Track *ApiTrack `json:"track"`
+
+	// Uri The track URI
+	Uri string `json:"uri"`
+}
+
+// ApiContextTracks A context's track listing
+type ApiContextTracks struct {
+	// Cached Entries with full metadata; poll again while cached < length
+	Cached int `json:"cached"`
+
+	// Length Number of track entries
+	Length int `json:"length"`
+
+	// Ready False while the context is still being enumerated in the background; the listing is empty until it is true
+	Ready  bool                  `json:"ready"`
+	Tracks []ApiContextTrackItem `json:"tracks"`
+
+	// Uri The context URI
 	Uri string `json:"uri"`
 }
 
@@ -114,6 +141,9 @@ type ApiStatus struct {
 
 	// DeviceType The player device type, for example COMPUTER or SPEAKER
 	DeviceType string `json:"device_type"`
+
+	// NextTrack The upcoming track when its metadata is cached (metadata.enabled), so clients can pre-warm its name and cover art before the user skips to it. Absent when unknown.
+	NextTrack *ApiTrack `json:"next_track,omitempty"`
 
 	// Paused Whether the player is paused
 	Paused bool `json:"paused"`
@@ -210,6 +240,12 @@ type ApiVolume struct {
 	Value uint32 `json:"value"`
 }
 
+// GetContextTracksParams defines parameters for GetContextTracks.
+type GetContextTracksParams struct {
+	// Uri Spotify context URI (playlist, album, artist, show, collection)
+	Uri string `form:"uri" json:"uri"`
+}
+
 // PlayerAddToQueueJSONRequestBody defines body for PlayerAddToQueue for application/json ContentType.
 type PlayerAddToQueueJSONRequestBody = ApiAddToQueue
 
@@ -245,6 +281,9 @@ type ServerInterface interface {
 
 	// (GET /)
 	GetRoot(w http.ResponseWriter, r *http.Request)
+
+	// (GET /context/tracks)
+	GetContextTracks(w http.ResponseWriter, r *http.Request, params GetContextTracksParams)
 
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
@@ -318,6 +357,40 @@ func (siw *ServerInterfaceWrapper) GetRoot(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetRoot(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetContextTracks operation middleware
+func (siw *ServerInterfaceWrapper) GetContextTracks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetContextTracksParams
+
+	// ------------- Required query parameter "uri" -------------
+
+	if paramValue := r.URL.Query().Get("uri"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "uri"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "uri", r.URL.Query(), &params.Uri)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "uri", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetContextTracks(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -714,6 +787,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("GET "+options.BaseURL+"/{$}", wrapper.GetRoot)
+	m.HandleFunc("GET "+options.BaseURL+"/context/tracks", wrapper.GetContextTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
 	m.HandleFunc("POST "+options.BaseURL+"/player/add_to_queue", wrapper.PlayerAddToQueue)
 	m.HandleFunc("POST "+options.BaseURL+"/player/next", wrapper.PlayerNext)

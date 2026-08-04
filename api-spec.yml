@@ -170,6 +170,56 @@ components:
           allOf:
             - $ref: '#/components/schemas/track'
           nullable: true
+        next_track:
+          description: >-
+            The upcoming track when its metadata is cached (metadata.enabled),
+            so clients can pre-warm its name and cover art before the user
+            skips to it. Absent when unknown.
+          allOf:
+            - $ref: '#/components/schemas/track'
+          nullable: true
+          x-omitempty: true
+    contextTrackItem:
+      x-go-name: ApiContextTrackItem
+      description: One entry of a context listing
+      type: object
+      required: [ uri, track ]
+      properties:
+        uri:
+          description: The track URI
+          type: string
+        track:
+          description: >-
+            Full track metadata, or null while the background sweep has not
+            resolved this entry yet
+          allOf:
+            - $ref: '#/components/schemas/track'
+          nullable: true
+    contextTracks:
+      x-go-name: ApiContextTracks
+      description: A context's track listing
+      type: object
+      required: [ uri, ready, length, cached, tracks ]
+      properties:
+        uri:
+          description: The context URI
+          type: string
+        ready:
+          description: >-
+            False while the context is still being enumerated in the
+            background; the listing is empty until it is true
+          type: boolean
+        length:
+          description: Number of track entries
+          type: integer
+        cached:
+          description: >-
+            Entries with full metadata; poll again while cached < length
+          type: integer
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/contextTrackItem'
     root:
       x-go-name: ApiRoot
       description: API reachability and playback readiness
@@ -451,6 +501,43 @@ paths:
           description: Successful response
         400:
           description: The name is missing or empty
+  /context/tracks:
+    get:
+      operationId: getContextTracks
+      description: >-
+        List a context's tracks in order with metadata (name, artists, cover
+        art), fetched via the internal API (not the rate-limited public Web
+        API). Any context the player can play is accepted — playlist, album,
+        artist, show, a user's Liked Songs collection — and enumerated the
+        same way. The response never waits on the network: the first call for
+        an unknown context starts a background enumeration and returns
+        ready=false with an empty listing. Once ready is true, entries whose
+        metadata is not cached yet have a null track while a background sweep
+        fills them in. Poll until ready is true and cached == length. Clients
+        can render a browsable song list from this and start any entry via
+        POST /player/play with the context uri and the track as skip_to_uri.
+
+        Tracks and episodes are both listed, so shows enumerate to their
+        episodes. Long contexts are truncated to metadata.max_tracks. Listings
+        are reused for five minutes, so an edit made to a playlist within that
+        window is not reflected. Requires metadata.enabled; responds 404
+        otherwise.
+      parameters:
+        - name: uri
+          in: query
+          required: true
+          description: Spotify context URI (playlist, album, artist, show, collection)
+          schema:
+            type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/contextTracks'
+        404:
+          description: The metadata cache is disabled
   /player/play:
     post:
       operationId: playerPlay
