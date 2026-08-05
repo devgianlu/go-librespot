@@ -55,7 +55,14 @@ func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient,
 	}
 
 	if len(spotCtx.Pages) == 0 || !isTracksComplete(spotCtx) {
-		newSpotCtx, err := sp.ContextResolve(ctx, spotCtx.Uri)
+		var newSpotCtx *connectpb.Context
+		var err error
+		if strings.HasPrefix(spotCtx.Url, "hm://") {
+			log.WithField("uri", spotCtx.Uri).Debugf("resolving context from its own url %s", spotCtx.Url)
+			newSpotCtx, err = sp.ContextResolveUrl(ctx, spotCtx.Url)
+		} else {
+			newSpotCtx, err = sp.ContextResolve(ctx, spotCtx.Uri)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed resolving context %s: %w", spotCtx.Uri, err)
 		} else if newSpotCtx.Loading {
@@ -65,9 +72,7 @@ func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient,
 		if newSpotCtx.Metadata == nil {
 			newSpotCtx.Metadata = map[string]string{}
 		}
-		for key, val := range spotCtx.Metadata {
-			newSpotCtx.Metadata[key] = val
-		}
+		maps.Copy(newSpotCtx.Metadata, spotCtx.Metadata)
 
 		spotCtx = newSpotCtx
 	}
@@ -105,10 +110,9 @@ func (r *ContextResolver) loadPage(ctx context.Context, url string) (*connectpb.
 		return nil, fmt.Errorf("invalid page url: %s", url)
 	}
 
-	url = strings.TrimPrefix(url, "hm://")
 	r.log.WithField("uri", r.Uri()).Tracef("loading context page from %s", url)
 
-	resp, err := r.sp.Request(ctx, "GET", url, nil, nil, nil)
+	resp, err := r.sp.RequestHm(ctx, "GET", url, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting page at %s: %w", url, err)
 	}
