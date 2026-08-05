@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package spotify.narration;
+
+import "spotify/narration/tts_resolve.proto";
+
+// TtsRequest is what /client-tts/v1/fulfill takes, kept exactly as extracted
+// from the client's own schema.
+message TtsRequest {
+  ResolveRequest.AudioFormat audio_format = 3;
+  string language = 4;
+  ResolveRequest.TtsVoice tts_voice = 5;
+  ResolveRequest.TtsProvider tts_provider = 6;
+  int32 sample_rate_hz = 7;
+
+  oneof prompt {
+    string text = 1;
+    string ssml = 2;
+  }
+}
+
+// TtsResponse is documented as the reply, but the endpoint observed on
+// 1.2.52.442 answers 303 with an empty body and puts the audio url in the
+// Location header instead.
+message TtsResponse {
+  string url = 1;
+}
