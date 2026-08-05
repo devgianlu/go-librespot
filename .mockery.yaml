@@ -9,5 +9,6 @@ template-data:
 packages:
   github.com/devgianlu/go-librespot:
     interfaces:
+      AudioSource:
       Logger:
       PageResolver:
