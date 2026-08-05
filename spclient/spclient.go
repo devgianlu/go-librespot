@@ -43,7 +43,8 @@ func isRetryableHTTPStatus(status int) bool {
 type Spclient struct {
 	log librespot.Logger
 
-	client *http.Client
+	client           *http.Client
+	noRedirectClient *http.Client
 
 	baseUrl     *url.URL
 	clientToken string
@@ -59,8 +60,16 @@ func NewSpclient(ctx context.Context, log librespot.Logger, client *http.Client,
 	}
 
 	return &Spclient{
-		log:         log,
-		client:      client,
+		log:    log,
+		client: client,
+		noRedirectClient: &http.Client{
+			Transport: client.Transport,
+			Jar:       client.Jar,
+			Timeout:   client.Timeout,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
 		baseUrl:     baseUrl,
 		clientToken: clientToken,
 		deviceId:    deviceId,
@@ -69,6 +78,10 @@ func NewSpclient(ctx context.Context, log librespot.Logger, client *http.Client,
 }
 
 func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	return c.innerRequestWith(ctx, c.client, method, reqUrl, query, header, body)
+}
+
+func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	if query != nil {
 		reqUrl.RawQuery = query.Encode()
 	}
@@ -118,7 +131,7 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 			}
 		}
 
-		resp, err := c.client.Do(req.WithContext(ctx))
+		resp, err := client.Do(req.WithContext(ctx))
 		if err != nil {
 			return nil, err
 		}
@@ -164,6 +177,13 @@ func (c *Spclient) WebApiRequest(ctx context.Context, method string, path string
 func (c *Spclient) Request(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqUrl := c.baseUrl.JoinPath(path)
 	return c.innerRequest(ctx, method, reqUrl, query, header, body)
+}
+
+// RequestNoRedirect is Request but returns the redirect itself rather than
+// following it, for endpoints that answer with a Location instead of a body.
+func (c *Spclient) RequestNoRedirect(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqUrl := c.baseUrl.JoinPath(path)
+	return c.innerRequestWith(ctx, c.noRedirectClient, method, reqUrl, query, header, body)
 }
 
 // RequestHm issues a request against an hm:// URL, the form Spotify uses to name
