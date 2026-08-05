@@ -627,15 +627,22 @@ func (p *Player) retrieveAudioKey(ctx context.Context, spotId librespot.SpotifyI
 const spotifyLoudnessTarget = -14.0
 
 func calculateNormalisationFactor(params *audiofilespb.NormalizationParams, pregain float32) float32 {
+	return normalisationFactorFor(params.LoudnessDb, params.TruePeakDb, pregain)
+}
+
+// normalisationFactorFor is the same calculation for audio that carries its
+// loudness outside NormalizationParams, as DJ narration does in its
+// narration.*.loudness and narration.*.true_peak metadata.
+func normalisationFactorFor(loudnessDb, truePeakDb, pregain float32) float32 {
 	// LoudnessDb is the integrated loudness of the track in LUFS (ITU-R BS.1770)
 	// To normalize, calculate the gain needed to reach Spotify's target of -14 LUFS
-	gainDb := spotifyLoudnessTarget - params.LoudnessDb + pregain
+	gainDb := spotifyLoudnessTarget - loudnessDb + pregain
 
 	// Convert gain from dB to linear scale
 	normalisationFactor := float32(math.Pow(10, float64(gainDb/20)))
 
 	// TruePeakDb from audio files response is in dBTP (dB True Peak)
-	truePeakLinear := float32(math.Pow(10, float64(params.TruePeakDb)/20))
+	truePeakLinear := float32(math.Pow(10, float64(truePeakDb)/20))
 	if truePeakLinear <= 0 {
 		return normalisationFactor
 	}

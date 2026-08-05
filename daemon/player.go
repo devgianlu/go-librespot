@@ -62,6 +62,14 @@ type AppPlayer struct {
 	primaryStream   *player.Stream
 	secondaryStream *player.Stream
 
+	// secondarySource is what the player was handed as the secondary.
+	secondarySource librespot.AudioSource
+
+	// narrationJumped records that the upcoming track is being reached by
+	// jumping straight to it, so a DJ context introduces it with its jump line
+	// rather than the one for arriving in sequence. Consumed by the next load.
+	narrationJumped bool
+
 	// resumeFinishedPlaybackId is the playback id of the stream most recently
 	// reported as listened to the end, so that unloading it cannot overwrite
 	// that with a position a moment short of the end.
