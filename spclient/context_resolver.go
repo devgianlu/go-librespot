@@ -48,13 +48,25 @@ func isTracksComplete(ctx *connectpb.Context) bool {
 	return expectedNumberOfTracks == totalLength
 }
 
+// hasResolvablePages reports whether a context's pages can actually yield
+// tracks, either by holding some already or by naming where to fetch them.
+func hasResolvablePages(ctx *connectpb.Context) bool {
+	for _, page := range ctx.Pages {
+		if len(page.Tracks) > 0 || len(page.PageUrl) > 0 || len(page.NextPageUrl) > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
 func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
 	if typ == librespot.SpotifyIdTypeUnknown {
 		return nil, fmt.Errorf("unsupported context type: %s", spotCtx.Uri)
 	}
 
-	if len(spotCtx.Pages) == 0 || !isTracksComplete(spotCtx) {
+	if len(spotCtx.Pages) == 0 || !hasResolvablePages(spotCtx) || !isTracksComplete(spotCtx) {
 		var newSpotCtx *connectpb.Context
 		var err error
 		if strings.HasPrefix(spotCtx.Url, "hm://") {
