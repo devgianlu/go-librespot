@@ -121,11 +121,33 @@ func (s *SwitchingAudioSource) Read(p []float32) (n int, err error) {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
-	if s.crossfadeSamples == 0 {
+	if s.crossfadeSamples == 0 || s.primaryDeclinesCrossfade() {
 		return s.readDirect(p)
 	}
 
 	return s.readCrossfade(p)
+}
+
+// uncrossfadable is implemented by a source whose tail has to be heard in full.
+//
+// Crossfading withholds the last crossfadeSamples and releases them only as a
+// fade under the next track. That is right for music, but a DJ outro is shorter
+// than a typical fade, so all of it would be spent fading out.
+type uncrossfadable interface {
+	NoCrossfade() bool
+}
+
+// primaryDeclinesCrossfade reports whether the current primary opts out, and
+// whether that can be honoured right now: only at a clean boundary, since
+// switching paths mid-fade or with a full lookahead would strand buffered
+// audio.
+func (s *SwitchingAudioSource) primaryDeclinesCrossfade() bool {
+	if s.fading || s.bufLen > 0 || s.primaryEOF {
+		return false
+	}
+
+	source, ok := s.source[s.which].(uncrossfadable)
+	return ok && source.NoCrossfade()
 }
 
 // readDirect is the original, crossfade-free read path.
