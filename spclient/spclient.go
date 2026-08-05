@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -79,12 +80,12 @@ func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.
 	}
 
 	if header != nil {
-		for name, values := range header {
-			req.Header[name] = values
-		}
+		maps.Copy(req.Header, header)
 	}
 
-	req.Header.Set("Client-Token", c.clientToken)
+	if len(c.clientToken) > 0 {
+		req.Header.Set("Client-Token", c.clientToken)
+	}
 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/x-protobuf")
