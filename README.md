@@ -26,6 +26,7 @@
 - 📊 **Loudness normalization** — Spotify-standard −14 LUFS (ITU-R BS.1770) with configurable pregain.
 - 🔀 **Crossfade** — configurable overlap between consecutive tracks.
 - 🎙️ **Podcast resume** — episodes pick up where you left off, and progress syncs back to your other devices.
+- 🎧 **DJ X** — Spotify's AI DJ, narration included: the spoken lines are synthesized and played around each track.
 - 🎚️ **Flexible volume control** — independent, synchronized with the ALSA mixer, or fully external.
 - 💾 **On-disk audio cache** — skip re-downloading tracks, bounded by an LRU size limit.
 - 🔐 **Multiple login flows** — Zeroconf discovery, interactive OAuth, or a Spotify access token.
