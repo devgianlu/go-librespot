@@ -371,6 +371,10 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	p.app.log.WithField("uri", spotId.Uri()).
 		Debugf("loading %s (paused: %t, position: %dms)", spotId.Type(), paused, trackPosition)
 
+	// Whether the track starts at its very beginning. Sampled before updateTimestamp,
+	// which folds the time elapsed since the last update back into the declared position.
+	fromStart := p.state.player.PositionAsOfTimestamp == 0
+
 	p.state.updateTimestamp()
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = true
@@ -428,12 +432,6 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	// the start: resuming mid-track, or seeking, should not replay the lead-in.
 	source := p.primaryStream.Source
 	metadata := p.state.player.Track.GetMetadata()
-
-	// The position the state declares, not trackPosition: while playing, that
-	// one advances the declared value by the wall clock elapsed since the state
-	// timestamp, so an ordinary advance reports a few milliseconds rather than
-	// zero. This is set to exactly zero wherever a track starts from the top.
-	fromStart := p.state.player.PositionAsOfTimestamp == 0
 
 	var skipped string
 	if !fromStart {
