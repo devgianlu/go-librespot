@@ -170,6 +170,16 @@ components:
           allOf:
             - $ref: '#/components/schemas/track'
           nullable: true
+        pending_track_uri:
+          description: >-
+            The track selected by a not-yet-settled skip: rapid next/prev
+            presses move the selection immediately but defer loading it until
+            the presses stop (skip_debounce_ms), so while browsing this holds
+            the target track URI and the track object still describes the last
+            loaded one. Absent when no skip is pending.
+          type: string
+          nullable: true
+          x-omitempty: true
     root:
       x-go-name: ApiRoot
       description: API reachability and playback readiness

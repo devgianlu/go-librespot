@@ -308,6 +308,12 @@
           "default": 0,
           "minimum": 0
         },
+        "skip_debounce_ms": {
+          "type": "integer",
+          "description": "How long to wait after a burst of next/prev commands before loading the selected track, in milliseconds, so rapid skipping costs one audio-key request instead of one per press. The first skip of a burst always loads immediately, so this only affects how long the daemon waits to see whether another skip follows. 0 disables debouncing",
+          "default": 600,
+          "minimum": 0
+        },
         "external_volume": {
           "type": "boolean",
           "description": "Whether volume is controlled externally, if true the app will not pre-multiply samples",

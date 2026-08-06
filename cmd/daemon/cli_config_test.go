@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSkipDebounceMapping(t *testing.T) {
+	var c cliConfig
+	c.SkipDebounceMs = 400
+	require.Equal(t, int64(400_000_000), int64(c.toDaemonConfig().SkipDebounce))
+
+	c.SkipDebounceMs = 0
+	require.Zero(t, c.toDaemonConfig().SkipDebounce)
+}
+
 func TestParseSize(t *testing.T) {
 	cases := []struct {
 		in      string
