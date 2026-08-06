@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"net"
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -149,4 +150,26 @@ func TestEnrichTrackMetadataIgnoresNilArguments(t *testing.T) {
 		enrichTrackMetadata(nil, testTrackMedia())
 		enrichTrackMetadata(&connectpb.ProvidedTrack{}, nil)
 	})
+}
+
+func TestDeviceAddressMask(t *testing.T) {
+	mask := deviceAddressMask()
+	if mask == "" {
+		t.Skip("no usable ipv4 interface on this host")
+	}
+
+	ip, ipNet, err := net.ParseCIDR(mask)
+	require.NoError(t, err, "must be valid CIDR")
+
+	// The device's own address, not the network address: parsing the mask back
+	// has to yield something other than the network it describes.
+	require.NotNil(t, ip.To4(), "must be ipv4")
+	require.False(t, ip.IsLoopback(), "must not be loopback")
+	require.True(t, ipNet.Contains(ip))
+
+	addrs, err := net.InterfaceAddrs()
+	require.NoError(t, err)
+
+	require.Contains(t, addrs, net.Addr(&net.IPNet{IP: ip, Mask: ipNet.Mask}),
+		"must be an address actually assigned to an interface")
 }

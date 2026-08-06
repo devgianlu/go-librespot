@@ -244,12 +244,12 @@ func (c *Spclient) PutConnectStateInactive(ctx context.Context, spotConnId strin
 	}
 }
 
-func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqProto *connectpb.PutStateRequest) error {
+func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqProto *connectpb.PutStateRequest) (*connectpb.Cluster, error) {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {
-		return fmt.Errorf("failed marshalling PutStateRequest: %w", err)
+		return nil, fmt.Errorf("failed marshalling PutStateRequest: %w", err)
 	}
-	_, err = backoff.RetryWithData(func() (*http.Response, error) {
+	respBody, err := backoff.RetryWithData(func() ([]byte, error) {
 		resp, err := c.Request(
 			ctx,
 			"PUT",
@@ -287,13 +287,19 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 			return nil, reqErr
 		} else {
 			c.log.Debugf("put connect state because %s", reqProto.PutStateReason)
-			return resp, nil
+			return io.ReadAll(resp.Body)
 		}
 	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2), ctx))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+
+	var cluster connectpb.Cluster
+	if err := proto.Unmarshal(respBody, &cluster); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling Cluster: %w", err)
+	}
+
+	return &cluster, nil
 }
 
 // RateLimitedError reports a connect-state 429; RetryAfter is the advised cooldown.
