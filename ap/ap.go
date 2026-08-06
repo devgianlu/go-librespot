@@ -328,13 +328,11 @@ loop:
 
 			switch pkt {
 			case PacketTypePing:
-				ap.log.Tracef("received accesspoint ping")
 				if err := ap.Send(context.TODO(), PacketTypePong, payload); err != nil {
 					ap.log.WithError(err).Errorf("failed sending Pong packet")
 					break loop
 				}
 			case PacketTypePongAck:
-				ap.log.Tracef("received accesspoint pong ack")
 				ap.notePongAck()
 				continue
 			default:
