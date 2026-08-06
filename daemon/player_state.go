@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"maps"
+	"net"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -116,6 +118,65 @@ func (s *State) playOrigin() string {
 	return s.player.PlayOrigin.FeatureIdentifier
 }
 
+// deviceAddressMask reports this device's own address in CIDR form, which is
+// what the official client puts in its device_address_mask metadata: the
+// interface address and its prefix length, not the network address, so
+// "192.168.1.20/24" rather than "192.168.1.0/24". Devices reporting the same
+// subnet are the ones the backend can consider to be on a local network
+// together.
+//
+// Only IPv4, matching the official client. Returns empty when nothing suitable
+// is found, in which case the entry is omitted rather than sent blank.
+func deviceAddressMask() string {
+	// Which address the host would use to reach the outside. A UDP socket is
+	// only bound, never sends anything, so the destination is a documentation
+	// address that is never routed anywhere.
+	var local net.IP
+	if conn, err := net.Dial("udp4", "192.0.2.1:9"); err == nil {
+		if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+			local = addr.IP
+		}
+		_ = conn.Close()
+	}
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	// The prefix length only comes from the interface, so the address found
+	// above still has to be located among them. Without a default route (or on
+	// a host that failed the dial) fall back to the first candidate instead.
+	var fallback string
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			ipNet, ok := addr.(*net.IPNet)
+			if !ok || ipNet.IP.To4() == nil {
+				continue
+			}
+
+			ones, _ := ipNet.Mask.Size()
+			cidr := fmt.Sprintf("%s/%d", ipNet.IP.To4(), ones)
+			if local != nil && ipNet.IP.Equal(local) {
+				return cidr
+			} else if fallback == "" {
+				fallback = cidr
+			}
+		}
+	}
+
+	return fallback
+}
+
 func (p *AppPlayer) initState() {
 	p.state = &State{
 		lastCommand: nil,
@@ -128,6 +189,9 @@ func (p *AppPlayer) initState() {
 			DeviceSoftwareVersion: librespot.VersionString(),
 			ClientId:              librespot.ClientIdHex,
 			SpircVersion:          "3.2.6",
+			Brand:                 "spotify",
+			Model:                 "go-librespot",
+			License:               "premium",
 			Capabilities: &connectpb.Capabilities{
 				CanBePlayer:                true,
 				RestrictToLocal:            false,
@@ -156,6 +220,12 @@ func (p *AppPlayer) initState() {
 			},
 		},
 	}
+
+	p.state.device.MetadataMap = map[string]string{"tier1_port": "0"}
+	if mask := deviceAddressMask(); mask != "" {
+		p.state.device.MetadataMap["device_address_mask"] = mask
+	}
+
 	p.state.reset()
 }
 
@@ -207,7 +277,16 @@ func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutSta
 	}
 
 	// finally send the state update
-	return p.sess.Spclient().PutConnectState(ctx, p.spotConnId, putStateReq)
+	cluster, err := p.sess.Spclient().PutConnectState(ctx, p.spotConnId, putStateReq)
+	if err != nil {
+		return err
+	}
+
+	if device := cluster.Device[p.app.deviceId]; device != nil && device.PublicIp != "" {
+		p.state.device.PublicIp = device.PublicIp
+	}
+
+	return nil
 }
 
 // coverImageSizes maps the ProvidedTrack metadata keys Spotify's clients look

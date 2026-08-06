@@ -14,8 +14,10 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/protobuf/proto"
 )
 
 // recordedRequest is what the stub endpoint saw, so tests can assert on the
@@ -322,6 +324,42 @@ func (suite *RequestSuite) TestPutConnectStateInactiveRejectsOtherStatuses() {
 	suite.Require().Error(err)
 	suite.Contains(err.Error(), "failed with status 200")
 	suite.Equal("false", suite.requests()[0].query.Get("notify"))
+}
+
+// The backend answers a state update with the cluster, which is where a device
+// learns the public address it cannot see for itself.
+func (suite *RequestSuite) TestPutConnectStateReturnsCluster() {
+	body, err := proto.Marshal(&connectpb.Cluster{
+		Device: map[string]*connectpb.DeviceInfo{
+			"device-id": {Name: "test", PublicIp: "203.0.113.7"},
+		},
+	})
+	suite.Require().NoError(err)
+
+	suite.handler = func(_ int, w http.ResponseWriter) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(body)
+	}
+
+	cluster, err := suite.spclient.PutConnectState(suite.T().Context(), "conn-id", &connectpb.PutStateRequest{})
+	suite.Require().NoError(err)
+	suite.Equal("203.0.113.7", cluster.Device["device-id"].PublicIp)
+
+	got := suite.requests()[0]
+	suite.Equal("PUT", got.method)
+	suite.Equal("/connect-state/v1/devices/device-id", got.path)
+	suite.Equal("conn-id", got.header.Get("X-Spotify-Connection-Id"))
+}
+
+func (suite *RequestSuite) TestPutConnectStateRejectsUnparseableCluster() {
+	suite.handler = func(_ int, w http.ResponseWriter) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not a protobuf at all"))
+	}
+
+	_, err := suite.spclient.PutConnectState(suite.T().Context(), "conn-id", &connectpb.PutStateRequest{})
+	suite.Require().Error(err)
+	suite.Contains(err.Error(), "failed unmarshalling Cluster")
 }
 
 func TestRequestSuite(t *testing.T) {
