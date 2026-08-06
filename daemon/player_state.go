@@ -217,6 +217,7 @@ func (p *AppPlayer) initState() {
 				SupportsSetOptionsCommand:  true,
 				SupportsHifi:               nil, // TODO: nice to have?
 				ConnectCapabilities:        "",
+				SupportsDj:                 true,
 			},
 		},
 	}
