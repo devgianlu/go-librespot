@@ -157,7 +157,11 @@ func (c *Client) recvLoop() {
 
 			reqs[reqSeq] = req
 
-			if err := c.ap.Send(context.TODO(), ap.PacketTypeMercuryReq, buf.Bytes()); err != nil {
+			// Background on purpose: this pump writes for every queued request,
+			// so one caller's cancellation must not abort the others. Request
+			// applies the caller's deadline to the response wait instead, and
+			// Send already fails once the accesspoint is closed.
+			if err := c.ap.Send(context.Background(), ap.PacketTypeMercuryReq, buf.Bytes()); err != nil {
 				delete(reqs, reqSeq)
 				req.resp <- hermesResponse{err: fmt.Errorf("failed sending mercury request: %w", err)}
 				continue
