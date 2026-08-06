@@ -14,7 +14,6 @@ type Decryptor struct {
 }
 
 var baseIv = []byte{0x72, 0xe0, 0x67, 0xfb, 0xdd, 0xcb, 0xcf, 0x77, 0xeb, 0xe8, 0xbc, 0x64, 0x3f, 0x63, 0x0d, 0x93}
-var throwawayBuffer = make([]byte, aes.BlockSize)
 
 func NewAesAudioDecryptor(r io.ReaderAt, key []byte) (*Decryptor, error) {
 	c, err := aes.NewCipher(key)
@@ -42,7 +41,8 @@ func (a *Decryptor) ReadAt(p []byte, pos int64) (n int, err error) {
 
 	// read some bytes to throw away
 	if off > 0 {
-		stream.XORKeyStream(throwawayBuffer, throwawayBuffer[:off])
+		var throwawayBuffer [aes.BlockSize]byte
+		stream.XORKeyStream(throwawayBuffer[:], throwawayBuffer[:off])
 	}
 
 	// read from source and decrypt
