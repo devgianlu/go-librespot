@@ -35,6 +35,10 @@ type Config struct {
 
 	FlacEnabled bool
 
+	// PreferFirewallFriendlyPorts tries accesspoints on 443 and 80 before the
+	// default 4070, which some networks block outbound.
+	PreferFirewallFriendlyPorts bool
+
 	// ImageSize selects which cover-art image variant the API server returns:
 	// "default", "small", "medium", "large", "xlarge".
 	ImageSize string

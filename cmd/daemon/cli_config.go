@@ -61,6 +61,7 @@ type cliConfig struct {
 	ZeroconfInterfacesToAdvertise []string `koanf:"zeroconf_interfaces_to_advertise"`
 	MprisEnabled                  bool     `koanf:"mpris_enabled"`
 	FlacEnabled                   bool     `koanf:"flac_enabled"`
+	PreferFirewallFriendlyPorts   bool     `koanf:"prefer_firewall_friendly_ports"`
 
 	Server struct {
 		Enabled     bool   `koanf:"enabled"`
@@ -129,6 +130,8 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 
 		FlacEnabled: c.FlacEnabled,
 		ImageSize:   c.Server.ImageSize,
+
+		PreferFirewallFriendlyPorts: c.PreferFirewallFriendlyPorts,
 	}
 	dc.Cache.Enabled = c.Cache.Enabled
 	dc.Cache.Dir = c.Cache.Dir
