@@ -4,11 +4,11 @@ package audio
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRequestFailsWhenAccesspointIsClosed(t *testing.T) {
@@ -18,7 +18,5 @@ func TestRequestFailsWhenAccesspointIsClosed(t *testing.T) {
 	provider := NewAudioKeyProvider(&librespot.NullLogger{}, accesspoint)
 
 	_, err := provider.Request(context.Background(), nil, nil)
-	if !errors.Is(err, ap.ErrAccesspointClosed) {
-		t.Fatalf("expected ErrAccesspointClosed, got %v", err)
-	}
+	require.ErrorIs(t, err, ap.ErrAccesspointClosed)
 }

@@ -4,11 +4,11 @@ package mercury
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRequestFailsWhenAccesspointIsClosed(t *testing.T) {
@@ -18,7 +18,5 @@ func TestRequestFailsWhenAccesspointIsClosed(t *testing.T) {
 	client := NewClient(&librespot.NullLogger{}, accesspoint)
 
 	_, err := client.Request(context.Background(), "GET", "hm://test", nil, nil)
-	if !errors.Is(err, ap.ErrAccesspointClosed) {
-		t.Fatalf("expected ErrAccesspointClosed, got %v", err)
-	}
+	require.ErrorIs(t, err, ap.ErrAccesspointClosed)
 }
