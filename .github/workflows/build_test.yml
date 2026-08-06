@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           go generate ./...
-          git diff --exit-code
+          test -z "$(git status --porcelain)" || { git status --porcelain; exit 1; }
 
       - name: Format
         run: test -z "$(gofmt -l .)"
