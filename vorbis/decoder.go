@@ -374,6 +374,15 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 
 	// we trust that the bytes offset we were given is accurate and process the data at this point
 	if _, err = d.readChunk(); err != nil {
+		if errors.Is(err, io.EOF) {
+			// The seek table only estimates a byte offset, and its
+			// resolution is coarsest right at the tail of the track, so
+			// landing on or past the last page here is an expected outcome
+			// of seeking close to the end, not a failure. Leave the decoder
+			// positioned at EOF; the next Read will correctly report the
+			// track as finished.
+			return nil
+		}
 		return fmt.Errorf("failed reading chunk: %w", err)
 	}
 
@@ -382,6 +391,11 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 
 	// read the page now that we are aligned
 	if err = d.readNextPage(); err != nil {
+		if errors.Is(err, io.EOF) {
+			// see comment above: landing on the EOS page while seeking is
+			// a valid outcome, not a failure
+			return nil
+		}
 		return fmt.Errorf("failed reading page: %w", err)
 	}
 
