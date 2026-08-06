@@ -1,6 +1,6 @@
 //go:build test_unit
 
-package flac
+package flac_test
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/flac"
 )
 
 // The API reports bit depth from the decoder, so it has to come off STREAMINFO.
@@ -19,7 +20,7 @@ func TestDecoderStreamInfo(t *testing.T) {
 		t.Fatalf("failed to read fixture: %v", err)
 	}
 
-	d, err := New(&librespot.NullLogger{}, bytes.NewReader(data), 1.0)
+	d, err := flac.New(&librespot.NullLogger{}, bytes.NewReader(data), 1.0)
 	if err != nil {
 		t.Fatalf("failed to create decoder: %v", err)
 	}
@@ -42,7 +43,7 @@ func TestDecoderFullScalePeak(t *testing.T) {
 		t.Fatalf("failed to read fixture: %v", err)
 	}
 
-	d, err := New(&librespot.NullLogger{}, bytes.NewReader(data), 1.0)
+	d, err := flac.New(&librespot.NullLogger{}, bytes.NewReader(data), 1.0)
 	if err != nil {
 		t.Fatalf("failed to create decoder: %v", err)
 	}
