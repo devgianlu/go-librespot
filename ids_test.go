@@ -2,7 +2,11 @@
 
 package go_librespot
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestContextUriType(t *testing.T) {
 	tests := []struct {
@@ -23,9 +27,9 @@ func TestContextUriType(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		if got := ContextUriType(tt.uri); got != tt.want {
-			t.Errorf("ContextUriType(%q) = %q, want %q", tt.uri, got, tt.want)
-		}
+		t.Run(tt.uri, func(t *testing.T) {
+			require.Equal(t, tt.want, ContextUriType(tt.uri))
+		})
 	}
 }
 
@@ -45,9 +49,9 @@ func TestInferSpotifyIdTypeTrackContexts(t *testing.T) {
 	}
 
 	for _, uri := range uris {
-		if got := InferSpotifyIdTypeFromContextUri(uri); got != SpotifyIdTypeTrack {
-			t.Errorf("InferSpotifyIdTypeFromContextUri(%q) = %q, want %q", uri, got, SpotifyIdTypeTrack)
-		}
+		t.Run(uri, func(t *testing.T) {
+			require.Equal(t, SpotifyIdTypeTrack, InferSpotifyIdTypeFromContextUri(uri))
+		})
 	}
 }
 
@@ -60,9 +64,9 @@ func TestInferSpotifyIdTypeEpisodeContexts(t *testing.T) {
 	}
 
 	for _, uri := range uris {
-		if got := InferSpotifyIdTypeFromContextUri(uri); got != SpotifyIdTypeEpisode {
-			t.Errorf("InferSpotifyIdTypeFromContextUri(%q) = %q, want %q", uri, got, SpotifyIdTypeEpisode)
-		}
+		t.Run(uri, func(t *testing.T) {
+			require.Equal(t, SpotifyIdTypeEpisode, InferSpotifyIdTypeFromContextUri(uri))
+		})
 	}
 }
 
@@ -81,8 +85,8 @@ func TestInferSpotifyIdTypeUnsupportedContexts(t *testing.T) {
 	}
 
 	for _, uri := range uris {
-		if got := InferSpotifyIdTypeFromContextUri(uri); got != SpotifyIdTypeUnknown {
-			t.Errorf("InferSpotifyIdTypeFromContextUri(%q) = %q, want unknown", uri, got)
-		}
+		t.Run(uri, func(t *testing.T) {
+			require.Equal(t, SpotifyIdTypeUnknown, InferSpotifyIdTypeFromContextUri(uri))
+		})
 	}
 }
