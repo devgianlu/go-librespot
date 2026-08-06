@@ -220,7 +220,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			},
 		})
 
-		hasNextTrack, err := p.advanceNext(context.TODO(), false, false)
+		hasNextTrack, err := p.advanceNext(ctx, false, false)
 		if err != nil {
 			p.app.log.WithError(err).Error("failed advancing to next track")
 		}
