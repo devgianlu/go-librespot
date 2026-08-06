@@ -1,6 +1,6 @@
 //go:build test_unit
 
-package mp3
+package mp3_test
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/mp3"
 )
 
 // sine_mono.mp3 is a 0.5s 440Hz sine, 44100Hz, single channel, 320kbps.
@@ -24,10 +25,10 @@ func fixture(t *testing.T) []byte {
 	return data
 }
 
-func newDecoder(t *testing.T, gain float32) *Decoder {
+func newDecoder(t *testing.T, gain float32) *mp3.Decoder {
 	t.Helper()
 
-	d, err := New(&librespot.NullLogger{}, bytes.NewReader(fixture(t)), gain)
+	d, err := mp3.New(&librespot.NullLogger{}, bytes.NewReader(fixture(t)), gain)
 	if err != nil {
 		t.Fatalf("failed to create decoder: %v", err)
 	}
@@ -36,7 +37,7 @@ func newDecoder(t *testing.T, gain float32) *Decoder {
 	return d
 }
 
-func drain(t *testing.T, d *Decoder) []float32 {
+func drain(t *testing.T, d *mp3.Decoder) []float32 {
 	t.Helper()
 
 	var out []float32

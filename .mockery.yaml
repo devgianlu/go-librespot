@@ -12,3 +12,13 @@ packages:
       AudioSource:
       Logger:
       PageResolver:
+      StateStore:
+  github.com/devgianlu/go-librespot/output:
+    interfaces:
+      Output:
+  github.com/devgianlu/go-librespot/player:
+    interfaces:
+      EventManager:
+  github.com/devgianlu/go-librespot/zeroconf:
+    interfaces:
+      ServiceRegistrar:

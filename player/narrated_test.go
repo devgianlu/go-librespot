@@ -1,6 +1,6 @@
 //go:build test_unit
 
-package player
+package player_test
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -62,7 +63,7 @@ func TestNarratedPlaysIntroThenTrack(t *testing.T) {
 	lead := emitting(t, 100, 0.25)
 	main := emitting(t, 200, 0.75)
 
-	got := drainSource(t, NewNarratedSource(&librespot.NullLogger{}, lead, main, nil))
+	got := drainSource(t, player.NewNarratedSource(&librespot.NullLogger{}, lead, main, nil))
 
 	if len(got) != 300 {
 		t.Fatalf("got %d samples, want 300", len(got))
@@ -85,7 +86,7 @@ func TestNarratedSurvivesBrokenIntro(t *testing.T) {
 
 	main := emitting(t, 128, 0.5)
 
-	got := drainSource(t, NewNarratedSource(&librespot.NullLogger{}, lead, main, nil))
+	got := drainSource(t, player.NewNarratedSource(&librespot.NullLogger{}, lead, main, nil))
 
 	if len(got) != 128 {
 		t.Fatalf("got %d samples, want the full track (128) despite the broken lead-in", len(got))
@@ -96,7 +97,7 @@ func TestNarratedEmptyIntro(t *testing.T) {
 	lead := emitting(t, 0, 0)
 	main := emitting(t, 64, 0.5)
 
-	if got := drainSource(t, NewNarratedSource(&librespot.NullLogger{}, lead, main, nil)); len(got) != 64 {
+	if got := drainSource(t, player.NewNarratedSource(&librespot.NullLogger{}, lead, main, nil)); len(got) != 64 {
 		t.Fatalf("got %d samples, want 64", len(got))
 	}
 }
@@ -108,7 +109,7 @@ func TestNarratedSeekSkipsIntro(t *testing.T) {
 	main := emitting(t, 100, 0.75)
 	main.EXPECT().SetPositionMs(int64(5000)).Return(nil).Once()
 
-	s := NewNarratedSource(&librespot.NullLogger{}, lead, main, nil)
+	s := player.NewNarratedSource(&librespot.NullLogger{}, lead, main, nil)
 	if err := s.SetPositionMs(5000); err != nil {
 		t.Fatalf("seek failed: %v", err)
 	}
@@ -128,7 +129,7 @@ func TestNarratedPositionIsTrackPosition(t *testing.T) {
 	main := librespot.NewMockAudioSource(t)
 	main.EXPECT().PositionMs().Return(42).Once()
 
-	if pos := NewNarratedSource(&librespot.NullLogger{}, lead, main, nil).PositionMs(); pos != 42 {
+	if pos := player.NewNarratedSource(&librespot.NullLogger{}, lead, main, nil).PositionMs(); pos != 42 {
 		t.Errorf("PositionMs = %d, want the main source's 42", pos)
 	}
 }
@@ -138,7 +139,7 @@ func TestNarratedPlaysOutroAfterTrack(t *testing.T) {
 	main := emitting(t, 100, 0.75)
 	outro := emitting(t, 30, 0.5)
 
-	got := drainSource(t, NewNarratedSource(&librespot.NullLogger{}, intro, main, outro))
+	got := drainSource(t, player.NewNarratedSource(&librespot.NullLogger{}, intro, main, outro))
 
 	if len(got) != 180 {
 		t.Fatalf("got %d samples, want 180 (50 intro + 100 track + 30 outro)", len(got))
@@ -163,7 +164,7 @@ func TestNarratedOutroOnly(t *testing.T) {
 	main := emitting(t, 64, 0.75)
 	outro := emitting(t, 16, 0.5)
 
-	if got := drainSource(t, NewNarratedSource(&librespot.NullLogger{}, nil, main, outro)); len(got) != 80 {
+	if got := drainSource(t, player.NewNarratedSource(&librespot.NullLogger{}, nil, main, outro)); len(got) != 80 {
 		t.Fatalf("got %d samples, want 80", len(got))
 	}
 }
@@ -175,7 +176,7 @@ func TestNarratedSurvivesBrokenOutro(t *testing.T) {
 	outro := librespot.NewMockAudioSource(t)
 	outro.EXPECT().Read(mock.Anything).Return(0, errors.New("cdn went away")).Maybe()
 
-	if got := drainSource(t, NewNarratedSource(&librespot.NullLogger{}, nil, main, outro)); len(got) != 64 {
+	if got := drainSource(t, player.NewNarratedSource(&librespot.NullLogger{}, nil, main, outro)); len(got) != 64 {
 		t.Fatalf("got %d samples, want the full track (64)", len(got))
 	}
 }
@@ -190,7 +191,7 @@ func TestNarratedSeekKeepsOutro(t *testing.T) {
 
 	outro := emitting(t, 20, 0.5)
 
-	s := NewNarratedSource(&librespot.NullLogger{}, intro, main, outro)
+	s := player.NewNarratedSource(&librespot.NullLogger{}, intro, main, outro)
 	if err := s.SetPositionMs(1000); err != nil {
 		t.Fatalf("seek failed: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestNarratedSeekKeepsOutro(t *testing.T) {
 	}
 }
 
-// The bug this guards: with crossfading on, SwitchingAudioSource withholds the
+// The bug this guards: with crossfading on, player.SwitchingAudioSource withholds the
 // last crossfadeSamples of the primary and only releases them as a fade under
 // the next track. An outro is shorter than a typical fade, so the whole of it
 // was consumed fading out and never actually heard.
@@ -218,13 +219,13 @@ func TestNarratedOutroSurvivesCrossfade(t *testing.T) {
 
 	track := emitting(t, 2000, 0.75)
 	outro := emitting(t, 500, 0.5)
-	narrated := NewNarratedSource(&librespot.NullLogger{}, nil, track, outro)
+	narrated := player.NewNarratedSource(&librespot.NullLogger{}, nil, track, outro)
 
 	if !narrated.NoCrossfade() {
 		t.Fatal("a source ending in an outro should decline crossfading")
 	}
 
-	s := NewSwitchingAudioSource(crossfadeSamples)
+	s := player.NewSwitchingAudioSource(crossfadeSamples)
 	s.SetPrimary(narrated)
 	// A next track is waiting, which is exactly when the fade would engage.
 	s.SetSecondary(emitting(t, 1000, 0.25))
@@ -266,7 +267,7 @@ func TestNarratedOutroSurvivesCrossfade(t *testing.T) {
 // A track with only an introduction still crossfades: its tail is ordinary
 // music, so there is nothing to protect.
 func TestNarratedIntroOnlyStillCrossfades(t *testing.T) {
-	narrated := NewNarratedSource(&librespot.NullLogger{}, emitting(t, 100, 0.25), emitting(t, 500, 0.75), nil)
+	narrated := player.NewNarratedSource(&librespot.NullLogger{}, emitting(t, 100, 0.25), emitting(t, 500, 0.75), nil)
 
 	if narrated.NoCrossfade() {
 		t.Error("a source with no outro should crossfade as usual")
