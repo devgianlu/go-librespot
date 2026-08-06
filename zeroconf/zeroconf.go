@@ -181,6 +181,10 @@ func (z *Zeroconf) handleAddUser(writer http.ResponseWriter, request *http.Reque
 		return fmt.Errorf("invalid client key: %w", err)
 	}
 
+	if len(blob) < 16+1+20 {
+		return fmt.Errorf("invalid blob: too short (%d bytes)", len(blob))
+	}
+
 	// start handshake and decrypting of blob
 	sharedSecret := z.dh.Exchange(clientKey)
 	baseKey := func() []byte { sum := sha1.Sum(sharedSecret); return sum[:16] }()
