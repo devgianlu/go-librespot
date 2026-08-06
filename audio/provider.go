@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -82,7 +83,10 @@ func (p *KeyProvider) recvLoop() {
 			switch pkt.Type {
 			case ap.PacketTypeAesKey:
 				key := make([]byte, 16)
-				_, _ = resp.Read(key)
+				if _, err := io.ReadFull(resp, key); err != nil {
+					req.resp <- keyResponse{err: fmt.Errorf("malformed aes key response for sequence %d: %w", respSeq, err)}
+					continue
+				}
 				req.resp <- keyResponse{key: key}
 			case ap.PacketTypeAesKeyError:
 				var errCode uint16
