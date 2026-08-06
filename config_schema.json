@@ -327,6 +327,11 @@
           "type": "boolean",
           "description": "Whether FLAC files should be preferred over other formats when available",
           "default": false
+        },
+        "prefer_firewall_friendly_ports": {
+          "type": "boolean",
+          "description": "Whether to try Spotify accesspoints on ports 443 and 80 before the default 4070, for networks that only allow those outbound. Does not affect the dealer or spclient, which already use 443",
+          "default": false
         }
       },
       "required": [

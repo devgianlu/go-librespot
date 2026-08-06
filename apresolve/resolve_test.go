@@ -12,6 +12,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -46,11 +47,20 @@ func (suite *ApResolverSuite) SetupTest() {
 		_, _ = w.Write([]byte(suite.body))
 	}))
 
-	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client())
+	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client(), false)
 
 	// Point the resolver at the stub instead of the real endpoint.
 	baseUrl, err := url.Parse(suite.server.URL)
 	suite.Require().NoError(err)
+	suite.resolver.baseUrl = baseUrl
+}
+
+// preferFirewallFriendlyPorts swaps in a resolver with the preference enabled,
+// pointed at the same stub. The preference is fixed at construction, so it
+// cannot be flipped on the resolver SetupTest already built.
+func (suite *ApResolverSuite) preferFirewallFriendlyPorts() {
+	baseUrl := suite.resolver.baseUrl
+	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client(), true)
 	suite.resolver.baseUrl = baseUrl
 }
 
@@ -204,6 +214,78 @@ func (suite *ApResolverSuite) TestHonoursContextCancellation() {
 	_, err := suite.resolver.GetAccesspoint(ctx)
 	suite.Require().Error(err)
 	suite.ErrorIs(err, context.Canceled)
+}
+
+// Spotify returns 4070 first, which restrictive networks tend to block. With
+// the preference on, 443 comes first and 80 next, and the directory's own
+// ordering is kept within each port group so the nearest endpoint still wins.
+func (suite *ApResolverSuite) TestPrefersFirewallFriendlyPorts() {
+	suite.preferFirewallFriendlyPorts()
+	suite.body = `{"accesspoint":[` +
+		`"ap-gew4:4070","ap-gew4:443","ap-gew4:80",` +
+		`"ap-guc3:4070","ap-gue1:443","ap-gae2:80"]}`
+
+	get, err := suite.resolver.GetAccesspoint(suite.T().Context())
+	suite.Require().NoError(err)
+
+	suite.Equal([]string{
+		"ap-gew4:443", "ap-gue1:443",
+		"ap-gew4:80", "ap-gae2:80",
+		"ap-gew4:4070", "ap-guc3:4070",
+	}, []string{
+		get(suite.T().Context()), get(suite.T().Context()),
+		get(suite.T().Context()), get(suite.T().Context()),
+		get(suite.T().Context()), get(suite.T().Context()),
+	})
+}
+
+// Off by default: the directory's order is Spotify's own preference and should
+// not be second-guessed unless asked.
+func (suite *ApResolverSuite) TestKeepsServerOrderByDefault() {
+	suite.body = `{"accesspoint":["ap-gew4:4070","ap-gew4:443","ap-gew4:80"]}`
+
+	get, err := suite.resolver.GetAccesspoint(suite.T().Context())
+	suite.Require().NoError(err)
+
+	suite.Equal("ap-gew4:4070", get(suite.T().Context()))
+	suite.Equal("ap-gew4:443", get(suite.T().Context()))
+	suite.Equal("ap-gew4:80", get(suite.T().Context()))
+}
+
+// Only accesspoints are reordered; the dealer and spclient are served over 443
+// already and their order carries no port meaning.
+func (suite *ApResolverSuite) TestDoesNotReorderOtherEndpointTypes() {
+	suite.preferFirewallFriendlyPorts()
+	suite.body = `{"dealer":["d1:4070","d2:443"],"spclient":["s1:4070","s2:443"]}`
+
+	ctx := suite.T().Context()
+	dealer, err := suite.resolver.GetDealer(ctx)
+	suite.Require().NoError(err)
+	suite.Equal("d1:4070", dealer(ctx))
+
+	spclient, err := suite.resolver.GetSpclient(ctx)
+	suite.Require().NoError(err)
+	suite.Equal("s1:4070", spclient(ctx))
+}
+
+func TestFirewallFriendlyPortRank(t *testing.T) {
+	for _, tt := range []struct {
+		addr string
+		want int
+	}{
+		{"ap-gew4.spotify.com:443", 0},
+		{"ap-gew4.spotify.com:80", 1},
+		{"ap-gew4.spotify.com:4070", 2},
+		// 8443 and 8080 must not be mistaken for 443 and 80 by a bare suffix
+		// check on the digits.
+		{"ap-gew4.spotify.com:8443", 2},
+		{"ap-gew4.spotify.com:8080", 2},
+		{"no-port", 2},
+	} {
+		t.Run(tt.addr, func(t *testing.T) {
+			require.Equal(t, tt.want, firewallFriendlyPortRank(tt.addr))
+		})
+	}
 }
 
 func TestApResolverSuite(t *testing.T) {

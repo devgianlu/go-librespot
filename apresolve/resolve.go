@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,22 +30,43 @@ type ApResolver struct {
 	endpointsExp  map[endpointType]time.Time
 	endpointsLock sync.RWMutex
 
+	preferFirewallFriendlyPorts bool
+
 	client *http.Client
 }
 
-func NewApResolver(log librespot.Logger, client *http.Client) *ApResolver {
+// NewApResolver builds a resolver for Spotify's endpoint directory.
+func NewApResolver(log librespot.Logger, client *http.Client, preferFirewallFriendlyPorts bool) *ApResolver {
 	baseUrl, err := url.Parse("https://apresolve.spotify.com/")
 	if err != nil {
 		panic("invalid apresolve base URL")
 	}
 
 	return &ApResolver{
-		log:          log,
-		baseUrl:      baseUrl,
-		client:       client,
-		endpoints:    map[endpointType][]string{},
-		endpointsExp: map[endpointType]time.Time{},
+		log:                         log,
+		baseUrl:                     baseUrl,
+		client:                      client,
+		endpoints:                   map[endpointType][]string{},
+		endpointsExp:                map[endpointType]time.Time{},
+		preferFirewallFriendlyPorts: preferFirewallFriendlyPorts,
 	}
+}
+
+func firewallFriendlyPortRank(addr string) int {
+	switch {
+	case strings.HasSuffix(addr, ":443"):
+		return 0
+	case strings.HasSuffix(addr, ":80"):
+		return 1
+	default:
+		return 2
+	}
+}
+
+func sortFirewallFriendly(addrs []string) {
+	sort.SliceStable(addrs, func(i, j int) bool {
+		return firewallFriendlyPortRank(addrs[i]) < firewallFriendlyPortRank(addrs[j])
+	})
 }
 
 func (r *ApResolver) fetchUrls(ctx context.Context, types ...endpointType) error {
@@ -100,6 +123,10 @@ func (r *ApResolver) fetchUrls(ctx context.Context, types ...endpointType) error
 	defer r.endpointsLock.Unlock()
 
 	if slices.Contains(types, endpointTypeAccesspoint) {
+		if r.preferFirewallFriendlyPorts {
+			sortFirewallFriendly(respJson.Accesspoint)
+		}
+
 		r.endpoints[endpointTypeAccesspoint] = respJson.Accesspoint
 		r.endpointsExp[endpointTypeAccesspoint] = time.Now().Add(1 * time.Hour)
 		r.log.Debugf("fetched new accesspoints: %v", respJson.Accesspoint)

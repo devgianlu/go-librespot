@@ -82,7 +82,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 	if opts.Resolver != nil {
 		s.resolver = opts.Resolver
 	} else {
-		s.resolver = apresolve.NewApResolver(opts.Log, s.client)
+		s.resolver = apresolve.NewApResolver(opts.Log, s.client, opts.PreferFirewallFriendlyPorts)
 	}
 
 	// create new login5.Login5

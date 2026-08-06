@@ -258,7 +258,14 @@ initial_volume: 100 # Initial volume in steps (not applied to the mixer device)
 ignore_last_volume: false # Whether to ignore the last saved volume and always use initial_volume
 external_volume: false # Whether volume is controlled externally 
 disable_autoplay: false # Whether autoplay of more songs should be disabled
+prefer_firewall_friendly_ports: false # Whether to try accesspoints on 443 and 80 before the default 4070
 ```
+
+If your network only allows outbound HTTP and HTTPS, set
+`prefer_firewall_friendly_ports: true`. Spotify offers each accesspoint on
+4070, 443 and 80 and normally lists 4070 first, which restrictive firewalls
+tend to block; enabling this tries 443 first, then 80, and falls back to 4070.
+The dealer and spclient are unaffected, as they already use 443.
 
 Make sure to check [here](/config_schema.json) for the full list of options.
 

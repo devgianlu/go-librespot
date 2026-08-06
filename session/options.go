@@ -23,6 +23,10 @@ type Options struct {
 	ClientToken string
 	// Resolver is an instance of apresolve.ApResolver, leave nil to use the default one.
 	Resolver *apresolve.ApResolver
+	// PreferFirewallFriendlyPorts prefers accesspoints on 443 and 80 over the
+	// default 4070. Only consulted when Resolver is nil, since a supplied
+	// resolver already carries its own preference.
+	PreferFirewallFriendlyPorts bool
 
 	// Client is the HTTP client to use for the session, leave empty for a new one.
 	Client *http.Client
