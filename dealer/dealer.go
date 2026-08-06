@@ -150,7 +150,6 @@ loop:
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			conn, err := d.writeConn(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			cancel()
-			d.log.Tracef("sent dealer ping")
 
 			if err != nil {
 				select {
@@ -220,7 +219,6 @@ loop:
 				d.lastPongLock.Lock()
 				d.lastPong = time.Now()
 				d.lastPongLock.Unlock()
-				d.log.Tracef("received dealer pong")
 				break
 			default:
 				d.log.Warnf("unknown dealer message type: %s", message.Type)
