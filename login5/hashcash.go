@@ -42,6 +42,8 @@ func solveHashcash(loginContext []byte, challenge *challengespb.HashcashChalleng
 	hasher := sha1.New()
 	start := time.Now()
 	for {
+		hasher.Reset()
+
 		hasher.Write(challenge.Prefix)
 		hasher.Write(suffix)
 		sum := hasher.Sum(nil)
