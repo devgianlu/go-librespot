@@ -11,6 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
 )
 
@@ -141,5 +142,42 @@ func TestCloseSignalsAndUnblocksInFlightSend(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for send to finish")
+	}
+}
+
+// A reconnect waiting out its backoff has to give up as soon as the
+// accesspoint is closed. Without a context on the retry it keeps going for the
+// backoff's own budget — 15 minutes by default — while holding connMu, which
+// stalls shutdown and blocks every Send behind it.
+func TestCloseCancelsReconnectBackoff(t *testing.T) {
+	ap := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+
+	attempted := make(chan struct{}, 1)
+	retryDone := make(chan error, 1)
+	go func() {
+		retryDone <- backoff.Retry(func() error {
+			select {
+			case attempted <- struct{}{}:
+			default:
+			}
+			return errors.New("accesspoint still unreachable")
+		}, backoff.WithContext(backoff.NewExponentialBackOff(), ap.ctx))
+	}()
+
+	select {
+	case <-attempted:
+	case <-time.After(time.Second):
+		t.Fatal("retry never ran")
+	}
+
+	ap.Close()
+
+	select {
+	case err := <-retryDone:
+		if err == nil {
+			t.Fatal("expected the cancelled retry to report an error")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconnect backoff kept running after Close")
 	}
 }

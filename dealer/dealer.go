@@ -32,6 +32,9 @@ type Dealer struct {
 
 	conn *websocket.Conn
 
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	done         chan struct{}
 	closeOnce    sync.Once
 	recvLoopOnce sync.Once
@@ -49,6 +52,7 @@ type Dealer struct {
 }
 
 func NewDealer(log librespot.Logger, client *http.Client, dealerAddr librespot.GetAddressFunc, accessToken librespot.GetLogin5TokenFunc) *Dealer {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Dealer{
 		client: &http.Client{
 			Transport:     client.Transport,
@@ -59,6 +63,8 @@ func NewDealer(log librespot.Logger, client *http.Client, dealerAddr librespot.G
 		log:              log,
 		addr:             dealerAddr,
 		accessToken:      accessToken,
+		ctx:              ctx,
+		cancel:           cancel,
 		done:             make(chan struct{}),
 		requestReceivers: map[string]requestReceiver{},
 	}
@@ -115,7 +121,12 @@ func (d *Dealer) connect(ctx context.Context) error {
 func (d *Dealer) Close() {
 	d.closeOnce.Do(func() {
 		close(d.done)
+
+		// Before cancelling, so the peer still gets a clean going-away frame:
+		// cancelling the context tears the websocket down abruptly.
 		d.closeConn(websocket.StatusGoingAway)
+
+		d.cancel()
 	})
 }
 
@@ -147,7 +158,7 @@ loop:
 				continue
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			ctx, cancel := context.WithTimeout(d.ctx, timeout)
 			conn, err := d.writeConn(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			cancel()
 
@@ -179,7 +190,7 @@ loop:
 			break loop
 		default:
 			// no need to hold the connMu since reconnection happens in this routine
-			msgType, messageBytes, err := d.readConn(context.Background())
+			msgType, messageBytes, err := d.readConn(d.ctx)
 
 			// don't log closed error if we're shutting down
 			if err != nil {
@@ -234,7 +245,7 @@ loop:
 	case <-d.done:
 	default:
 		d.connMu.Lock()
-		if err := backoff.Retry(d.reconnect, backoff.NewExponentialBackOff()); err != nil {
+		if err := backoff.Retry(d.reconnect, backoff.WithContext(backoff.NewExponentialBackOff(), d.ctx)); err != nil {
 			d.log.WithError(err).Errorf("failed reconnecting dealer")
 			d.connMu.Unlock()
 
@@ -272,7 +283,7 @@ func (d *Dealer) sendReply(key string, success bool) error {
 		return fmt.Errorf("failed marshalling reply: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(d.ctx, timeout)
 	_, err = d.writeConn(ctx, websocket.MessageText, replyBytes)
 	cancel()
 	if err != nil {
@@ -283,7 +294,7 @@ func (d *Dealer) sendReply(key string, success bool) error {
 }
 
 func (d *Dealer) reconnect() error {
-	if err := d.connect(context.TODO()); err != nil {
+	if err := d.connect(d.ctx); err != nil {
 		return err
 	}
 
