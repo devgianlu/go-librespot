@@ -47,3 +47,15 @@ jobs:
 
       - name: Test
         run: go test -v -tags "test_unit test_integration" ./...
+
+      - name: Coverage
+        if: runner.os == 'Linux'
+        run: ./coverage.sh
+
+      - name: Upload coverage profile
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out.filtered
+          if-no-files-found: error
