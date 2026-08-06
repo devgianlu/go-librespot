@@ -13,3 +13,7 @@
 /vcpkg
 /vcpkg_installed
 /dist
+
+# Coverage
+coverage.out
+coverage.out.filtered
