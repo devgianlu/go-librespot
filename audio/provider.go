@@ -103,7 +103,11 @@ func (p *KeyProvider) recvLoop() {
 
 			reqs[reqSeq] = req
 
-			if err := p.ap.Send(context.TODO(), ap.PacketTypeRequestKey, buf.Bytes()); err != nil {
+			// Background on purpose: this pump writes for every queued request,
+			// so one caller's cancellation must not abort the others. Request
+			// applies the caller's deadline to the response wait instead, and
+			// Send already fails once the accesspoint is closed.
+			if err := p.ap.Send(context.Background(), ap.PacketTypeRequestKey, buf.Bytes()); err != nil {
 				delete(reqs, reqSeq)
 				req.resp <- keyResponse{err: fmt.Errorf("failed sending key request for file %s, gid: %s: %w",
 					hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid), err)}
