@@ -245,34 +245,46 @@ func (ResolveRequest_TtsVoice) EnumDescriptor() ([]byte, []int) {
 type ResolveRequest_TtsProvider int32
 
 const (
-	ResolveRequest_UNSET_TTS_PROVIDER  ResolveRequest_TtsProvider = 0
-	ResolveRequest_CLOUD_TTS           ResolveRequest_TtsProvider = 1
-	ResolveRequest_READSPEAKER         ResolveRequest_TtsProvider = 2
-	ResolveRequest_POLLY               ResolveRequest_TtsProvider = 3
-	ResolveRequest_WELL_SAID           ResolveRequest_TtsProvider = 4
-	ResolveRequest_SONANTIC_DEPRECATED ResolveRequest_TtsProvider = 5
-	ResolveRequest_SONANTIC_FAST       ResolveRequest_TtsProvider = 6
+	ResolveRequest_UNSET_TTS_PROVIDER     ResolveRequest_TtsProvider = 0
+	ResolveRequest_CLOUD_TTS              ResolveRequest_TtsProvider = 1
+	ResolveRequest_READSPEAKER            ResolveRequest_TtsProvider = 2
+	ResolveRequest_POLLY                  ResolveRequest_TtsProvider = 3
+	ResolveRequest_WELL_SAID              ResolveRequest_TtsProvider = 4
+	ResolveRequest_SONANTIC_DEPRECATED    ResolveRequest_TtsProvider = 5
+	ResolveRequest_SONANTIC_FAST          ResolveRequest_TtsProvider = 6
+	ResolveRequest_OPENAI                 ResolveRequest_TtsProvider = 7
+	ResolveRequest_SONANTIC_LARGE         ResolveRequest_TtsProvider = 8
+	ResolveRequest_ELEVEN_LABS_DEPRECATED ResolveRequest_TtsProvider = 9
+	ResolveRequest_ADS_PUBLIC             ResolveRequest_TtsProvider = 10
 )
 
 // Enum value maps for ResolveRequest_TtsProvider.
 var (
 	ResolveRequest_TtsProvider_name = map[int32]string{
-		0: "UNSET_TTS_PROVIDER",
-		1: "CLOUD_TTS",
-		2: "READSPEAKER",
-		3: "POLLY",
-		4: "WELL_SAID",
-		5: "SONANTIC_DEPRECATED",
-		6: "SONANTIC_FAST",
+		0:  "UNSET_TTS_PROVIDER",
+		1:  "CLOUD_TTS",
+		2:  "READSPEAKER",
+		3:  "POLLY",
+		4:  "WELL_SAID",
+		5:  "SONANTIC_DEPRECATED",
+		6:  "SONANTIC_FAST",
+		7:  "OPENAI",
+		8:  "SONANTIC_LARGE",
+		9:  "ELEVEN_LABS_DEPRECATED",
+		10: "ADS_PUBLIC",
 	}
 	ResolveRequest_TtsProvider_value = map[string]int32{
-		"UNSET_TTS_PROVIDER":  0,
-		"CLOUD_TTS":           1,
-		"READSPEAKER":         2,
-		"POLLY":               3,
-		"WELL_SAID":           4,
-		"SONANTIC_DEPRECATED": 5,
-		"SONANTIC_FAST":       6,
+		"UNSET_TTS_PROVIDER":     0,
+		"CLOUD_TTS":              1,
+		"READSPEAKER":            2,
+		"POLLY":                  3,
+		"WELL_SAID":              4,
+		"SONANTIC_DEPRECATED":    5,
+		"SONANTIC_FAST":          6,
+		"OPENAI":                 7,
+		"SONANTIC_LARGE":         8,
+		"ELEVEN_LABS_DEPRECATED": 9,
+		"ADS_PUBLIC":             10,
 	}
 )
 
@@ -303,20 +315,72 @@ func (ResolveRequest_TtsProvider) EnumDescriptor() ([]byte, []int) {
 	return file_spotify_narration_tts_resolve_proto_rawDescGZIP(), []int{0, 2}
 }
 
+type ResolveRequest_TtsVoiceStyle int32
+
+const (
+	ResolveRequest_NEUTRAL ResolveRequest_TtsVoiceStyle = 0
+	ResolveRequest_CHILL   ResolveRequest_TtsVoiceStyle = 1
+	ResolveRequest_UPBEAT  ResolveRequest_TtsVoiceStyle = 2
+)
+
+// Enum value maps for ResolveRequest_TtsVoiceStyle.
+var (
+	ResolveRequest_TtsVoiceStyle_name = map[int32]string{
+		0: "NEUTRAL",
+		1: "CHILL",
+		2: "UPBEAT",
+	}
+	ResolveRequest_TtsVoiceStyle_value = map[string]int32{
+		"NEUTRAL": 0,
+		"CHILL":   1,
+		"UPBEAT":  2,
+	}
+)
+
+func (x ResolveRequest_TtsVoiceStyle) Enum() *ResolveRequest_TtsVoiceStyle {
+	p := new(ResolveRequest_TtsVoiceStyle)
+	*p = x
+	return p
+}
+
+func (x ResolveRequest_TtsVoiceStyle) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResolveRequest_TtsVoiceStyle) Descriptor() protoreflect.EnumDescriptor {
+	return file_spotify_narration_tts_resolve_proto_enumTypes[3].Descriptor()
+}
+
+func (ResolveRequest_TtsVoiceStyle) Type() protoreflect.EnumType {
+	return &file_spotify_narration_tts_resolve_proto_enumTypes[3]
+}
+
+func (x ResolveRequest_TtsVoiceStyle) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResolveRequest_TtsVoiceStyle.Descriptor instead.
+func (ResolveRequest_TtsVoiceStyle) EnumDescriptor() ([]byte, []int) {
+	return file_spotify_narration_tts_resolve_proto_rawDescGZIP(), []int{0, 3}
+}
+
 type ResolveRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Prompt:
 	//
 	//	*ResolveRequest_Text
 	//	*ResolveRequest_Ssml
-	Prompt        isResolveRequest_Prompt    `protobuf_oneof:"prompt"`
-	AudioFormat   ResolveRequest_AudioFormat `protobuf:"varint,3,opt,name=audio_format,json=audioFormat,proto3,enum=spotify.narration.ResolveRequest_AudioFormat" json:"audio_format,omitempty"`
-	Language      string                     `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	TtsVoice      ResolveRequest_TtsVoice    `protobuf:"varint,5,opt,name=tts_voice,json=ttsVoice,proto3,enum=spotify.narration.ResolveRequest_TtsVoice" json:"tts_voice,omitempty"`
-	TtsProvider   ResolveRequest_TtsProvider `protobuf:"varint,6,opt,name=tts_provider,json=ttsProvider,proto3,enum=spotify.narration.ResolveRequest_TtsProvider" json:"tts_provider,omitempty"`
-	SampleRateHz  int32                      `protobuf:"varint,7,opt,name=sample_rate_hz,json=sampleRateHz,proto3" json:"sample_rate_hz,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Prompt               isResolveRequest_Prompt      `protobuf_oneof:"prompt"`
+	AudioFormat          ResolveRequest_AudioFormat   `protobuf:"varint,3,opt,name=audio_format,json=audioFormat,proto3,enum=spotify.narration.ResolveRequest_AudioFormat" json:"audio_format,omitempty"`
+	Language             string                       `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	TtsVoice             ResolveRequest_TtsVoice      `protobuf:"varint,5,opt,name=tts_voice,json=ttsVoice,proto3,enum=spotify.narration.ResolveRequest_TtsVoice" json:"tts_voice,omitempty"`
+	TtsProvider          ResolveRequest_TtsProvider   `protobuf:"varint,6,opt,name=tts_provider,json=ttsProvider,proto3,enum=spotify.narration.ResolveRequest_TtsProvider" json:"tts_provider,omitempty"`
+	SampleRateHz         int32                        `protobuf:"varint,7,opt,name=sample_rate_hz,json=sampleRateHz,proto3" json:"sample_rate_hz,omitempty"`
+	TtsVoiceStyle        ResolveRequest_TtsVoiceStyle `protobuf:"varint,8,opt,name=tts_voice_style,json=ttsVoiceStyle,proto3,enum=spotify.narration.ResolveRequest_TtsVoiceStyle" json:"tts_voice_style,omitempty"`
+	TtsVoiceStylePercent int32                        `protobuf:"varint,9,opt,name=tts_voice_style_percent,json=ttsVoiceStylePercent,proto3" json:"tts_voice_style_percent,omitempty"`
+	Seed                 int32                        `protobuf:"varint,10,opt,name=seed,proto3" json:"seed,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ResolveRequest) Reset() {
@@ -409,6 +473,27 @@ func (x *ResolveRequest) GetSampleRateHz() int32 {
 	return 0
 }
 
+func (x *ResolveRequest) GetTtsVoiceStyle() ResolveRequest_TtsVoiceStyle {
+	if x != nil {
+		return x.TtsVoiceStyle
+	}
+	return ResolveRequest_NEUTRAL
+}
+
+func (x *ResolveRequest) GetTtsVoiceStylePercent() int32 {
+	if x != nil {
+		return x.TtsVoiceStylePercent
+	}
+	return 0
+}
+
+func (x *ResolveRequest) GetSeed() int32 {
+	if x != nil {
+		return x.Seed
+	}
+	return 0
+}
+
 type isResolveRequest_Prompt interface {
 	isResolveRequest_Prompt()
 }
@@ -477,11 +562,109 @@ func (x *ResolveResponse) GetExpiry() int64 {
 	return 0
 }
 
+type TtsPrompt struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Tts:
+	//
+	//	*TtsPrompt_Text
+	//	*TtsPrompt_Ssml
+	Tts           isTtsPrompt_Tts `protobuf_oneof:"tts"`
+	Language      string          `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	Url           string          `protobuf:"bytes,4,opt,name=url,proto3" json:"url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TtsPrompt) Reset() {
+	*x = TtsPrompt{}
+	mi := &file_spotify_narration_tts_resolve_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TtsPrompt) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TtsPrompt) ProtoMessage() {}
+
+func (x *TtsPrompt) ProtoReflect() protoreflect.Message {
+	mi := &file_spotify_narration_tts_resolve_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TtsPrompt.ProtoReflect.Descriptor instead.
+func (*TtsPrompt) Descriptor() ([]byte, []int) {
+	return file_spotify_narration_tts_resolve_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TtsPrompt) GetTts() isTtsPrompt_Tts {
+	if x != nil {
+		return x.Tts
+	}
+	return nil
+}
+
+func (x *TtsPrompt) GetText() string {
+	if x != nil {
+		if x, ok := x.Tts.(*TtsPrompt_Text); ok {
+			return x.Text
+		}
+	}
+	return ""
+}
+
+func (x *TtsPrompt) GetSsml() string {
+	if x != nil {
+		if x, ok := x.Tts.(*TtsPrompt_Ssml); ok {
+			return x.Ssml
+		}
+	}
+	return ""
+}
+
+func (x *TtsPrompt) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *TtsPrompt) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type isTtsPrompt_Tts interface {
+	isTtsPrompt_Tts()
+}
+
+type TtsPrompt_Text struct {
+	Text string `protobuf:"bytes,1,opt,name=text,proto3,oneof"`
+}
+
+type TtsPrompt_Ssml struct {
+	Ssml string `protobuf:"bytes,2,opt,name=ssml,proto3,oneof"`
+}
+
+func (*TtsPrompt_Text) isTtsPrompt_Tts() {}
+
+func (*TtsPrompt_Ssml) isTtsPrompt_Tts() {}
+
 var File_spotify_narration_tts_resolve_proto protoreflect.FileDescriptor
 
 const file_spotify_narration_tts_resolve_proto_rawDesc = "" +
 	"\n" +
-	"#spotify/narration/tts_resolve.proto\x12\x11spotify.narration\"\xf5\b\n" +
+	"#spotify/narration/tts_resolve.proto\x12\x11spotify.narration\"\x9a\v\n" +
 	"\x0eResolveRequest\x12\x14\n" +
 	"\x04text\x18\x01 \x01(\tH\x00R\x04text\x12\x14\n" +
 	"\x04ssml\x18\x02 \x01(\tH\x00R\x04ssml\x12P\n" +
@@ -489,7 +672,11 @@ const file_spotify_narration_tts_resolve_proto_rawDesc = "" +
 	"\blanguage\x18\x04 \x01(\tR\blanguage\x12G\n" +
 	"\ttts_voice\x18\x05 \x01(\x0e2*.spotify.narration.ResolveRequest.TtsVoiceR\bttsVoice\x12P\n" +
 	"\ftts_provider\x18\x06 \x01(\x0e2-.spotify.narration.ResolveRequest.TtsProviderR\vttsProvider\x12$\n" +
-	"\x0esample_rate_hz\x18\a \x01(\x05R\fsampleRateHz\"O\n" +
+	"\x0esample_rate_hz\x18\a \x01(\x05R\fsampleRateHz\x12W\n" +
+	"\x0ftts_voice_style\x18\b \x01(\x0e2/.spotify.narration.ResolveRequest.TtsVoiceStyleR\rttsVoiceStyle\x125\n" +
+	"\x17tts_voice_style_percent\x18\t \x01(\x05R\x14ttsVoiceStylePercent\x12\x12\n" +
+	"\x04seed\x18\n" +
+	" \x01(\x05R\x04seed\"O\n" +
 	"\vAudioFormat\x12\x0f\n" +
 	"\vUNSPECIFIED\x10\x00\x12\a\n" +
 	"\x03WAV\x10\x01\x12\a\n" +
@@ -549,7 +736,7 @@ const file_spotify_narration_tts_resolve_proto_rawDesc = "" +
 	"\aVOICE37\x10%\x12\v\n" +
 	"\aVOICE38\x10&\x12\v\n" +
 	"\aVOICE39\x10'\x12\v\n" +
-	"\aVOICE40\x10(\"\x8b\x01\n" +
+	"\aVOICE40\x10(\"\xd7\x01\n" +
 	"\vTtsProvider\x12\x16\n" +
 	"\x12UNSET_TTS_PROVIDER\x10\x00\x12\r\n" +
 	"\tCLOUD_TTS\x10\x01\x12\x0f\n" +
@@ -557,11 +744,29 @@ const file_spotify_narration_tts_resolve_proto_rawDesc = "" +
 	"\x05POLLY\x10\x03\x12\r\n" +
 	"\tWELL_SAID\x10\x04\x12\x17\n" +
 	"\x13SONANTIC_DEPRECATED\x10\x05\x12\x11\n" +
-	"\rSONANTIC_FAST\x10\x06B\b\n" +
+	"\rSONANTIC_FAST\x10\x06\x12\n" +
+	"\n" +
+	"\x06OPENAI\x10\a\x12\x12\n" +
+	"\x0eSONANTIC_LARGE\x10\b\x12\x1a\n" +
+	"\x16ELEVEN_LABS_DEPRECATED\x10\t\x12\x0e\n" +
+	"\n" +
+	"ADS_PUBLIC\x10\n" +
+	"\"3\n" +
+	"\rTtsVoiceStyle\x12\v\n" +
+	"\aNEUTRAL\x10\x00\x12\t\n" +
+	"\x05CHILL\x10\x01\x12\n" +
+	"\n" +
+	"\x06UPBEAT\x10\x02B\b\n" +
 	"\x06prompt\";\n" +
 	"\x0fResolveResponse\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x16\n" +
-	"\x06expiry\x18\x02 \x01(\x03R\x06expiryB\xc8\x01\n" +
+	"\x06expiry\x18\x02 \x01(\x03R\x06expiry\"l\n" +
+	"\tTtsPrompt\x12\x14\n" +
+	"\x04text\x18\x01 \x01(\tH\x00R\x04text\x12\x14\n" +
+	"\x04ssml\x18\x02 \x01(\tH\x00R\x04ssml\x12\x1a\n" +
+	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x10\n" +
+	"\x03url\x18\x04 \x01(\tR\x03urlB\x05\n" +
+	"\x03ttsB\xc8\x01\n" +
 	"\x15com.spotify.narrationB\x0fTtsResolveProtoP\x01Z9github.com/devgianlu/go-librespot/proto/spotify/narration\xa2\x02\x03SNX\xaa\x02\x11Spotify.Narration\xca\x02\x11Spotify\\Narration\xe2\x02\x1dSpotify\\Narration\\GPBMetadata\xea\x02\x12Spotify::Narrationb\x06proto3"
 
 var (
@@ -576,24 +781,27 @@ func file_spotify_narration_tts_resolve_proto_rawDescGZIP() []byte {
 	return file_spotify_narration_tts_resolve_proto_rawDescData
 }
 
-var file_spotify_narration_tts_resolve_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_spotify_narration_tts_resolve_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_spotify_narration_tts_resolve_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_spotify_narration_tts_resolve_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_spotify_narration_tts_resolve_proto_goTypes = []any{
-	(ResolveRequest_AudioFormat)(0), // 0: spotify.narration.ResolveRequest.AudioFormat
-	(ResolveRequest_TtsVoice)(0),    // 1: spotify.narration.ResolveRequest.TtsVoice
-	(ResolveRequest_TtsProvider)(0), // 2: spotify.narration.ResolveRequest.TtsProvider
-	(*ResolveRequest)(nil),          // 3: spotify.narration.ResolveRequest
-	(*ResolveResponse)(nil),         // 4: spotify.narration.ResolveResponse
+	(ResolveRequest_AudioFormat)(0),   // 0: spotify.narration.ResolveRequest.AudioFormat
+	(ResolveRequest_TtsVoice)(0),      // 1: spotify.narration.ResolveRequest.TtsVoice
+	(ResolveRequest_TtsProvider)(0),   // 2: spotify.narration.ResolveRequest.TtsProvider
+	(ResolveRequest_TtsVoiceStyle)(0), // 3: spotify.narration.ResolveRequest.TtsVoiceStyle
+	(*ResolveRequest)(nil),            // 4: spotify.narration.ResolveRequest
+	(*ResolveResponse)(nil),           // 5: spotify.narration.ResolveResponse
+	(*TtsPrompt)(nil),                 // 6: spotify.narration.TtsPrompt
 }
 var file_spotify_narration_tts_resolve_proto_depIdxs = []int32{
 	0, // 0: spotify.narration.ResolveRequest.audio_format:type_name -> spotify.narration.ResolveRequest.AudioFormat
 	1, // 1: spotify.narration.ResolveRequest.tts_voice:type_name -> spotify.narration.ResolveRequest.TtsVoice
 	2, // 2: spotify.narration.ResolveRequest.tts_provider:type_name -> spotify.narration.ResolveRequest.TtsProvider
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 3: spotify.narration.ResolveRequest.tts_voice_style:type_name -> spotify.narration.ResolveRequest.TtsVoiceStyle
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_spotify_narration_tts_resolve_proto_init() }
@@ -605,13 +813,17 @@ func file_spotify_narration_tts_resolve_proto_init() {
 		(*ResolveRequest_Text)(nil),
 		(*ResolveRequest_Ssml)(nil),
 	}
+	file_spotify_narration_tts_resolve_proto_msgTypes[2].OneofWrappers = []any{
+		(*TtsPrompt_Text)(nil),
+		(*TtsPrompt_Ssml)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spotify_narration_tts_resolve_proto_rawDesc), len(file_spotify_narration_tts_resolve_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   2,
+			NumEnums:      4,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

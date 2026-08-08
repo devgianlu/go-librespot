@@ -101,6 +101,8 @@ message DeviceInfo {
   bool is_locally_discovered = 29;
   optional AudioOutputDeviceInfo audio_output_device_info = 24;
   optional spotify.connectstate.devices.GroupData group_data = 30;
+  optional string group_instance = 31;
+  bool is_public = 32;
 
   reserved 5; // metadata
 }
@@ -108,6 +110,9 @@ message DeviceInfo {
 message AudioOutputDeviceInfo {
   optional AudioOutputDeviceType audio_output_device_type = 1;
   optional string device_name = 2;
+  optional string brand = 3;
+  optional string model = 4;
+  optional AudioOutputCategory category = 5;
 }
 
 message Capabilities {
@@ -142,6 +147,8 @@ message Capabilities {
   bool supports_remote_sleep_timer = 34;
   bool supports_ping_request = 35;
   bool supports_playlist_mixing = 36;
+  bool supports_remote_audio_quality_control = 37;
+  bool supports_zephyr = 38;
 
   reserved 1, 4, 24, 31, 32;
 
@@ -229,6 +236,16 @@ enum AudioOutputDeviceType {
   CAR_PROJECTED = 6;
 }
 
+enum AudioOutputCategory {
+  AUDIO_OUTPUT_CATEGORY_UNKNOWN = 0;
+  AUDIO_OUTPUT_CATEGORY_CAR = 1;
+  AUDIO_OUTPUT_CATEGORY_HEADPHONES = 2;
+  AUDIO_OUTPUT_CATEGORY_SPEAKER = 3;
+  AUDIO_OUTPUT_CATEGORY_WEARABLE = 4;
+  AUDIO_OUTPUT_CATEGORY_GLASSES = 5;
+  AUDIO_OUTPUT_CATEGORY_APP = 6;
+}
+
 enum PutStateReason {
   UNKNOWN_PUT_STATE_REASON = 0;
   SPIRC_HELLO = 1;
@@ -244,6 +261,9 @@ enum PutStateReason {
   AUDIO_DRIVER_INFO_CHANGED = 11;
   PUT_STATE_RATE_LIMITED = 12;
   BACKEND_METADATA_APPLIED = 13;
+  LOCAL_DEVICES_CHANGED = 14;
+  GROUP_STATE_CHANGED = 15;
+  PRIVATE_SESSION_CHANGED = 16;
 }
 
 enum MemberType {
