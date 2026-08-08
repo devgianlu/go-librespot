@@ -13,6 +13,9 @@ message ResolveRequest {
   TtsVoice tts_voice = 5;
   TtsProvider tts_provider = 6;
   int32 sample_rate_hz = 7;
+  TtsVoiceStyle tts_voice_style = 8;
+  int32 tts_voice_style_percent = 9;
+  int32 seed = 10;
 
   enum AudioFormat {
     UNSPECIFIED = 0;
@@ -75,10 +78,30 @@ message ResolveRequest {
     WELL_SAID = 4;
     SONANTIC_DEPRECATED = 5;
     SONANTIC_FAST = 6;
+    OPENAI = 7;
+    SONANTIC_LARGE = 8;
+    ELEVEN_LABS_DEPRECATED = 9;
+    ADS_PUBLIC = 10;
+  }
+
+  enum TtsVoiceStyle {
+    NEUTRAL = 0;
+    CHILL = 1;
+    UPBEAT = 2;
   }
 }
 
 message ResolveResponse {
   string url = 1;
   int64 expiry = 2;
+}
+
+message TtsPrompt {
+  oneof tts {
+    string text = 1;
+    string ssml = 2;
+  }
+
+  string language = 3;
+  string url = 4;
 }
