@@ -134,6 +134,67 @@ func (AudioOutputDeviceType) EnumDescriptor() ([]byte, []int) {
 	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{1}
 }
 
+type AudioOutputCategory int32
+
+const (
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_UNKNOWN    AudioOutputCategory = 0
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_CAR        AudioOutputCategory = 1
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_HEADPHONES AudioOutputCategory = 2
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_SPEAKER    AudioOutputCategory = 3
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_WEARABLE   AudioOutputCategory = 4
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_GLASSES    AudioOutputCategory = 5
+	AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_APP        AudioOutputCategory = 6
+)
+
+// Enum value maps for AudioOutputCategory.
+var (
+	AudioOutputCategory_name = map[int32]string{
+		0: "AUDIO_OUTPUT_CATEGORY_UNKNOWN",
+		1: "AUDIO_OUTPUT_CATEGORY_CAR",
+		2: "AUDIO_OUTPUT_CATEGORY_HEADPHONES",
+		3: "AUDIO_OUTPUT_CATEGORY_SPEAKER",
+		4: "AUDIO_OUTPUT_CATEGORY_WEARABLE",
+		5: "AUDIO_OUTPUT_CATEGORY_GLASSES",
+		6: "AUDIO_OUTPUT_CATEGORY_APP",
+	}
+	AudioOutputCategory_value = map[string]int32{
+		"AUDIO_OUTPUT_CATEGORY_UNKNOWN":    0,
+		"AUDIO_OUTPUT_CATEGORY_CAR":        1,
+		"AUDIO_OUTPUT_CATEGORY_HEADPHONES": 2,
+		"AUDIO_OUTPUT_CATEGORY_SPEAKER":    3,
+		"AUDIO_OUTPUT_CATEGORY_WEARABLE":   4,
+		"AUDIO_OUTPUT_CATEGORY_GLASSES":    5,
+		"AUDIO_OUTPUT_CATEGORY_APP":        6,
+	}
+)
+
+func (x AudioOutputCategory) Enum() *AudioOutputCategory {
+	p := new(AudioOutputCategory)
+	*p = x
+	return p
+}
+
+func (x AudioOutputCategory) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AudioOutputCategory) Descriptor() protoreflect.EnumDescriptor {
+	return file_spotify_connectstate_connect_proto_enumTypes[2].Descriptor()
+}
+
+func (AudioOutputCategory) Type() protoreflect.EnumType {
+	return &file_spotify_connectstate_connect_proto_enumTypes[2]
+}
+
+func (x AudioOutputCategory) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AudioOutputCategory.Descriptor instead.
+func (AudioOutputCategory) EnumDescriptor() ([]byte, []int) {
+	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{2}
+}
+
 type PutStateReason int32
 
 const (
@@ -151,6 +212,9 @@ const (
 	PutStateReason_AUDIO_DRIVER_INFO_CHANGED PutStateReason = 11
 	PutStateReason_PUT_STATE_RATE_LIMITED    PutStateReason = 12
 	PutStateReason_BACKEND_METADATA_APPLIED  PutStateReason = 13
+	PutStateReason_LOCAL_DEVICES_CHANGED     PutStateReason = 14
+	PutStateReason_GROUP_STATE_CHANGED       PutStateReason = 15
+	PutStateReason_PRIVATE_SESSION_CHANGED   PutStateReason = 16
 )
 
 // Enum value maps for PutStateReason.
@@ -170,6 +234,9 @@ var (
 		11: "AUDIO_DRIVER_INFO_CHANGED",
 		12: "PUT_STATE_RATE_LIMITED",
 		13: "BACKEND_METADATA_APPLIED",
+		14: "LOCAL_DEVICES_CHANGED",
+		15: "GROUP_STATE_CHANGED",
+		16: "PRIVATE_SESSION_CHANGED",
 	}
 	PutStateReason_value = map[string]int32{
 		"UNKNOWN_PUT_STATE_REASON":  0,
@@ -186,6 +253,9 @@ var (
 		"AUDIO_DRIVER_INFO_CHANGED": 11,
 		"PUT_STATE_RATE_LIMITED":    12,
 		"BACKEND_METADATA_APPLIED":  13,
+		"LOCAL_DEVICES_CHANGED":     14,
+		"GROUP_STATE_CHANGED":       15,
+		"PRIVATE_SESSION_CHANGED":   16,
 	}
 )
 
@@ -200,11 +270,11 @@ func (x PutStateReason) String() string {
 }
 
 func (PutStateReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_connectstate_connect_proto_enumTypes[2].Descriptor()
+	return file_spotify_connectstate_connect_proto_enumTypes[3].Descriptor()
 }
 
 func (PutStateReason) Type() protoreflect.EnumType {
-	return &file_spotify_connectstate_connect_proto_enumTypes[2]
+	return &file_spotify_connectstate_connect_proto_enumTypes[3]
 }
 
 func (x PutStateReason) Number() protoreflect.EnumNumber {
@@ -213,7 +283,7 @@ func (x PutStateReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PutStateReason.Descriptor instead.
 func (PutStateReason) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{2}
+	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{3}
 }
 
 type MemberType int32
@@ -258,11 +328,11 @@ func (x MemberType) String() string {
 }
 
 func (MemberType) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_connectstate_connect_proto_enumTypes[3].Descriptor()
+	return file_spotify_connectstate_connect_proto_enumTypes[4].Descriptor()
 }
 
 func (MemberType) Type() protoreflect.EnumType {
-	return &file_spotify_connectstate_connect_proto_enumTypes[3]
+	return &file_spotify_connectstate_connect_proto_enumTypes[4]
 }
 
 func (x MemberType) Number() protoreflect.EnumNumber {
@@ -271,7 +341,7 @@ func (x MemberType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MemberType.Descriptor instead.
 func (MemberType) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{3}
+	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{4}
 }
 
 type ClusterUpdateReason int32
@@ -319,11 +389,11 @@ func (x ClusterUpdateReason) String() string {
 }
 
 func (ClusterUpdateReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_spotify_connectstate_connect_proto_enumTypes[4].Descriptor()
+	return file_spotify_connectstate_connect_proto_enumTypes[5].Descriptor()
 }
 
 func (ClusterUpdateReason) Type() protoreflect.EnumType {
-	return &file_spotify_connectstate_connect_proto_enumTypes[4]
+	return &file_spotify_connectstate_connect_proto_enumTypes[5]
 }
 
 func (x ClusterUpdateReason) Number() protoreflect.EnumNumber {
@@ -332,7 +402,7 @@ func (x ClusterUpdateReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ClusterUpdateReason.Descriptor instead.
 func (ClusterUpdateReason) EnumDescriptor() ([]byte, []int) {
-	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{4}
+	return file_spotify_connectstate_connect_proto_rawDescGZIP(), []int{5}
 }
 
 type ClusterUpdate struct {
@@ -877,6 +947,8 @@ type DeviceInfo struct {
 	IsLocallyDiscovered     bool                            `protobuf:"varint,29,opt,name=is_locally_discovered,json=isLocallyDiscovered,proto3" json:"is_locally_discovered,omitempty"`
 	AudioOutputDeviceInfo   *AudioOutputDeviceInfo          `protobuf:"bytes,24,opt,name=audio_output_device_info,json=audioOutputDeviceInfo,proto3,oneof" json:"audio_output_device_info,omitempty"`
 	GroupData               *devices.GroupData              `protobuf:"bytes,30,opt,name=group_data,json=groupData,proto3,oneof" json:"group_data,omitempty"`
+	GroupInstance           *string                         `protobuf:"bytes,31,opt,name=group_instance,json=groupInstance,proto3,oneof" json:"group_instance,omitempty"`
+	IsPublic                bool                            `protobuf:"varint,32,opt,name=is_public,json=isPublic,proto3" json:"is_public,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
 }
@@ -1107,10 +1179,27 @@ func (x *DeviceInfo) GetGroupData() *devices.GroupData {
 	return nil
 }
 
+func (x *DeviceInfo) GetGroupInstance() string {
+	if x != nil && x.GroupInstance != nil {
+		return *x.GroupInstance
+	}
+	return ""
+}
+
+func (x *DeviceInfo) GetIsPublic() bool {
+	if x != nil {
+		return x.IsPublic
+	}
+	return false
+}
+
 type AudioOutputDeviceInfo struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	AudioOutputDeviceType *AudioOutputDeviceType `protobuf:"varint,1,opt,name=audio_output_device_type,json=audioOutputDeviceType,proto3,enum=spotify.connectstate.AudioOutputDeviceType,oneof" json:"audio_output_device_type,omitempty"`
 	DeviceName            *string                `protobuf:"bytes,2,opt,name=device_name,json=deviceName,proto3,oneof" json:"device_name,omitempty"`
+	Brand                 *string                `protobuf:"bytes,3,opt,name=brand,proto3,oneof" json:"brand,omitempty"`
+	Model                 *string                `protobuf:"bytes,4,opt,name=model,proto3,oneof" json:"model,omitempty"`
+	Category              *AudioOutputCategory   `protobuf:"varint,5,opt,name=category,proto3,enum=spotify.connectstate.AudioOutputCategory,oneof" json:"category,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1159,41 +1248,64 @@ func (x *AudioOutputDeviceInfo) GetDeviceName() string {
 	return ""
 }
 
+func (x *AudioOutputDeviceInfo) GetBrand() string {
+	if x != nil && x.Brand != nil {
+		return *x.Brand
+	}
+	return ""
+}
+
+func (x *AudioOutputDeviceInfo) GetModel() string {
+	if x != nil && x.Model != nil {
+		return *x.Model
+	}
+	return ""
+}
+
+func (x *AudioOutputDeviceInfo) GetCategory() AudioOutputCategory {
+	if x != nil && x.Category != nil {
+		return *x.Category
+	}
+	return AudioOutputCategory_AUDIO_OUTPUT_CATEGORY_UNKNOWN
+}
+
 type Capabilities struct {
-	state                      protoimpl.MessageState    `protogen:"open.v1"`
-	CanBePlayer                bool                      `protobuf:"varint,2,opt,name=can_be_player,json=canBePlayer,proto3" json:"can_be_player,omitempty"`
-	RestrictToLocal            bool                      `protobuf:"varint,3,opt,name=restrict_to_local,json=restrictToLocal,proto3" json:"restrict_to_local,omitempty"`
-	GaiaEqConnectId            bool                      `protobuf:"varint,5,opt,name=gaia_eq_connect_id,json=gaiaEqConnectId,proto3" json:"gaia_eq_connect_id,omitempty"`
-	SupportsLogout             bool                      `protobuf:"varint,6,opt,name=supports_logout,json=supportsLogout,proto3" json:"supports_logout,omitempty"`
-	IsObservable               bool                      `protobuf:"varint,7,opt,name=is_observable,json=isObservable,proto3" json:"is_observable,omitempty"`
-	VolumeSteps                int32                     `protobuf:"varint,8,opt,name=volume_steps,json=volumeSteps,proto3" json:"volume_steps,omitempty"`
-	SupportedTypes             []string                  `protobuf:"bytes,9,rep,name=supported_types,json=supportedTypes,proto3" json:"supported_types,omitempty"`
-	CommandAcks                bool                      `protobuf:"varint,10,opt,name=command_acks,json=commandAcks,proto3" json:"command_acks,omitempty"`
-	SupportsRename             bool                      `protobuf:"varint,11,opt,name=supports_rename,json=supportsRename,proto3" json:"supports_rename,omitempty"`
-	Hidden                     bool                      `protobuf:"varint,12,opt,name=hidden,proto3" json:"hidden,omitempty"`
-	DisableVolume              bool                      `protobuf:"varint,13,opt,name=disable_volume,json=disableVolume,proto3" json:"disable_volume,omitempty"`
-	ConnectDisabled            bool                      `protobuf:"varint,14,opt,name=connect_disabled,json=connectDisabled,proto3" json:"connect_disabled,omitempty"`
-	SupportsPlaylistV2         bool                      `protobuf:"varint,15,opt,name=supports_playlist_v2,json=supportsPlaylistV2,proto3" json:"supports_playlist_v2,omitempty"`
-	IsControllable             bool                      `protobuf:"varint,16,opt,name=is_controllable,json=isControllable,proto3" json:"is_controllable,omitempty"`
-	SupportsExternalEpisodes   bool                      `protobuf:"varint,17,opt,name=supports_external_episodes,json=supportsExternalEpisodes,proto3" json:"supports_external_episodes,omitempty"`
-	SupportsSetBackendMetadata bool                      `protobuf:"varint,18,opt,name=supports_set_backend_metadata,json=supportsSetBackendMetadata,proto3" json:"supports_set_backend_metadata,omitempty"`
-	SupportsTransferCommand    bool                      `protobuf:"varint,19,opt,name=supports_transfer_command,json=supportsTransferCommand,proto3" json:"supports_transfer_command,omitempty"`
-	SupportsCommandRequest     bool                      `protobuf:"varint,20,opt,name=supports_command_request,json=supportsCommandRequest,proto3" json:"supports_command_request,omitempty"`
-	IsVoiceEnabled             bool                      `protobuf:"varint,21,opt,name=is_voice_enabled,json=isVoiceEnabled,proto3" json:"is_voice_enabled,omitempty"`
-	NeedsFullPlayerState       bool                      `protobuf:"varint,22,opt,name=needs_full_player_state,json=needsFullPlayerState,proto3" json:"needs_full_player_state,omitempty"`
-	SupportsGzipPushes         bool                      `protobuf:"varint,23,opt,name=supports_gzip_pushes,json=supportsGzipPushes,proto3" json:"supports_gzip_pushes,omitempty"`
-	SupportsSetOptionsCommand  bool                      `protobuf:"varint,25,opt,name=supports_set_options_command,json=supportsSetOptionsCommand,proto3" json:"supports_set_options_command,omitempty"`
-	SupportsHifi               *CapabilitySupportDetails `protobuf:"bytes,26,opt,name=supports_hifi,json=supportsHifi,proto3" json:"supports_hifi,omitempty"`
-	ConnectCapabilities        string                    `protobuf:"bytes,27,opt,name=connect_capabilities,json=connectCapabilities,proto3" json:"connect_capabilities,omitempty"`
-	SupportsRooms              bool                      `protobuf:"varint,28,opt,name=supports_rooms,json=supportsRooms,proto3" json:"supports_rooms,omitempty"`
-	SupportsDj                 bool                      `protobuf:"varint,29,opt,name=supports_dj,json=supportsDj,proto3" json:"supports_dj,omitempty"`
-	SupportedAudioQuality      media.AudioQuality        `protobuf:"varint,30,opt,name=supported_audio_quality,json=supportedAudioQuality,proto3,enum=spotify.common.media.AudioQuality" json:"supported_audio_quality,omitempty"`
-	SupportsSmartShuffleMode   bool                      `protobuf:"varint,33,opt,name=supports_smart_shuffle_mode,json=supportsSmartShuffleMode,proto3" json:"supports_smart_shuffle_mode,omitempty"`
-	SupportsRemoteSleepTimer   bool                      `protobuf:"varint,34,opt,name=supports_remote_sleep_timer,json=supportsRemoteSleepTimer,proto3" json:"supports_remote_sleep_timer,omitempty"`
-	SupportsPingRequest        bool                      `protobuf:"varint,35,opt,name=supports_ping_request,json=supportsPingRequest,proto3" json:"supports_ping_request,omitempty"`
-	SupportsPlaylistMixing     bool                      `protobuf:"varint,36,opt,name=supports_playlist_mixing,json=supportsPlaylistMixing,proto3" json:"supports_playlist_mixing,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	state                             protoimpl.MessageState    `protogen:"open.v1"`
+	CanBePlayer                       bool                      `protobuf:"varint,2,opt,name=can_be_player,json=canBePlayer,proto3" json:"can_be_player,omitempty"`
+	RestrictToLocal                   bool                      `protobuf:"varint,3,opt,name=restrict_to_local,json=restrictToLocal,proto3" json:"restrict_to_local,omitempty"`
+	GaiaEqConnectId                   bool                      `protobuf:"varint,5,opt,name=gaia_eq_connect_id,json=gaiaEqConnectId,proto3" json:"gaia_eq_connect_id,omitempty"`
+	SupportsLogout                    bool                      `protobuf:"varint,6,opt,name=supports_logout,json=supportsLogout,proto3" json:"supports_logout,omitempty"`
+	IsObservable                      bool                      `protobuf:"varint,7,opt,name=is_observable,json=isObservable,proto3" json:"is_observable,omitempty"`
+	VolumeSteps                       int32                     `protobuf:"varint,8,opt,name=volume_steps,json=volumeSteps,proto3" json:"volume_steps,omitempty"`
+	SupportedTypes                    []string                  `protobuf:"bytes,9,rep,name=supported_types,json=supportedTypes,proto3" json:"supported_types,omitempty"`
+	CommandAcks                       bool                      `protobuf:"varint,10,opt,name=command_acks,json=commandAcks,proto3" json:"command_acks,omitempty"`
+	SupportsRename                    bool                      `protobuf:"varint,11,opt,name=supports_rename,json=supportsRename,proto3" json:"supports_rename,omitempty"`
+	Hidden                            bool                      `protobuf:"varint,12,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	DisableVolume                     bool                      `protobuf:"varint,13,opt,name=disable_volume,json=disableVolume,proto3" json:"disable_volume,omitempty"`
+	ConnectDisabled                   bool                      `protobuf:"varint,14,opt,name=connect_disabled,json=connectDisabled,proto3" json:"connect_disabled,omitempty"`
+	SupportsPlaylistV2                bool                      `protobuf:"varint,15,opt,name=supports_playlist_v2,json=supportsPlaylistV2,proto3" json:"supports_playlist_v2,omitempty"`
+	IsControllable                    bool                      `protobuf:"varint,16,opt,name=is_controllable,json=isControllable,proto3" json:"is_controllable,omitempty"`
+	SupportsExternalEpisodes          bool                      `protobuf:"varint,17,opt,name=supports_external_episodes,json=supportsExternalEpisodes,proto3" json:"supports_external_episodes,omitempty"`
+	SupportsSetBackendMetadata        bool                      `protobuf:"varint,18,opt,name=supports_set_backend_metadata,json=supportsSetBackendMetadata,proto3" json:"supports_set_backend_metadata,omitempty"`
+	SupportsTransferCommand           bool                      `protobuf:"varint,19,opt,name=supports_transfer_command,json=supportsTransferCommand,proto3" json:"supports_transfer_command,omitempty"`
+	SupportsCommandRequest            bool                      `protobuf:"varint,20,opt,name=supports_command_request,json=supportsCommandRequest,proto3" json:"supports_command_request,omitempty"`
+	IsVoiceEnabled                    bool                      `protobuf:"varint,21,opt,name=is_voice_enabled,json=isVoiceEnabled,proto3" json:"is_voice_enabled,omitempty"`
+	NeedsFullPlayerState              bool                      `protobuf:"varint,22,opt,name=needs_full_player_state,json=needsFullPlayerState,proto3" json:"needs_full_player_state,omitempty"`
+	SupportsGzipPushes                bool                      `protobuf:"varint,23,opt,name=supports_gzip_pushes,json=supportsGzipPushes,proto3" json:"supports_gzip_pushes,omitempty"`
+	SupportsSetOptionsCommand         bool                      `protobuf:"varint,25,opt,name=supports_set_options_command,json=supportsSetOptionsCommand,proto3" json:"supports_set_options_command,omitempty"`
+	SupportsHifi                      *CapabilitySupportDetails `protobuf:"bytes,26,opt,name=supports_hifi,json=supportsHifi,proto3" json:"supports_hifi,omitempty"`
+	ConnectCapabilities               string                    `protobuf:"bytes,27,opt,name=connect_capabilities,json=connectCapabilities,proto3" json:"connect_capabilities,omitempty"`
+	SupportsRooms                     bool                      `protobuf:"varint,28,opt,name=supports_rooms,json=supportsRooms,proto3" json:"supports_rooms,omitempty"`
+	SupportsDj                        bool                      `protobuf:"varint,29,opt,name=supports_dj,json=supportsDj,proto3" json:"supports_dj,omitempty"`
+	SupportedAudioQuality             media.AudioQuality        `protobuf:"varint,30,opt,name=supported_audio_quality,json=supportedAudioQuality,proto3,enum=spotify.common.media.AudioQuality" json:"supported_audio_quality,omitempty"`
+	SupportsSmartShuffleMode          bool                      `protobuf:"varint,33,opt,name=supports_smart_shuffle_mode,json=supportsSmartShuffleMode,proto3" json:"supports_smart_shuffle_mode,omitempty"`
+	SupportsRemoteSleepTimer          bool                      `protobuf:"varint,34,opt,name=supports_remote_sleep_timer,json=supportsRemoteSleepTimer,proto3" json:"supports_remote_sleep_timer,omitempty"`
+	SupportsPingRequest               bool                      `protobuf:"varint,35,opt,name=supports_ping_request,json=supportsPingRequest,proto3" json:"supports_ping_request,omitempty"`
+	SupportsPlaylistMixing            bool                      `protobuf:"varint,36,opt,name=supports_playlist_mixing,json=supportsPlaylistMixing,proto3" json:"supports_playlist_mixing,omitempty"`
+	SupportsRemoteAudioQualityControl bool                      `protobuf:"varint,37,opt,name=supports_remote_audio_quality_control,json=supportsRemoteAudioQualityControl,proto3" json:"supports_remote_audio_quality_control,omitempty"`
+	SupportsZephyr                    bool                      `protobuf:"varint,38,opt,name=supports_zephyr,json=supportsZephyr,proto3" json:"supports_zephyr,omitempty"`
+	unknownFields                     protoimpl.UnknownFields
+	sizeCache                         protoimpl.SizeCache
 }
 
 func (x *Capabilities) Reset() {
@@ -1439,6 +1551,20 @@ func (x *Capabilities) GetSupportsPingRequest() bool {
 func (x *Capabilities) GetSupportsPlaylistMixing() bool {
 	if x != nil {
 		return x.SupportsPlaylistMixing
+	}
+	return false
+}
+
+func (x *Capabilities) GetSupportsRemoteAudioQualityControl() bool {
+	if x != nil {
+		return x.SupportsRemoteAudioQualityControl
+	}
+	return false
+}
+
+func (x *Capabilities) GetSupportsZephyr() bool {
+	if x != nil {
+		return x.SupportsZephyr
 	}
 	return false
 }
@@ -2222,7 +2348,7 @@ const file_spotify_connectstate_connect_proto_rawDesc = "" +
 	"\x15client_side_timestamp\x18\f \x01(\x04R\x13clientSideTimestamp\x125\n" +
 	"\x17only_write_player_state\x18\r \x01(\bR\x14onlyWritePlayerState\"/\n" +
 	"\x11PrivateDeviceInfo\x12\x1a\n" +
-	"\bplatform\x18\x01 \x01(\tR\bplatform\"\x8b\f\n" +
+	"\bplatform\x18\x01 \x01(\tR\bplatform\"\xe7\f\n" +
 	"\n" +
 	"DeviceInfo\x12\x19\n" +
 	"\bcan_play\x18\x01 \x01(\bR\acanPlay\x12\x16\n" +
@@ -2257,7 +2383,9 @@ const file_spotify_connectstate_connect_proto_rawDesc = "" +
 	"\x15is_locally_discovered\x18\x1d \x01(\bR\x13isLocallyDiscovered\x12i\n" +
 	"\x18audio_output_device_info\x18\x18 \x01(\v2+.spotify.connectstate.AudioOutputDeviceInfoH\x00R\x15audioOutputDeviceInfo\x88\x01\x01\x12K\n" +
 	"\n" +
-	"group_data\x18\x1e \x01(\v2'.spotify.connectstate.devices.GroupDataH\x01R\tgroupData\x88\x01\x01\x1a>\n" +
+	"group_data\x18\x1e \x01(\v2'.spotify.connectstate.devices.GroupDataH\x01R\tgroupData\x88\x01\x01\x12*\n" +
+	"\x0egroup_instance\x18\x1f \x01(\tH\x02R\rgroupInstance\x88\x01\x01\x12\x1b\n" +
+	"\tis_public\x18  \x01(\bR\bisPublic\x1a>\n" +
 	"\x10MetadataMapEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1ak\n" +
@@ -2265,13 +2393,20 @@ const file_spotify_connectstate_connect_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\rR\x03key\x12?\n" +
 	"\x05value\x18\x02 \x01(\v2).spotify.connectstate.devices.DeviceAliasR\x05value:\x028\x01B\x1b\n" +
 	"\x19_audio_output_device_infoB\r\n" +
-	"\v_group_dataJ\x04\b\x05\x10\x06\"\xd5\x01\n" +
+	"\v_group_dataB\x11\n" +
+	"\x0f_group_instanceJ\x04\b\x05\x10\x06\"\xf8\x02\n" +
 	"\x15AudioOutputDeviceInfo\x12i\n" +
 	"\x18audio_output_device_type\x18\x01 \x01(\x0e2+.spotify.connectstate.AudioOutputDeviceTypeH\x00R\x15audioOutputDeviceType\x88\x01\x01\x12$\n" +
 	"\vdevice_name\x18\x02 \x01(\tH\x01R\n" +
-	"deviceName\x88\x01\x01B\x1b\n" +
+	"deviceName\x88\x01\x01\x12\x19\n" +
+	"\x05brand\x18\x03 \x01(\tH\x02R\x05brand\x88\x01\x01\x12\x19\n" +
+	"\x05model\x18\x04 \x01(\tH\x03R\x05model\x88\x01\x01\x12J\n" +
+	"\bcategory\x18\x05 \x01(\x0e2).spotify.connectstate.AudioOutputCategoryH\x04R\bcategory\x88\x01\x01B\x1b\n" +
 	"\x19_audio_output_device_typeB\x0e\n" +
-	"\f_device_name\"\x97\r\n" +
+	"\f_device_nameB\b\n" +
+	"\x06_brandB\b\n" +
+	"\x06_modelB\v\n" +
+	"\t_category\"\x92\x0e\n" +
 	"\fCapabilities\x12\"\n" +
 	"\rcan_be_player\x18\x02 \x01(\bR\vcanBePlayer\x12*\n" +
 	"\x11restrict_to_local\x18\x03 \x01(\bR\x0frestrictToLocal\x12+\n" +
@@ -2305,7 +2440,9 @@ const file_spotify_connectstate_connect_proto_rawDesc = "" +
 	"\x1bsupports_smart_shuffle_mode\x18! \x01(\bR\x18supportsSmartShuffleMode\x12=\n" +
 	"\x1bsupports_remote_sleep_timer\x18\" \x01(\bR\x18supportsRemoteSleepTimer\x122\n" +
 	"\x15supports_ping_request\x18# \x01(\bR\x13supportsPingRequest\x128\n" +
-	"\x18supports_playlist_mixing\x18$ \x01(\bR\x16supportsPlaylistMixingJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b \x10!R\x12supported_contextsR\x17supports_lossless_audioR\x17supports_playback_speedR\x18play_token_lost_behavior\"\x93\x01\n" +
+	"\x18supports_playlist_mixing\x18$ \x01(\bR\x16supportsPlaylistMixing\x12P\n" +
+	"%supports_remote_audio_quality_control\x18% \x01(\bR!supportsRemoteAudioQualityControl\x12'\n" +
+	"\x0fsupports_zephyr\x18& \x01(\bR\x0esupportsZephyrJ\x04\b\x01\x10\x02J\x04\b\x04\x10\x05J\x04\b\x18\x10\x19J\x04\b\x1f\x10 J\x04\b \x10!R\x12supported_contextsR\x17supports_lossless_audioR\x17supports_playback_speedR\x18play_token_lost_behavior\"\x93\x01\n" +
 	"\x18CapabilitySupportDetails\x12'\n" +
 	"\x0ffully_supported\x18\x01 \x01(\bR\x0efullySupported\x12#\n" +
 	"\ruser_eligible\x18\x02 \x01(\bR\fuserEligible\x12)\n" +
@@ -2375,7 +2512,15 @@ const file_spotify_connectstate_connect_proto_rawDesc = "" +
 	"\aAIRPLAY\x10\x04\x12\x12\n" +
 	"\n" +
 	"AUTOMOTIVE\x10\x05\x1a\x02\b\x01\x12\x11\n" +
-	"\rCAR_PROJECTED\x10\x06*\xca\x02\n" +
+	"\rCAR_PROJECTED\x10\x06*\x86\x02\n" +
+	"\x13AudioOutputCategory\x12!\n" +
+	"\x1dAUDIO_OUTPUT_CATEGORY_UNKNOWN\x10\x00\x12\x1d\n" +
+	"\x19AUDIO_OUTPUT_CATEGORY_CAR\x10\x01\x12$\n" +
+	" AUDIO_OUTPUT_CATEGORY_HEADPHONES\x10\x02\x12!\n" +
+	"\x1dAUDIO_OUTPUT_CATEGORY_SPEAKER\x10\x03\x12\"\n" +
+	"\x1eAUDIO_OUTPUT_CATEGORY_WEARABLE\x10\x04\x12!\n" +
+	"\x1dAUDIO_OUTPUT_CATEGORY_GLASSES\x10\x05\x12\x1d\n" +
+	"\x19AUDIO_OUTPUT_CATEGORY_APP\x10\x06*\x9b\x03\n" +
 	"\x0ePutStateReason\x12\x1c\n" +
 	"\x18UNKNOWN_PUT_STATE_REASON\x10\x00\x12\x0f\n" +
 	"\vSPIRC_HELLO\x10\x01\x12\x10\n" +
@@ -2392,7 +2537,10 @@ const file_spotify_connectstate_connect_proto_rawDesc = "" +
 	"\x12\x1d\n" +
 	"\x19AUDIO_DRIVER_INFO_CHANGED\x10\v\x12\x1a\n" +
 	"\x16PUT_STATE_RATE_LIMITED\x10\f\x12\x1c\n" +
-	"\x18BACKEND_METADATA_APPLIED\x10\r*\x82\x01\n" +
+	"\x18BACKEND_METADATA_APPLIED\x10\r\x12\x19\n" +
+	"\x15LOCAL_DEVICES_CHANGED\x10\x0e\x12\x17\n" +
+	"\x13GROUP_STATE_CHANGED\x10\x0f\x12\x1b\n" +
+	"\x17PRIVATE_SESSION_CHANGED\x10\x10*\x82\x01\n" +
 	"\n" +
 	"MemberType\x12\f\n" +
 	"\bSPIRC_V2\x10\x00\x12\f\n" +
@@ -2424,82 +2572,84 @@ func file_spotify_connectstate_connect_proto_rawDescGZIP() []byte {
 	return file_spotify_connectstate_connect_proto_rawDescData
 }
 
-var file_spotify_connectstate_connect_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_spotify_connectstate_connect_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_spotify_connectstate_connect_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_spotify_connectstate_connect_proto_goTypes = []any{
 	(DodoDeviceType)(0),                       // 0: spotify.connectstate.DodoDeviceType
 	(AudioOutputDeviceType)(0),                // 1: spotify.connectstate.AudioOutputDeviceType
-	(PutStateReason)(0),                       // 2: spotify.connectstate.PutStateReason
-	(MemberType)(0),                           // 3: spotify.connectstate.MemberType
-	(ClusterUpdateReason)(0),                  // 4: spotify.connectstate.ClusterUpdateReason
-	(*ClusterUpdate)(nil),                     // 5: spotify.connectstate.ClusterUpdate
-	(*Device)(nil),                            // 6: spotify.connectstate.Device
-	(*Cluster)(nil),                           // 7: spotify.connectstate.Cluster
-	(*DodoDeviceInfo)(nil),                    // 8: spotify.connectstate.DodoDeviceInfo
-	(*PutStateRequest)(nil),                   // 9: spotify.connectstate.PutStateRequest
-	(*PrivateDeviceInfo)(nil),                 // 10: spotify.connectstate.PrivateDeviceInfo
-	(*DeviceInfo)(nil),                        // 11: spotify.connectstate.DeviceInfo
-	(*AudioOutputDeviceInfo)(nil),             // 12: spotify.connectstate.AudioOutputDeviceInfo
-	(*Capabilities)(nil),                      // 13: spotify.connectstate.Capabilities
-	(*CapabilitySupportDetails)(nil),          // 14: spotify.connectstate.CapabilitySupportDetails
-	(*ConnectCommandOptions)(nil),             // 15: spotify.connectstate.ConnectCommandOptions
-	(*ConnectLoggingParams)(nil),              // 16: spotify.connectstate.ConnectLoggingParams
-	(*LogoutCommand)(nil),                     // 17: spotify.connectstate.LogoutCommand
-	(*SetVolumeCommand)(nil),                  // 18: spotify.connectstate.SetVolumeCommand
-	(*RenameCommand)(nil),                     // 19: spotify.connectstate.RenameCommand
-	(*ProxyTransferCommand)(nil),              // 20: spotify.connectstate.ProxyTransferCommand
-	(*SetBackendMetadataCommand)(nil),         // 21: spotify.connectstate.SetBackendMetadataCommand
-	(*LocalDevice)(nil),                       // 22: spotify.connectstate.LocalDevice
-	nil,                                       // 23: spotify.connectstate.Cluster.DeviceEntry
-	(*DodoDeviceInfo_PlayerStateSummary)(nil), // 24: spotify.connectstate.DodoDeviceInfo.PlayerStateSummary
-	nil,                         // 25: spotify.connectstate.DeviceInfo.MetadataMapEntry
-	nil,                         // 26: spotify.connectstate.DeviceInfo.DeviceAliasesEntry
-	nil,                         // 27: spotify.connectstate.SetBackendMetadataCommand.MetadataEntry
-	(*PlayerState)(nil),         // 28: spotify.connectstate.PlayerState
-	(devices.DeviceType)(0),     // 29: spotify.connectstate.devices.DeviceType
-	(*devices.GroupData)(nil),   // 30: spotify.connectstate.devices.GroupData
-	(media.AudioQuality)(0),     // 31: spotify.common.media.AudioQuality
-	(*devices.DeviceAlias)(nil), // 32: spotify.connectstate.devices.DeviceAlias
+	(AudioOutputCategory)(0),                  // 2: spotify.connectstate.AudioOutputCategory
+	(PutStateReason)(0),                       // 3: spotify.connectstate.PutStateReason
+	(MemberType)(0),                           // 4: spotify.connectstate.MemberType
+	(ClusterUpdateReason)(0),                  // 5: spotify.connectstate.ClusterUpdateReason
+	(*ClusterUpdate)(nil),                     // 6: spotify.connectstate.ClusterUpdate
+	(*Device)(nil),                            // 7: spotify.connectstate.Device
+	(*Cluster)(nil),                           // 8: spotify.connectstate.Cluster
+	(*DodoDeviceInfo)(nil),                    // 9: spotify.connectstate.DodoDeviceInfo
+	(*PutStateRequest)(nil),                   // 10: spotify.connectstate.PutStateRequest
+	(*PrivateDeviceInfo)(nil),                 // 11: spotify.connectstate.PrivateDeviceInfo
+	(*DeviceInfo)(nil),                        // 12: spotify.connectstate.DeviceInfo
+	(*AudioOutputDeviceInfo)(nil),             // 13: spotify.connectstate.AudioOutputDeviceInfo
+	(*Capabilities)(nil),                      // 14: spotify.connectstate.Capabilities
+	(*CapabilitySupportDetails)(nil),          // 15: spotify.connectstate.CapabilitySupportDetails
+	(*ConnectCommandOptions)(nil),             // 16: spotify.connectstate.ConnectCommandOptions
+	(*ConnectLoggingParams)(nil),              // 17: spotify.connectstate.ConnectLoggingParams
+	(*LogoutCommand)(nil),                     // 18: spotify.connectstate.LogoutCommand
+	(*SetVolumeCommand)(nil),                  // 19: spotify.connectstate.SetVolumeCommand
+	(*RenameCommand)(nil),                     // 20: spotify.connectstate.RenameCommand
+	(*ProxyTransferCommand)(nil),              // 21: spotify.connectstate.ProxyTransferCommand
+	(*SetBackendMetadataCommand)(nil),         // 22: spotify.connectstate.SetBackendMetadataCommand
+	(*LocalDevice)(nil),                       // 23: spotify.connectstate.LocalDevice
+	nil,                                       // 24: spotify.connectstate.Cluster.DeviceEntry
+	(*DodoDeviceInfo_PlayerStateSummary)(nil), // 25: spotify.connectstate.DodoDeviceInfo.PlayerStateSummary
+	nil,                         // 26: spotify.connectstate.DeviceInfo.MetadataMapEntry
+	nil,                         // 27: spotify.connectstate.DeviceInfo.DeviceAliasesEntry
+	nil,                         // 28: spotify.connectstate.SetBackendMetadataCommand.MetadataEntry
+	(*PlayerState)(nil),         // 29: spotify.connectstate.PlayerState
+	(devices.DeviceType)(0),     // 30: spotify.connectstate.devices.DeviceType
+	(*devices.GroupData)(nil),   // 31: spotify.connectstate.devices.GroupData
+	(media.AudioQuality)(0),     // 32: spotify.common.media.AudioQuality
+	(*devices.DeviceAlias)(nil), // 33: spotify.connectstate.devices.DeviceAlias
 }
 var file_spotify_connectstate_connect_proto_depIdxs = []int32{
-	7,  // 0: spotify.connectstate.ClusterUpdate.cluster:type_name -> spotify.connectstate.Cluster
-	4,  // 1: spotify.connectstate.ClusterUpdate.update_reason:type_name -> spotify.connectstate.ClusterUpdateReason
-	11, // 2: spotify.connectstate.Device.device_info:type_name -> spotify.connectstate.DeviceInfo
-	28, // 3: spotify.connectstate.Device.player_state:type_name -> spotify.connectstate.PlayerState
-	10, // 4: spotify.connectstate.Device.private_device_info:type_name -> spotify.connectstate.PrivateDeviceInfo
-	28, // 5: spotify.connectstate.Cluster.player_state:type_name -> spotify.connectstate.PlayerState
-	23, // 6: spotify.connectstate.Cluster.device:type_name -> spotify.connectstate.Cluster.DeviceEntry
-	8,  // 7: spotify.connectstate.Cluster.dodo_devices:type_name -> spotify.connectstate.DodoDeviceInfo
+	8,  // 0: spotify.connectstate.ClusterUpdate.cluster:type_name -> spotify.connectstate.Cluster
+	5,  // 1: spotify.connectstate.ClusterUpdate.update_reason:type_name -> spotify.connectstate.ClusterUpdateReason
+	12, // 2: spotify.connectstate.Device.device_info:type_name -> spotify.connectstate.DeviceInfo
+	29, // 3: spotify.connectstate.Device.player_state:type_name -> spotify.connectstate.PlayerState
+	11, // 4: spotify.connectstate.Device.private_device_info:type_name -> spotify.connectstate.PrivateDeviceInfo
+	29, // 5: spotify.connectstate.Cluster.player_state:type_name -> spotify.connectstate.PlayerState
+	24, // 6: spotify.connectstate.Cluster.device:type_name -> spotify.connectstate.Cluster.DeviceEntry
+	9,  // 7: spotify.connectstate.Cluster.dodo_devices:type_name -> spotify.connectstate.DodoDeviceInfo
 	0,  // 8: spotify.connectstate.DodoDeviceInfo.dodo_device_type:type_name -> spotify.connectstate.DodoDeviceType
-	24, // 9: spotify.connectstate.DodoDeviceInfo.player_state_summary:type_name -> spotify.connectstate.DodoDeviceInfo.PlayerStateSummary
-	6,  // 10: spotify.connectstate.PutStateRequest.device:type_name -> spotify.connectstate.Device
-	3,  // 11: spotify.connectstate.PutStateRequest.member_type:type_name -> spotify.connectstate.MemberType
-	2,  // 12: spotify.connectstate.PutStateRequest.put_state_reason:type_name -> spotify.connectstate.PutStateReason
-	13, // 13: spotify.connectstate.DeviceInfo.capabilities:type_name -> spotify.connectstate.Capabilities
-	29, // 14: spotify.connectstate.DeviceInfo.device_type:type_name -> spotify.connectstate.devices.DeviceType
-	25, // 15: spotify.connectstate.DeviceInfo.metadata_map:type_name -> spotify.connectstate.DeviceInfo.MetadataMapEntry
-	26, // 16: spotify.connectstate.DeviceInfo.device_aliases:type_name -> spotify.connectstate.DeviceInfo.DeviceAliasesEntry
-	12, // 17: spotify.connectstate.DeviceInfo.audio_output_device_info:type_name -> spotify.connectstate.AudioOutputDeviceInfo
-	30, // 18: spotify.connectstate.DeviceInfo.group_data:type_name -> spotify.connectstate.devices.GroupData
+	25, // 9: spotify.connectstate.DodoDeviceInfo.player_state_summary:type_name -> spotify.connectstate.DodoDeviceInfo.PlayerStateSummary
+	7,  // 10: spotify.connectstate.PutStateRequest.device:type_name -> spotify.connectstate.Device
+	4,  // 11: spotify.connectstate.PutStateRequest.member_type:type_name -> spotify.connectstate.MemberType
+	3,  // 12: spotify.connectstate.PutStateRequest.put_state_reason:type_name -> spotify.connectstate.PutStateReason
+	14, // 13: spotify.connectstate.DeviceInfo.capabilities:type_name -> spotify.connectstate.Capabilities
+	30, // 14: spotify.connectstate.DeviceInfo.device_type:type_name -> spotify.connectstate.devices.DeviceType
+	26, // 15: spotify.connectstate.DeviceInfo.metadata_map:type_name -> spotify.connectstate.DeviceInfo.MetadataMapEntry
+	27, // 16: spotify.connectstate.DeviceInfo.device_aliases:type_name -> spotify.connectstate.DeviceInfo.DeviceAliasesEntry
+	13, // 17: spotify.connectstate.DeviceInfo.audio_output_device_info:type_name -> spotify.connectstate.AudioOutputDeviceInfo
+	31, // 18: spotify.connectstate.DeviceInfo.group_data:type_name -> spotify.connectstate.devices.GroupData
 	1,  // 19: spotify.connectstate.AudioOutputDeviceInfo.audio_output_device_type:type_name -> spotify.connectstate.AudioOutputDeviceType
-	14, // 20: spotify.connectstate.Capabilities.supports_hifi:type_name -> spotify.connectstate.CapabilitySupportDetails
-	31, // 21: spotify.connectstate.Capabilities.supported_audio_quality:type_name -> spotify.common.media.AudioQuality
-	15, // 22: spotify.connectstate.LogoutCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
-	15, // 23: spotify.connectstate.SetVolumeCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
-	16, // 24: spotify.connectstate.SetVolumeCommand.logging_params:type_name -> spotify.connectstate.ConnectLoggingParams
-	15, // 25: spotify.connectstate.RenameCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
-	15, // 26: spotify.connectstate.ProxyTransferCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
-	16, // 27: spotify.connectstate.ProxyTransferCommand.logging_params:type_name -> spotify.connectstate.ConnectLoggingParams
-	27, // 28: spotify.connectstate.SetBackendMetadataCommand.metadata:type_name -> spotify.connectstate.SetBackendMetadataCommand.MetadataEntry
-	29, // 29: spotify.connectstate.LocalDevice.device_type:type_name -> spotify.connectstate.devices.DeviceType
-	14, // 30: spotify.connectstate.LocalDevice.supports_hifi:type_name -> spotify.connectstate.CapabilitySupportDetails
-	11, // 31: spotify.connectstate.Cluster.DeviceEntry.value:type_name -> spotify.connectstate.DeviceInfo
-	32, // 32: spotify.connectstate.DeviceInfo.DeviceAliasesEntry.value:type_name -> spotify.connectstate.devices.DeviceAlias
-	33, // [33:33] is the sub-list for method output_type
-	33, // [33:33] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	2,  // 20: spotify.connectstate.AudioOutputDeviceInfo.category:type_name -> spotify.connectstate.AudioOutputCategory
+	15, // 21: spotify.connectstate.Capabilities.supports_hifi:type_name -> spotify.connectstate.CapabilitySupportDetails
+	32, // 22: spotify.connectstate.Capabilities.supported_audio_quality:type_name -> spotify.common.media.AudioQuality
+	16, // 23: spotify.connectstate.LogoutCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
+	16, // 24: spotify.connectstate.SetVolumeCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
+	17, // 25: spotify.connectstate.SetVolumeCommand.logging_params:type_name -> spotify.connectstate.ConnectLoggingParams
+	16, // 26: spotify.connectstate.RenameCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
+	16, // 27: spotify.connectstate.ProxyTransferCommand.command_options:type_name -> spotify.connectstate.ConnectCommandOptions
+	17, // 28: spotify.connectstate.ProxyTransferCommand.logging_params:type_name -> spotify.connectstate.ConnectLoggingParams
+	28, // 29: spotify.connectstate.SetBackendMetadataCommand.metadata:type_name -> spotify.connectstate.SetBackendMetadataCommand.MetadataEntry
+	30, // 30: spotify.connectstate.LocalDevice.device_type:type_name -> spotify.connectstate.devices.DeviceType
+	15, // 31: spotify.connectstate.LocalDevice.supports_hifi:type_name -> spotify.connectstate.CapabilitySupportDetails
+	12, // 32: spotify.connectstate.Cluster.DeviceEntry.value:type_name -> spotify.connectstate.DeviceInfo
+	33, // 33: spotify.connectstate.DeviceInfo.DeviceAliasesEntry.value:type_name -> spotify.connectstate.devices.DeviceAlias
+	34, // [34:34] is the sub-list for method output_type
+	34, // [34:34] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_spotify_connectstate_connect_proto_init() }
@@ -2518,7 +2668,7 @@ func file_spotify_connectstate_connect_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_spotify_connectstate_connect_proto_rawDesc), len(file_spotify_connectstate_connect_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
