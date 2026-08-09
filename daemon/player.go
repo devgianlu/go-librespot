@@ -260,6 +260,14 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			p.state.player.ContextMetadata[k] = v
 		}
 
+		// Claim the transfer before doing anything slow.
+		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
+		p.state.player.Track = librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
+		p.state.player.IsPlaying = true
+		p.state.player.IsBuffering = true
+		p.state.player.PlaybackSpeed = 0 // not progressing while buffering
+		p.flushState(ctx)
+
 		// Seek to the transferred track, playing it ahead of the context if it
 		// cannot be located.
 		if err := ctxTracks.TrySeekTo(ctx, transferState.Playback.CurrentTrack); err != nil {
