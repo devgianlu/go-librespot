@@ -144,6 +144,104 @@ func (suite *TrackListInternalSuite) TestShuffleStopsAtPageCap() {
 	suite.resolver.AssertNumberOfCalls(suite.T(), "Page", seekMaxPages+1)
 }
 
+// playingContext sets the list up the way production always hands it to a
+// jump: a finite context of n tracks with the cursor resting on the first one.
+func (suite *TrackListInternalSuite) playingContext(n int) {
+	tracks := make([]*connectpb.ContextTrack, n)
+	for i := range tracks {
+		tracks[i] = &connectpb.ContextTrack{Uri: trackUri(i), Uid: fmt.Sprintf("c%d", i)}
+	}
+
+	suite.resolver.EXPECT().Page(mock.Anything, 0).Return(tracks, nil).Maybe()
+	suite.resolver.EXPECT().Page(mock.Anything, mock.Anything).Return(nil, io.EOF).Maybe()
+
+	suite.Require().NoError(suite.list.TrySeekTo(context.Background(), tracks[0]))
+}
+
+func queued(uid, uri string) *connectpb.ContextTrack {
+	return &connectpb.ContextTrack{Uri: uri, Uid: uid, Metadata: map[string]string{"is_queued": "true"}}
+}
+
+// TestSeekToContextTrackWhileQueuePlaying is issue #218: with a manually queued
+// track playing, jumping to a track in the context moved the context cursor but
+// left the queue in charge, so the queued track simply restarted.
+func (suite *TrackListInternalSuite) TestSeekToContextTrackWhileQueuePlaying() {
+	suite.playingContext(5)
+
+	suite.list.AddToQueue(queued("q1", "spotify:track:queued1"))
+	suite.list.SetPlayingQueue(true)
+	suite.Require().Equal("spotify:track:queued1", suite.list.CurrentTrack().Uri)
+
+	// Jump to a track from the context.
+	suite.NoError(suite.list.TrySeekTo(context.Background(), &connectpb.ContextTrack{Uri: trackUri(3), Uid: "c3"}))
+
+	suite.Equal(trackUri(3), suite.list.CurrentTrack().Uri)
+	suite.Equal(&connectpb.ContextIndex{Page: 0, Track: 3}, suite.list.Index())
+
+	// The queued track was jumped away from, so advancing carries on into the
+	// context rather than playing it a second time.
+	suite.True(suite.list.GoNext(context.Background()))
+	suite.Equal(trackUri(4), suite.list.CurrentTrack().Uri)
+}
+
+// TestSeekToQueuedTrack covers the second half of the issue: jumping to another
+// queued track must play it and consume the ones skipped over, rather than
+// leave it sitting in the queue.
+func (suite *TrackListInternalSuite) TestSeekToQueuedTrack() {
+	suite.playingContext(5)
+
+	suite.list.AddToQueue(queued("q1", "spotify:track:queued1"))
+	suite.list.AddToQueue(queued("q2", "spotify:track:queued2"))
+	suite.list.AddToQueue(queued("q3", "spotify:track:queued3"))
+	suite.list.SetPlayingQueue(true)
+
+	suite.NoError(suite.list.TrySeekTo(context.Background(), queued("q3", "spotify:track:queued3")))
+
+	suite.Equal("spotify:track:queued3", suite.list.CurrentTrack().Uri)
+
+	// q1 and q2 were skipped past and q3 is playing rather than pending, so
+	// nothing queued is upcoming any more.
+	next := suite.list.NextTracks(context.Background(), nil)
+	suite.Require().NotEmpty(next)
+	suite.Equal(trackUri(1), next[0].Uri)
+
+	// Once it ends, playback continues into the context.
+	suite.True(suite.list.GoNext(context.Background()))
+	suite.Equal(trackUri(1), suite.list.CurrentTrack().Uri)
+}
+
+// TestSeekToContextTrackPrefersContextCopy guards the uid disambiguation: a
+// song can sit in the queue and in the context at once, and clicking the
+// context copy must not hijack the queued one.
+func (suite *TrackListInternalSuite) TestSeekToContextTrackPrefersContextCopy() {
+	suite.playingContext(5)
+
+	suite.list.AddToQueue(queued("q1", trackUri(3)))
+
+	suite.NoError(suite.list.TrySeekTo(context.Background(), &connectpb.ContextTrack{Uri: trackUri(3), Uid: "c3"}))
+
+	suite.Equal(trackUri(3), suite.list.CurrentTrack().Uri)
+	suite.Equal(&connectpb.ContextIndex{Page: 0, Track: 3}, suite.list.Index())
+
+	// The queued copy was not consumed and still plays next.
+	suite.True(suite.list.GoNext(context.Background()))
+	suite.Equal(&connectpb.ContextIndex{}, suite.list.Index())
+	suite.Equal(trackUri(3), suite.list.CurrentTrack().Uri)
+}
+
+// TestSeekToQueuedTrackWithoutUid covers the API path, which names a track by
+// uri alone.
+func (suite *TrackListInternalSuite) TestSeekToQueuedTrackWithoutUid() {
+	suite.playingContext(5)
+
+	suite.list.AddToQueue(queued("q1", "spotify:track:queued1"))
+	suite.list.AddToQueue(queued("q2", "spotify:track:queued2"))
+
+	suite.NoError(suite.list.TrySeekTo(context.Background(), &connectpb.ContextTrack{Uri: "spotify:track:queued2"}))
+
+	suite.Equal("spotify:track:queued2", suite.list.CurrentTrack().Uri)
+}
+
 func TestTrackListInternalSuite(t *testing.T) {
 	suite.Run(t, new(TrackListInternalSuite))
 }
