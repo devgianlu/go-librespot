@@ -34,6 +34,9 @@ type AppPlayer struct {
 	app  *App
 	sess *session.Session
 
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	stop      chan struct{}
 	closeOnce sync.Once
 	logout    chan *AppPlayer
@@ -730,17 +733,20 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 	return nil
 }
 
-// Close stops the player and releases its session.
+// Close stops the player and releases its session. It may be called while Run
+// is still busy serving a command, so it must not assume Run reacts promptly:
+// cancelling the context is what actually unblocks in-flight requests.
 func (p *AppPlayer) Close() {
 	p.closeOnce.Do(func() {
+		p.cancel()
 		p.stop <- struct{}{}
 		p.player.Close()
 		p.sess.Close()
 	})
 }
 
-func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaPlayer2PlayerCommand) {
-	err := p.sess.Dealer().Connect(ctx)
+func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaPlayer2PlayerCommand) {
+	err := p.sess.Dealer().Connect(p.ctx)
 	if err != nil {
 		p.app.log.WithError(err).Error("failed connecting to dealer")
 		p.Close()
@@ -806,7 +812,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				continue
 			}
 
-			if err := p.handleDealerMessage(ctx, msg); err != nil {
+			if err := p.handleDealerMessage(p.ctx, msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
 		case req, ok := <-reqRecv:
@@ -818,7 +824,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				continue
 			}
 
-			if err := p.handleDealerRequest(ctx, req); err != nil {
+			if err := p.handleDealerRequest(p.ctx, req); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
@@ -831,7 +837,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				continue
 			}
 
-			data, err := p.handleApiRequest(ctx, req)
+			data, err := p.handleApiRequest(p.ctx, req)
 			req.Reply(data, err)
 		case mprisReq, ok := <-mprisRecv:
 			if !ok {
@@ -840,7 +846,7 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			}
 
 			p.app.log.Tracef("new mpris message %v", mprisReq)
-			err := p.handleMprisEvent(ctx, mprisReq)
+			err := p.handleMprisEvent(p.ctx, mprisReq)
 			dbusError := mpris.MediaPlayer2PlayerCommandResponse{
 				Err: &dbus.Error{},
 			}
@@ -856,9 +862,9 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 				continue
 			}
 
-			p.handlePlayerEvent(ctx, &ev)
+			p.handlePlayerEvent(p.ctx, &ev)
 		case <-p.prefetchTimer.C:
-			p.prefetchNext(ctx)
+			p.prefetchNext(p.ctx)
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.
@@ -869,13 +875,13 @@ func (p *AppPlayer) Run(ctx context.Context, apiRecv <-chan ApiRequest, mprisRec
 			volumeTimer.Reset(100 * time.Millisecond)
 		case <-volumeTimer.C:
 			// We've gone some time without update, send the new value now.
-			p.volumeUpdated(ctx)
+			p.volumeUpdated(p.ctx)
 		case <-p.stateTimer.C:
 			p.statePutScheduled = false
 			if !p.stateDirty {
 				break
 			}
-			p.flushState(ctx)
+			p.flushState(p.ctx)
 		}
 	}
 }
