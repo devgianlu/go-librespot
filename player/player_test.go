@@ -3,9 +3,11 @@
 package player
 
 import (
+	"errors"
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/output"
@@ -71,14 +73,15 @@ func (o *recordingOutput) snapshot() []string {
 // newTestPlayer builds a Player driven by manageLoop with newOutput wired to
 // the given recordingOutput, bypassing NewPlayer (which requires a real
 // spclient/session) since manageLoop only touches p.log, p.cmd, p.ev,
-// p.crossfadeSamples and p.newOutput.
+// p.closed, p.crossfadeSamples and p.newOutput.
 func newTestPlayer(t *testing.T, out *recordingOutput) *Player {
 	t.Helper()
 
 	p := &Player{
-		log: &librespot.NullLogger{},
-		cmd: make(chan playerCmd),
-		ev:  make(chan Event, 128),
+		log:    &librespot.NullLogger{},
+		cmd:    make(chan playerCmd),
+		ev:     make(chan Event, 128),
+		closed: make(chan struct{}),
 		newOutput: func(reader librespot.Float32Reader, volume float32, device string) (output.Output, error) {
 			out.source = reader.(*SwitchingAudioSource)
 			out.mu.Lock()
@@ -292,5 +295,68 @@ func TestReopenOutputNothingPlaying(t *testing.T) {
 	out.mu.Unlock()
 	if len(devices) != 1 || devices[0] != "hifi" {
 		t.Fatalf("expected the next output to open on device \"hifi\", got devices=%v", devices)
+	}
+}
+
+// TestCommandsAfterCloseDoNotPanic locks in the fix for the "send on closed
+// channel" crash seen in the wild: manageLoop used to close p.cmd on its way
+// out, so any goroutine that was still issuing a command took the whole daemon
+// down. The daemon reaches this state routinely — AppPlayer.Close signals a
+// buffered stop and closes the player immediately, while the player's Run loop
+// may still be inside a dealer request loading a track — so a late command
+// must be an ordinary failure. Commands must also not block: nothing reads
+// p.cmd once manageLoop is gone.
+func TestCommandsAfterCloseDoNotPanic(t *testing.T) {
+	out := &recordingOutput{}
+	p := newTestPlayer(t, out)
+
+	p.Close()
+
+	// manageLoop exits asynchronously; wait for it to give up the channel.
+	select {
+	case <-p.closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("manage loop did not signal closure")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		// The exact call from the crash report, which returns nothing and so
+		// must simply be a no-op.
+		p.SetSecondaryStream(rampSource(100, 0, 0))
+
+		if err := p.SetPrimaryStream(rampSource(100, 0, 0), false, false); !errors.Is(err, ErrPlayerClosed) {
+			t.Errorf("SetPrimaryStream after close: got %v, want ErrPlayerClosed", err)
+		}
+		if err := p.Play(); !errors.Is(err, ErrPlayerClosed) {
+			t.Errorf("Play after close: got %v, want ErrPlayerClosed", err)
+		}
+		if err := p.Pause(); !errors.Is(err, ErrPlayerClosed) {
+			t.Errorf("Pause after close: got %v, want ErrPlayerClosed", err)
+		}
+		if err := p.SeekMs(1000); !errors.Is(err, ErrPlayerClosed) {
+			t.Errorf("SeekMs after close: got %v, want ErrPlayerClosed", err)
+		}
+		if err := p.ReopenOutput("hifi"); !errors.Is(err, ErrPlayerClosed) {
+			t.Errorf("ReopenOutput after close: got %v, want ErrPlayerClosed", err)
+		}
+		if pos := p.PositionMs(); pos != 0 {
+			t.Errorf("PositionMs after close: got %d, want 0", pos)
+		}
+
+		p.Stop()
+		p.SetVolume(MaxStateVolume / 2)
+
+		// Closing twice must not deadlock either; the cleanup hook does it a
+		// third time.
+		p.Close()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("commands issued after close blocked forever")
 	}
 }
