@@ -48,6 +48,7 @@ func TestInferSpotifyIdTypeTrackContexts(t *testing.T) {
 		"spotify:collection:tracks",
 		"spotify:user:someone:playlist:37i9dQZF1E36KLdUfLiuUo",
 		"spotify:user:11145089019:collection",
+		"spotify:prerelease:6nQjPI2xUOZjJ7bJPMFxtF",
 	}
 
 	for _, uri := range uris {
@@ -77,7 +78,6 @@ func TestInferSpotifyIdTypeEpisodeContexts(t *testing.T) {
 func TestInferSpotifyIdTypeUnsupportedContexts(t *testing.T) {
 	uris := []string{
 		"spotify:socialsession:5xwj7pphGg7mJSfWz2vXY8",
-		"spotify:prerelease:6nQjPI2xUOZjJ7bJPMFxtF",
 		"spotify:ad:xxx",
 		"spotify:image:xxx",
 		"spotify:user:someone",
