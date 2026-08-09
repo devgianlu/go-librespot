@@ -79,10 +79,55 @@ func (tl *List) TrySeek(ctx context.Context, f func(track *connectpb.ContextTrac
 	return nil
 }
 
-// TrySeekTo positions the list at track. When the bounded seek cannot find it
-// the track is played anyway, ahead of the context, and playback carries on into
-// the context from its start afterwards.
+// seekQueue positions the list on track if the queue holds it, dropping the
+// entries ahead of it, and reports whether it did.
+func (tl *List) seekQueue(track *connectpb.ContextTrack) bool {
+	// queue[0] is the track playing right now, so a jump can only target what
+	// comes after it.
+	start := 0
+	if tl.playingQueue {
+		start = 1
+	}
+
+	// Queue entries carry a uid, so when the caller names one an exact uid
+	// match is the only evidence the queued copy was what got clicked.
+	match := func(queued *connectpb.ContextTrack) bool { return queued.Uid == track.Uid }
+	if len(track.Uid) == 0 {
+		match = ContextTrackComparator(tl.ctx.Type(), track)
+	}
+
+	for i := start; i < len(tl.queue); i++ {
+		if !match(tl.queue[i]) {
+			continue
+		}
+
+		// Everything queued ahead of the chosen track is skipped, and the
+		// chosen one becomes the queue entry now playing.
+		tl.queue = tl.queue[i:]
+		tl.playingQueue = true
+		return true
+	}
+
+	return false
+}
+
+// TrySeekTo positions the list at track, whether it is queued or part of the
+// context. When the bounded seek cannot find it in the context the track is
+// played anyway, ahead of the context, and playback carries on into the context
+// from its start afterwards.
 func (tl *List) TrySeekTo(ctx context.Context, track *connectpb.ContextTrack) error {
+	if tl.seekQueue(track) {
+		return nil
+	}
+
+	// Not a queued track, so we are leaving the queue. Drop the entry that was
+	// playing as well: it has been jumped away from. Whatever is queued behind
+	// it still follows this track.
+	if tl.playingQueue {
+		tl.queue = tl.queue[1:]
+		tl.playingQueue = false
+	}
+
 	if err := tl.Seek(ctx, ContextTrackComparator(tl.ctx.Type(), track)); err == nil {
 		return nil
 	} else {
