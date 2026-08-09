@@ -12,10 +12,26 @@ import (
 	"golang.org/x/exp/rand"
 )
 
+type ContextResolver interface {
+	librespot.PageResolver[*connectpb.ContextTrack]
+
+	Type() librespot.SpotifyIdType
+	Uri() string
+	Metadata() map[string]string
+}
+
+const (
+	// seekMaxPages bounds how many pages a walk of the context may fetch.
+	seekMaxPages = 256
+
+	// seekWalkTimeout bounds a walk of the context in wall-clock time.
+	seekWalkTimeout = 10 * time.Second
+)
+
 type List struct {
 	log librespot.Logger
 
-	ctx *spclient.ContextResolver
+	ctx ContextResolver
 
 	shuffled    bool
 	shuffleSeed uint64
@@ -28,17 +44,22 @@ type List struct {
 }
 
 func NewTrackListFromContext(ctx context.Context, log_ librespot.Logger, sp *spclient.Spclient, spotCtx *connectpb.Context) (_ *List, err error) {
-	tl := &List{}
-	tl.ctx, err = spclient.NewContextResolver(ctx, log_, sp, spotCtx)
+	resolver, err := spclient.NewContextResolver(ctx, log_, sp, spotCtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed initializing context resolver: %w", err)
 	}
+
+	return newTrackList(log_, resolver), nil
+}
+
+func newTrackList(log_ librespot.Logger, resolver ContextResolver) *List {
+	tl := &List{ctx: resolver}
 
 	tl.log = log_.WithField("uri", tl.ctx.Uri())
 	tl.log.Debugf("resolved context of %s", tl.ctx.Type())
 
 	tl.tracks = newPagedList[*connectpb.ContextTrack](tl.log, tl.ctx)
-	return tl, nil
+	return tl
 }
 
 func (tl *List) Metadata() map[string]string {
@@ -58,13 +79,34 @@ func (tl *List) TrySeek(ctx context.Context, f func(track *connectpb.ContextTrac
 	return nil
 }
 
+// TrySeekTo positions the list at track. When the bounded seek cannot find it
+// the track is played anyway, ahead of the context, and playback carries on into
+// the context from its start afterwards.
+func (tl *List) TrySeekTo(ctx context.Context, track *connectpb.ContextTrack) error {
+	if err := tl.Seek(ctx, ContextTrackComparator(tl.ctx.Type(), track)); err == nil {
+		return nil
+	} else {
+		tl.log.WithError(err).Warnf("failed seeking to track in context %s, playing it ahead of the context", tl.ctx.Uri())
+	}
+
+	tl.tracks.moveInjected(track)
+	return nil
+}
+
 func (tl *List) Seek(ctx context.Context, f func(*connectpb.ContextTrack) bool) error {
+	ctx, cancel := context.WithTimeout(ctx, seekWalkTimeout)
+	defer cancel()
+
 	iter := tl.tracks.iterStart()
 	for iter.next(ctx) {
 		curr := iter.get()
 		if f(curr.item) {
 			tl.tracks.move(iter)
 			return nil
+		}
+
+		if curr.pageIdx >= seekMaxPages {
+			return fmt.Errorf("gave up seeking after %d pages", curr.pageIdx+1)
 		}
 	}
 
@@ -172,6 +214,12 @@ func (tl *List) Index() *connectpb.ContextIndex {
 	}
 
 	curr := tl.tracks.get()
+	if curr.pageIdx < 0 {
+		// An injected track (see TrySeekTo) sits outside the context's pages
+		// and so has no index within it.
+		return &connectpb.ContextIndex{}
+	}
+
 	return &connectpb.ContextIndex{Page: uint32(curr.pageIdx), Track: uint32(curr.itemIdx)}
 }
 
@@ -294,14 +342,23 @@ func (tl *List) ToggleShuffle(ctx context.Context, shuffle bool) error {
 	}
 
 	if shuffle {
-		// fetch all tracks
+		// Fetch all tracks, under the same bounds as a seek: a generated
+		// context hands out pages forever, so "all" has to stop somewhere or
+		// the command that asked for the shuffle never returns.
+		walkCtx, cancel := context.WithTimeout(ctx, seekWalkTimeout)
+
 		iter := tl.tracks.iterStart()
-		for iter.next(ctx) {
-			// TODO: check that we do not seek forever
+		for iter.next(walkCtx) {
+			if pageIdx := iter.get().pageIdx; pageIdx >= seekMaxPages {
+				tl.log.Warnf("shuffling only the first %d pages of the context", pageIdx+1)
+				break
+			}
 		}
 		if err := iter.error(); err != nil {
 			tl.log.WithError(err).Error("failed fetching all tracks")
 		}
+
+		cancel()
 
 		// generate new seed and use it to shuffle
 		tl.shuffleSeed = rand.Uint64() + 1
