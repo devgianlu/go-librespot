@@ -279,12 +279,7 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 		}
 	}
 
-	if p.state.player.ContextMetadata == nil {
-		p.state.player.ContextMetadata = map[string]string{}
-	}
-	for k, v := range spotCtx.Metadata {
-		p.state.player.ContextMetadata[k] = v
-	}
+	p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, ctxTracks.Metadata())
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
