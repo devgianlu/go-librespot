@@ -211,14 +211,24 @@ func (app *App) persistState() error {
 }
 
 func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err error) {
+	playerCtx, playerCancel := context.WithCancel(ctx)
+
 	appPlayer := &AppPlayer{
 		app:             app,
+		ctx:             playerCtx,
+		cancel:          playerCancel,
 		stop:            make(chan struct{}, 1),
 		logout:          app.logoutCh,
 		countryCode:     new(string),
 		volumeUpdate:    make(chan float32, 1),
 		playbackReadyCh: make(chan struct{}),
 	}
+
+	defer func() {
+		if err != nil {
+			playerCancel()
+		}
+	}()
 
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.prefetchTimer.Stop()
@@ -368,7 +378,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			panic("zeroconf is disabled and no credentials are present")
 		}
 
-		appPlayer.Run(ctx, app.server.Receive(), app.mpris.Receive())
+		appPlayer.Run(app.server.Receive(), app.mpris.Receive())
 		return nil
 	}
 
@@ -417,7 +427,7 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 
 		if next != nil {
 			go func() {
-				next.player.Run(ctx, next.apiCh, app.mpris.Receive())
+				next.player.Run(next.apiCh, app.mpris.Receive())
 
 				// Run stopped by itself (it gives up when the dealer is
 				// unreachable): nothing will read apiCh again, so release any
