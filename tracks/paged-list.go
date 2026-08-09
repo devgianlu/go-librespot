@@ -102,6 +102,15 @@ func (l *pagedList[T]) moveStart(ctx context.Context) error {
 	return nil
 }
 
+// moveInjected puts item at the head of the loaded list and positions the list
+// on it. The item belongs to no page, so it is marked with a negative page
+// index: that keeps fetchNextPage asking for page 0 when nothing has been
+// loaded yet, and lets callers tell it apart from a real context entry.
+func (l *pagedList[T]) moveInjected(item T) {
+	l.list = append([]pagedListItem[T]{{item, -1, -1}}, l.list...)
+	l.pos = 0
+}
+
 func (l *pagedList[T]) move(iter *pagedListInterator[T]) {
 	if iter.err != nil {
 		panic("cannot move to errored paged list iterator")

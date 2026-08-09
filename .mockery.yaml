@@ -19,6 +19,9 @@ packages:
   github.com/devgianlu/go-librespot/player:
     interfaces:
       EventManager:
+  github.com/devgianlu/go-librespot/tracks:
+    interfaces:
+      ContextResolver:
   github.com/devgianlu/go-librespot/zeroconf:
     interfaces:
       ServiceRegistrar:

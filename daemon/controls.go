@@ -732,8 +732,7 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 		// with its jump line rather than the one for arriving in sequence.
 		p.narrationJumped = true
 
-		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
-		if err := p.state.tracks.TrySeek(ctx, tracks.ContextTrackComparator(contextSpotType, track)); err != nil {
+		if err := p.state.tracks.TrySeekTo(ctx, track); err != nil {
 			return err
 		}
 
