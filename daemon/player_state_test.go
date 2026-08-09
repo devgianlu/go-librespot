@@ -173,3 +173,87 @@ func TestDeviceAddressMask(t *testing.T) {
 	require.Contains(t, addrs, net.Addr(&net.IPNet{IP: ip, Mask: ipNet.Mask}),
 		"must be an address actually assigned to an interface")
 }
+
+// The two key sets below are lifted from a capture of the official client
+// (1.2.92.147) switching from Liked Songs to an album, which is what settles
+// how context_metadata is meant to behave: the album PUT carries none of the
+// playlist's keys, and every key the two share carries the album's value. The
+// client replaces the map, it does not merge into it.
+var (
+	likedSongsContextMetadata = map[string]string{
+		"context_description":                "Liked Songs",
+		"context_owner":                      "someuser",
+		"format_list_type":                   "liked-songs",
+		"image_url":                          "",
+		"liked_songs_collection_uri":         "spotify:user:someuser:collection",
+		"owner_username":                     "someuser",
+		"playlist_number_of_tracks":          "3",
+		"switch_liked_songs_url_dynamically": "false",
+	}
+
+	albumContextMetadata = map[string]string{
+		"albumType":                 "ALBUM",
+		"albumUri":                  "spotify:album:0lrmy4pJINsFzycJvttX2W",
+		"context_description":       "G I R L",
+		"context_owner":             "spotify",
+		"format_list_type":          "album",
+		"image_url":                 "ab67616d00001e02e89d2c2a3db129062b3b4e4f",
+		"playlist_number_of_tracks": "11",
+		"releaseDate":               "2014-03-03T00:00:00Z",
+	}
+)
+
+// TestContextMetadataReplacesPreviousContext is issue #330: loading a new
+// context used to merge into the metadata already in the state, so keys the new
+// context does not define kept the previous context's values — most visibly
+// context_description, leaving the controller showing "Next from: <old album>".
+func TestContextMetadataReplacesPreviousContext(t *testing.T) {
+	// A play command carries a bare context, so everything descriptive arrives
+	// from resolving it.
+	previous := contextMetadata(nil, likedSongsContextMetadata)
+	require.Equal(t, "Liked Songs", previous["context_description"])
+
+	current := contextMetadata(nil, albumContextMetadata)
+
+	require.Equal(t, "G I R L", current["context_description"],
+		"the new context's description must be the one reported")
+	require.Equal(t, albumContextMetadata, current,
+		"nothing from the previous context may survive into the new one")
+
+	for key := range likedSongsContextMetadata {
+		if _, shared := albumContextMetadata[key]; shared {
+			continue
+		}
+		require.NotContains(t, current, key,
+			"key %q belongs to the previous context and must not linger", key)
+	}
+}
+
+// TestContextMetadataMergesCommandAndResolver covers the two sources: the
+// command's own metadata plus whatever resolving the context added.
+func TestContextMetadataMergesCommandAndResolver(t *testing.T) {
+	metadata := contextMetadata(
+		map[string]string{"from_command": "1", "context_description": "stale"},
+		map[string]string{"from_resolver": "1", "context_description": "resolved"},
+	)
+
+	require.Equal(t, map[string]string{
+		"from_command":        "1",
+		"from_resolver":       "1",
+		"context_description": "resolved",
+	}, metadata)
+}
+
+// TestContextMetadataDoesNotAliasInputs makes sure the state never ends up
+// holding a map owned by the command or the resolver, which a later load would
+// then mutate underneath it.
+func TestContextMetadataDoesNotAliasInputs(t *testing.T) {
+	fromCommand := map[string]string{"a": "1"}
+	fromResolver := map[string]string{"b": "2"}
+
+	metadata := contextMetadata(fromCommand, fromResolver)
+	metadata["c"] = "3"
+
+	require.NotContains(t, fromCommand, "c")
+	require.NotContains(t, fromResolver, "c")
+}

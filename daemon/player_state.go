@@ -248,6 +248,13 @@ func (p *AppPlayer) updateState(ctx context.Context) {
 	p.flushState(ctx)
 }
 
+func contextMetadata(fromCommand, fromResolver map[string]string) map[string]string {
+	metadata := make(map[string]string, len(fromCommand)+len(fromResolver))
+	maps.Copy(metadata, fromCommand)
+	maps.Copy(metadata, fromResolver)
+	return metadata
+}
+
 func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutStateReason) error {
 	if reason == connectpb.PutStateReason_BECAME_INACTIVE {
 		return p.sess.Spclient().PutConnectStateInactive(ctx, p.spotConnId, false)
