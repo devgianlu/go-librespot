@@ -86,6 +86,14 @@ type AppPlayer struct {
 	// active at a time" behavior of Spotify's own clients.
 	sleepTimer *time.Timer
 
+	// sleepAtEndOfTrack is set by a set_sleep_timer command whose timer_type
+	// is "end_of_track": rather than a duration to wait, playback is meant
+	// to stop when the current track naturally finishes. Checked (and
+	// cleared) in the EventTypeNotPlaying handler, in place of the usual
+	// advance to the next track. Mutually exclusive with sleepTimer - only
+	// one sleep timer mode is active at a time.
+	sleepAtEndOfTrack bool
+
 	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
 	// skip past (Spotify-refused audio keys / restricted media) before giving up — so a run
 	// of refused tracks (even at the very start of a context) advances to the first playable
@@ -424,15 +432,17 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.addToQueue(ctx, req.Command.Track)
 		return nil
 	case "set_sleep_timer":
-		// Only one timer is active at a time: stop/drain the previous one
-		// before possibly rearming, matching Spotify's own clients (a new
-		// call replaces, not stacks with, an earlier one).
+		// Only one timer (of either mode) is active at a time: stop/drain
+		// the duration timer and clear the end-of-track flag before
+		// possibly setting either, matching Spotify's own clients (a new
+		// call replaces, not stacks with, an earlier one, of either mode).
 		if !p.sleepTimer.Stop() {
 			select {
 			case <-p.sleepTimer.C:
 			default:
 			}
 		}
+		p.sleepAtEndOfTrack = false
 
 		// Setting the timer alone has no visible effect on its own: the
 		// Spotify app doesn't track this locally, it reads back whether (and
@@ -448,6 +458,13 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 					Timestamp: &connectpb.SleepTimer_Timestamp{
 						Timestamp: time.Now().Add(duration).UnixMilli(),
 					},
+				},
+			}
+		case tt != nil && tt.Type == "end_of_track":
+			p.sleepAtEndOfTrack = true
+			p.state.player.SleepTimer = &connectpb.SleepTimer{
+				TimerType: &connectpb.SleepTimer_EndOfTrack_{
+					EndOfTrack: &connectpb.SleepTimer_EndOfTrack{},
 				},
 			}
 		default:
