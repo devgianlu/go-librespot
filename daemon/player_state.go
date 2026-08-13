@@ -218,6 +218,7 @@ func (p *AppPlayer) initState() {
 				SupportsHifi:               nil, // TODO: nice to have?
 				ConnectCapabilities:        "",
 				SupportsDj:                 true,
+				SupportsRemoteSleepTimer:   true,
 			},
 		},
 	}
