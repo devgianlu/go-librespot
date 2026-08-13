@@ -93,6 +93,13 @@ type RequestPayload struct {
 		} `json:"play_options"`
 		FromDeviceIdentifier string `json:"from_device_identifier"`
 	} `json:"command"`
+
+	// RawCommand holds the command object's raw JSON, populated separately
+	// from Command above (see handleRequest). Command only exposes the
+	// fields we've modeled; a payload field we haven't added yet silently
+	// disappears on unmarshal otherwise, which makes an unhandled command's
+	// actual shape impossible to inspect from Command alone.
+	RawCommand json.RawMessage `json:"-"`
 }
 
 func handleTransferEncoding(headers map[string]string, data []byte) ([]byte, error) {
@@ -231,6 +238,14 @@ func (d *Dealer) handleRequest(rawMsg *RawMessage) {
 		log.WithError(err).Error("failed unmarshalling dealer request payload")
 		return
 	}
+
+	// keep the command's raw JSON around too, so a command we don't model
+	// yet can still be inspected in full (see RawCommand)
+	var rawEnvelope struct {
+		Command json.RawMessage `json:"command"`
+	}
+	_ = json.Unmarshal(payloadBytes, &rawEnvelope)
+	payload.RawCommand = rawEnvelope.Command
 
 	// dispatch request
 	resp := make(chan bool, 1)
