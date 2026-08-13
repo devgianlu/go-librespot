@@ -233,6 +233,9 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.prefetchTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.prefetchTimer.Stop()
 
+	appPlayer.sleepTimer = time.NewTimer(math.MaxInt64)
+	appPlayer.sleepTimer.Stop()
+
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,
 		DeviceType:  app.deviceType,

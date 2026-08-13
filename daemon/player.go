@@ -80,6 +80,12 @@ type AppPlayer struct {
 
 	prefetchTimer *time.Timer
 
+	// sleepTimer fires the duration requested by the most recent
+	// set_sleep_timer command, pausing playback. Stopped/reset (never left
+	// to fire) by a later set_sleep_timer call, matching the "only one timer
+	// active at a time" behavior of Spotify's own clients.
+	sleepTimer *time.Timer
+
 	// consecutiveUnplayableSkips bounds how many unplayable tracks in a row advanceNext will
 	// skip past (Spotify-refused audio keys / restricted media) before giving up — so a run
 	// of refused tracks (even at the very start of a context) advances to the first playable
@@ -416,6 +422,45 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		return nil
 	case "add_to_queue":
 		p.addToQueue(ctx, req.Command.Track)
+		return nil
+	case "set_sleep_timer":
+		// Only one timer is active at a time: stop/drain the previous one
+		// before possibly rearming, matching Spotify's own clients (a new
+		// call replaces, not stacks with, an earlier one).
+		if !p.sleepTimer.Stop() {
+			select {
+			case <-p.sleepTimer.C:
+			default:
+			}
+		}
+
+		// Setting the timer alone has no visible effect on its own: the
+		// Spotify app doesn't track this locally, it reads back whether (and
+		// when) a timer is active from PlayerState.SleepTimer, so that has
+		// to be kept in sync for the app to show anything at all.
+		tt := req.Command.TimerType
+		switch {
+		case tt != nil && tt.Type == "duration" && tt.DurationS > 0:
+			duration := time.Duration(tt.DurationS) * time.Second
+			p.sleepTimer.Reset(duration)
+			p.state.player.SleepTimer = &connectpb.SleepTimer{
+				TimerType: &connectpb.SleepTimer_Timestamp_{
+					Timestamp: &connectpb.SleepTimer_Timestamp{
+						Timestamp: time.Now().Add(duration).UnixMilli(),
+					},
+				},
+			}
+		default:
+			// "clear" is Spotify's own cancel signal. Anything else we don't
+			// recognize is logged rather than silently treated as a cancel,
+			// so its actual wire shape can be captured.
+			if tt != nil && tt.Type != "" && tt.Type != "clear" {
+				p.app.log.Warnf("unsupported set_sleep_timer timer_type payload: %s", req.RawCommand)
+			}
+			p.state.player.SleepTimer = nil
+		}
+
+		p.updateState(ctx)
 		return nil
 	default:
 		p.app.log.Warnf("unsupported player command %q payload: %s", req.Command.Endpoint, req.RawCommand)
@@ -868,6 +913,14 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			p.handlePlayerEvent(p.ctx, &ev)
 		case <-p.prefetchTimer.C:
 			p.prefetchNext(p.ctx)
+		case <-p.sleepTimer.C:
+			// Cleared before pause(), whose own updateState call picks this
+			// up - so the app stops showing the timer as active in the same
+			// state push that reports playback paused.
+			p.state.player.SleepTimer = nil
+			if err := p.pause(p.ctx); err != nil {
+				p.app.log.WithError(err).Warn("failed pausing playback for sleep timer")
+			}
 		case volume := <-p.volumeUpdate:
 			// Received a new volume: from Spotify Connect, from the REST API,
 			// or from the system volume mixer.

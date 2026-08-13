@@ -43,12 +43,16 @@ type RequestPayload struct {
 	MessageId      uint32 `json:"message_id"`
 	SentByDeviceId string `json:"sent_by_device_id"`
 	Command        struct {
-		Endpoint         string                    `json:"endpoint"`
-		SessionId        string                    `json:"session_id"`
-		Data             []byte                    `json:"data"`
-		Value            interface{}               `json:"value"`
-		Position         int64                     `json:"position"`
-		Relative         string                    `json:"relative"`
+		Endpoint  string      `json:"endpoint"`
+		SessionId string      `json:"session_id"`
+		Data      []byte      `json:"data"`
+		Value     interface{} `json:"value"`
+		Position  int64       `json:"position"`
+		Relative  string      `json:"relative"`
+		TimerType *struct {
+			Type      string `json:"type"`
+			DurationS int64  `json:"duration_s"`
+		} `json:"timer_type"`
 		Context          *connectpb.Context        `json:"context"`
 		PlayOrigin       *connectpb.PlayOrigin     `json:"play_origin"`
 		Track            *connectpb.ContextTrack   `json:"track"`
