@@ -34,11 +34,68 @@ jobs:
           path: /tmp/out
           retention-days: 7
 
+  build-windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install MinGW and decode libraries
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-libvorbis
+            mingw-w64-x86_64-flac
+            mingw-w64-x86_64-mpg123
+          path-type: inherit
+
+      - name: Configure CGO for MSYS2
+        run: |
+          {
+            echo "CC=$(cygpath -m "$(command -v gcc)")"
+            echo "PKG_CONFIG=$(cygpath -m "$(command -v pkg-config)")"
+            echo "PKG_CONFIG_PATH=$(cygpath -m /mingw64/lib/pkgconfig)"
+          } >> "$GITHUB_ENV"
+          # libogg.dll.a omits ogg_stream_iovecin; force -logg onto libogg.a.
+          if [ -f /mingw64/lib/libogg.dll.a ]; then
+            mv /mingw64/lib/libogg.dll.a /mingw64/lib/libogg.dll.a.unused
+          fi
+
+      - name: Compile Windows binary
+        env:
+          CGO_ENABLED: 1
+        run: |
+          export PATH="/mingw64/bin:${PATH}"
+          mkdir -p out
+          go build -o go-librespot.exe -ldflags "-s -w" ./cmd/daemon
+          tar -zcvf out/go-librespot_windows_amd64.tar.gz go-librespot.exe README.md
+
+      - name: Upload compiled binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-windows_amd64
+          path: out
+          retention-days: 7
+
   publish:
     runs-on: ubuntu-24.04
     if: startsWith(github.ref, 'refs/tags/')
     needs:
       - build
+      - build-windows
     steps:
       - name: Download compiled binaries
         uses: actions/download-artifact@v4

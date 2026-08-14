@@ -59,3 +59,121 @@ jobs:
           name: coverage
           path: coverage.out.filtered
           if-no-files-found: error
+
+  windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install MinGW and decode libraries
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkg-config
+            mingw-w64-x86_64-libogg
+            mingw-w64-x86_64-libvorbis
+            mingw-w64-x86_64-flac
+            mingw-w64-x86_64-mpg123
+          path-type: inherit
+
+      - name: Configure CGO for MSYS2
+        run: |
+          # go.exe is a native Windows binary. Convert MSYS2 paths so CGO
+          # does not pick Strawberry Perl's pkg-config or a missing C:\msys64.
+          {
+            echo "CC=$(cygpath -m "$(command -v gcc)")"
+            echo "PKG_CONFIG=$(cygpath -m "$(command -v pkg-config)")"
+            echo "PKG_CONFIG_PATH=$(cygpath -m /mingw64/lib/pkgconfig)"
+          } >> "$GITHUB_ENV"
+          # libogg.dll.a is generated from win32/ogg.def, which omits
+          # ogg_stream_iovecin (required by xlab/vorbis-go). Hide the import
+          # lib so -logg resolves to libogg.a. Leave FLAC/mpg123/vorbis as DLLs
+          # to avoid duplicate symbols and extra Win32 deps (shlwapi).
+          if [ -f /mingw64/lib/libogg.dll.a ]; then
+            mv /mingw64/lib/libogg.dll.a /mingw64/lib/libogg.dll.a.unused
+          fi
+
+      - name: Build daemon
+        env:
+          CGO_ENABLED: 1
+        run: |
+          export PATH="/mingw64/bin:${PATH}"
+          go build -v -o go-librespot.exe ./cmd/daemon
+
+      - name: Test
+        env:
+          CGO_ENABLED: 1
+        run: |
+          export PATH="/mingw64/bin:${PATH}"
+          go test -v -tags "test_unit test_integration" ./...
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-librespot-windows-amd64
+          path: go-librespot.exe
+          retention-days: 7
+          if-no-files-found: error
+
+  windows-vcpkg:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install MinGW cross compiler
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 pkg-config curl zip unzip tar
+
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/vcpkg
+            vcpkg_installed
+          key: vcpkg-mingw-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'vcpkg-triplets/**') }}
+
+      - name: Bootstrap vcpkg
+        run: |
+          if [ ! -x /tmp/vcpkg/vcpkg ]; then
+            git clone --depth 1 --branch 2025.09.17 https://github.com/microsoft/vcpkg.git /tmp/vcpkg
+            /tmp/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+          fi
+
+      - name: Install decode libraries
+        env:
+          VCPKG_ROOT: /tmp/vcpkg
+        run: /tmp/vcpkg/vcpkg install --triplet x64-mingw-static
+
+      - name: Cross-compile Windows daemon
+        env:
+          CGO_ENABLED: 1
+          GOOS: windows
+          GOARCH: amd64
+          CC: x86_64-w64-mingw32-gcc
+          CGO_LDFLAGS: -static
+          PKG_CONFIG_LIBDIR: ${{ github.workspace }}/vcpkg_installed/x64-mingw-static/lib/pkgconfig
+          PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed/x64-mingw-static/lib/pkgconfig
+        run: go build -v -o go-librespot.exe -ldflags "-s -w" ./cmd/daemon
+
+      - name: Upload vcpkg Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-librespot-windows-amd64-vcpkg
+          path: go-librespot.exe
+          retention-days: 7
+          if-no-files-found: error

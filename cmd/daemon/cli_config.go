@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -196,7 +197,7 @@ func loadCLIConfig(cfg *cliConfig) error {
 		"device_type": "computer",
 		"bitrate":     160,
 
-		"audio_backend":            "alsa",
+		"audio_backend":            defaultAudioBackend(),
 		"audio_device":             "default",
 		"audio_output_pipe_format": "s16le",
 		"mixer_control_name":       "Master",
@@ -269,6 +270,13 @@ func loadCLIConfig(cfg *cliConfig) error {
 	}
 
 	return nil
+}
+
+func defaultAudioBackend() string {
+	if runtime.GOOS == "windows" {
+		return "wasapi"
+	}
+	return "alsa"
 }
 
 // parseSize parses a human-readable size string such as "1GB", "500MB" or a

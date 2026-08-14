@@ -1,6 +1,9 @@
 {
   "dependencies": [
-    "alsa",
+    {
+      "name": "alsa",
+      "platform": "linux"
+    },
     "libvorbis",
     "libflac",
     "mpg123"

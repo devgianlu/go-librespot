@@ -5,10 +5,20 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func TestDefaultAudioBackend(t *testing.T) {
+	got := defaultAudioBackend()
+	if runtime.GOOS == "windows" {
+		require.Equal(t, "wasapi", got)
+		return
+	}
+	require.Equal(t, "alsa", got)
+}
 
 func TestParseSize(t *testing.T) {
 	cases := []struct {
@@ -57,5 +67,10 @@ func TestLoadCLIConfigWaitForReaderFlag(t *testing.T) {
 
 	cfg := &cliConfig{}
 	require.NoError(t, loadCLIConfig(cfg))
+	t.Cleanup(func() {
+		if cfg.configLock != nil {
+			_ = cfg.configLock.Unlock()
+		}
+	})
 	require.True(t, cfg.AudioOutputPipeWaitForReader, "audio_output_pipe_wait_for_reader was not parsed from the config file")
 }

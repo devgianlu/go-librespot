@@ -70,14 +70,37 @@ func (s *FileStateStore) Save(state *librespot.AppState) error {
 	if err != nil {
 		return fmt.Errorf("failed creating temporary file for app state: %w", err)
 	}
+	tmpPath := tmpFile.Name()
 
 	if err := json.NewEncoder(tmpFile).Encode(state); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed writing marshalled app state: %w", err)
 	}
 
-	if err := os.Rename(tmpFile.Name(), s.statePath); err != nil {
+	// Windows cannot rename a file that still has an open handle.
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed closing temporary app state file: %w", err)
+	}
+
+	if err := replaceFile(tmpPath, s.statePath); err != nil {
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("failed replacing app state file: %w", err)
 	}
 
 	return nil
+}
+
+// replaceFile moves src onto dest. On Windows, os.Rename cannot overwrite an
+// existing dest, so dest is removed first. The daemon holds a lockfile, so
+// nothing else should be rewriting this path.
+func replaceFile(src, dest string) error {
+	if err := os.Rename(src, dest); err == nil {
+		return nil
+	}
+	if err := os.Remove(dest); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Rename(src, dest)
 }
