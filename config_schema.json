@@ -120,6 +120,11 @@
           ],
           "default": "s16le"
         },
+        "audio_output_pipe_wait_for_reader": {
+          "type": "boolean",
+          "description": "Whether to wait for a reader to connect to the FIFO before starting playback, instead of failing if none is present. Useful for readers (e.g. snapcast with dryout) that only connect when data is expected",
+          "default": false
+        },
         "server": {
           "type": "object",
           "properties": {

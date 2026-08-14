@@ -113,6 +113,14 @@ type NewOutputOptions struct {
 	//
 	// This is only supported on the pipe backend.
 	OutputPipeFormat string
+
+	// OutputPipeWaitForReader makes the pipe backend wait for a reader to
+	// appear when opening the FIFO, instead of failing if none is present at the
+	// time playback starts. This is useful for readers (e.g. snapcast with
+	// dryout) that only connect to the FIFO when data is expected.
+	//
+	// This is only supported on the pipe backend.
+	OutputPipeWaitForReader bool
 }
 
 func NewOutput(options *NewOutputOptions) (Output, error) {
