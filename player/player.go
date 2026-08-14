@@ -183,6 +183,14 @@ type Options struct {
 	//
 	// This is only supported on the pipe backend.
 	AudioOutputPipeFormat string
+
+	// AudioOutputPipeWaitForReader makes the pipe backend wait for a reader to
+	// appear when opening the FIFO, instead of failing if none is present at the
+	// time playback starts. This is useful for readers (e.g. snapcast with
+	// dryout) that only connect to the FIFO when data is expected.
+	//
+	// This is only supported on the pipe backend.
+	AudioOutputPipeWaitForReader bool
 }
 
 func NewPlayer(opts *Options) (*Player, error) {
@@ -202,22 +210,23 @@ func NewPlayer(opts *Options) (*Player, error) {
 		defaultAudioDevice:        opts.AudioDevice,
 		newOutput: func(reader librespot.Float32Reader, volume float32, device string) (output.Output, error) {
 			return output.NewOutput(&output.NewOutputOptions{
-				Log:              opts.Log,
-				Backend:          opts.AudioBackend,
-				Reader:           reader,
-				SampleRate:       SampleRate,
-				ChannelCount:     Channels,
-				Device:           device,
-				RuntimeSocket:    opts.AudioBackendRuntimeSocket,
-				Mixer:            opts.MixerDevice,
-				Control:          opts.MixerControlName,
-				InitialVolume:    volume,
-				BufferTimeMicro:  opts.AudioBufferTime,
-				PeriodCount:      opts.AudioPeriodCount,
-				ExternalVolume:   opts.ExternalVolume,
-				VolumeUpdate:     opts.VolumeUpdate,
-				OutputPipe:       opts.AudioOutputPipe,
-				OutputPipeFormat: opts.AudioOutputPipeFormat,
+				Log:                     opts.Log,
+				Backend:                 opts.AudioBackend,
+				Reader:                  reader,
+				SampleRate:              SampleRate,
+				ChannelCount:            Channels,
+				Device:                  device,
+				RuntimeSocket:           opts.AudioBackendRuntimeSocket,
+				Mixer:                   opts.MixerDevice,
+				Control:                 opts.MixerControlName,
+				InitialVolume:           volume,
+				BufferTimeMicro:         opts.AudioBufferTime,
+				PeriodCount:             opts.AudioPeriodCount,
+				ExternalVolume:          opts.ExternalVolume,
+				VolumeUpdate:            opts.VolumeUpdate,
+				OutputPipe:              opts.AudioOutputPipe,
+				OutputPipeFormat:        opts.AudioOutputPipeFormat,
+				OutputPipeWaitForReader: opts.AudioOutputPipeWaitForReader,
 			})
 		},
 

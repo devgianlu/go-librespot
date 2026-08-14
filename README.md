@@ -251,6 +251,7 @@ audio_buffer_time: 500000 # Audio buffer time in microseconds, ALSA only
 audio_period_count: 4 # Number of periods to request, ALSA only
 audio_output_pipe: '' # Path to a named pipe for audio output
 audio_output_pipe_format: s16le # Audio output pipe format (s16le, s32le, f32le)
+audio_output_pipe_wait_for_reader: false # Whether to wait for a reader to connect to the FIFO before starting playback (see below)
 bitrate: 160 # Playback bitrate (96, 160, 320)
 crossfade_duration: 0 # Crossfade duration between tracks in milliseconds (0 to disable)
 volume_steps: 100 # Volume steps count
@@ -266,6 +267,11 @@ If your network only allows outbound HTTP and HTTPS, set
 4070, 443 and 80 and normally lists 4070 first, which restrictive firewalls
 tend to block; enabling this tries 443 first, then 80, and falls back to 4070.
 The dealer and spclient are unaffected, as they already use 443.
+
+With the pipe backend, opening the FIFO fails if no reader is connected when
+playback starts. Some readers (e.g. snapcast with `dryout_ms`) only connect to
+the FIFO when they expect data. Set `audio_output_pipe_wait_for_reader: true`
+to instead wait for a reader to appear before starting playback.
 
 Make sure to check [here](/config_schema.json) for the full list of options.
 
