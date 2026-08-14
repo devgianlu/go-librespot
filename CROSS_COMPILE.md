@@ -24,3 +24,25 @@ The `armv6` variant is a generic armv6 build. It should work on most armv6 devic
 
 The `armv6_rpi` variant is specifically built for the Raspberry Pi 1 and Zero, which do not support thumb instructions.
 The toolchain used for this build can be found [here](https://github.com/devgianlu/rpi-toolchain).
+
+## Windows (native C libraries)
+
+Windows builds need the same decode libraries as Linux (`libogg`, `libvorbis`, `libflac`, `mpg123`) compiled with MinGW so they can be linked through CGO. ALSA is Linux-only and is skipped automatically.
+
+From a checkout that already has vcpkg bootstrapped:
+
+```shell
+vcpkg install --triplet x64-mingw-static
+```
+
+The overlay triplet lives in [`vcpkg-triplets/x64-mingw-static.cmake`](./vcpkg-triplets/x64-mingw-static.cmake). Point CGO at the installed pkg-config files:
+
+```
+PKG_CONFIG_PATH=<repo>/vcpkg_installed/x64-mingw-static/lib/pkgconfig
+CGO_ENABLED=1
+CC=x86_64-w64-mingw32-gcc
+```
+
+The Windows default `audio_backend` is `wasapi`: a first-party shared-mode WASAPI driver (default playback device, software volume). It does not use `go-wca`.
+
+CI compiles `windows/amd64` two ways: natively on `windows-2022` (MSYS2 packages) and by cross-compiling from Ubuntu with this vcpkg triplet. PR artifacts are uploaded as `go-librespot-windows-amd64` and `go-librespot-windows-amd64-vcpkg`. Tagged releases include `go-librespot_windows_amd64.tar.gz`.

@@ -38,10 +38,12 @@ func TestEvictsLeastRecentlyUsed(t *testing.T) {
 	_, ok = c.File(b)
 	require.False(t, ok, "least recently used file should have been evicted")
 
-	_, ok = c.File(a)
+	r, ok = c.File(a)
 	require.True(t, ok, "recently used file should be retained")
-	_, ok = c.File(d)
+	_ = r.(interface{ Close() error }).Close()
+	r, ok = c.File(d)
 	require.True(t, ok, "newly written file should be retained")
+	_ = r.(interface{ Close() error }).Close()
 
 	require.LessOrEqual(t, c.limiter.inUse, int64(25))
 }
@@ -75,8 +77,9 @@ func TestRecencySurvivesRestart(t *testing.T) {
 
 	_, ok = c2.File(a)
 	require.False(t, ok, "stale file should have been evicted on startup")
-	_, ok = c2.File(b)
+	r, ok = c2.File(b)
 	require.True(t, ok, "recently accessed file should survive a restart")
+	_ = r.(interface{ Close() error }).Close()
 }
 
 func TestNoEvictionWithoutLimit(t *testing.T) {
@@ -89,8 +92,9 @@ func TestNoEvictionWithoutLimit(t *testing.T) {
 	}
 
 	for i := 0; i < 20; i++ {
-		_, ok := c.File([]byte{byte(i), 0xff})
+		r, ok := c.File([]byte{byte(i), 0xff})
 		require.True(t, ok)
+		_ = r.(interface{ Close() error }).Close()
 	}
 }
 

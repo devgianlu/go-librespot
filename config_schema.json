@@ -71,7 +71,9 @@
           "enum": [
             "alsa",
             "pulseaudio",
-            "pipe"
+            "pipe",
+            "audio-toolbox",
+            "wasapi"
           ],
           "default": "alsa"
         },

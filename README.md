@@ -22,7 +22,7 @@
 ## Features
 
 - 🎵 **Spotify Connect** — show up as a speaker in the Spotify app and stream to it from any device on your network (Spotify Premium required).
-- 🔊 **Multiple audio backends** — ALSA, PulseAudio, or a raw named pipe for custom routing.
+- 🔊 **Multiple audio backends** — ALSA, PulseAudio, WASAPI on Windows, or a raw named pipe for custom routing.
 - 📊 **Loudness normalization** — Spotify-standard −14 LUFS (ITU-R BS.1770) with configurable pregain.
 - 🔀 **Crossfade** — configurable overlap between consecutive tracks.
 - 🎙️ **Podcast resume** — episodes pick up where you left off, and progress syncs back to your other devices.
@@ -66,7 +66,7 @@ brew install go-librespot
 To build from source the following prerequisites are necessary:
 
 - Go 1.25 or higher
-- Libraries: `libogg`, `libvorbis`, `flac`, `mpg123`, `libasound2`
+- Libraries: `libogg`, `libvorbis`, `flac`, `mpg123` (plus `libasound2` on Linux)
 
 To install Go, download it from the [Go website](https://go.dev/dl/).
 
@@ -75,6 +75,14 @@ To install the required libraries on Debian-based systems (Debian, Ubuntu, Raspb
 ```shell
 sudo apt-get install libogg-dev libvorbis-dev libflac-dev libmpg123-dev libasound2-dev
 ```
+
+On Windows the default backend is WASAPI (default playback device). Install the decode libraries as MinGW packages (MSVC `.lib` files will not link with CGO), for example with [MSYS2](https://www.msys2.org/):
+
+```
+pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-pkg-config mingw-w64-x86_64-libogg mingw-w64-x86_64-libvorbis mingw-w64-x86_64-flac mingw-w64-x86_64-mpg123
+```
+
+Cross-compiling a static `windows/amd64` binary with vcpkg is described in [CROSS_COMPILE.md](/CROSS_COMPILE.md).
 
 Once prerequisites are installed you can clone the repository and run the daemon with:
 
@@ -86,8 +94,8 @@ Details about cross-compiling go-librespot are described [here](/CROSS_COMPILE.m
 
 ## Configuration
 
-The default directory for configuration files is `~/.config/go-librespot`. On macOS devices, this is
-`~/Library/Application Support/go-librespot`. You can change this directory with the
+The default directory for configuration files is `~/.config/go-librespot`. On macOS this is
+`~/Library/Application Support/go-librespot`. On Windows it is `%APPDATA%\go-librespot`. You can change this directory with the
 `-config_dir` flag. The configuration directory contains:
 
 - `config.yml`: The main configuration (does not exist by default)
@@ -242,7 +250,7 @@ log_disable_timestamp: false # Whether to disable timestamps in log output
 device_id: '' # Spotify device ID (auto-generated)
 device_name: '' # Spotify device name
 device_type: computer # Spotify device type (icon)
-audio_backend: alsa # Audio backend to use (alsa, pipe, pulseaudio)
+audio_backend: alsa # Audio backend to use (alsa, pipe, pulseaudio, audio-toolbox, wasapi). Default is alsa, or wasapi on Windows.
 audio_backend_runtime_socket: '' # Audio backends' runtime socket to use, if backend is pulseaudio
 audio_device: default # ALSA audio device to use for playback
 mixer_device: '' # ALSA mixer device for volume synchronization 

@@ -17,3 +17,5 @@
 # Coverage
 coverage.out
 coverage.out.filtered
+*.exe
+.commandcode

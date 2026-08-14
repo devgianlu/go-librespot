@@ -255,18 +255,15 @@ func (suite *HttpChunkedReaderIntegrationSuite) TestLatencyMetrics() {
 		suite.Require().NoError(err)
 	}
 
-	// Check that latency metrics are reasonable
-	suite.Greater(reader.InitialLatency(), time.Duration(0))
-	suite.Greater(reader.MaxLatency(), time.Duration(0))
-	suite.Greater(reader.MinLatency(), time.Duration(0))
-	suite.Greater(reader.AvgLatencyMs(), 0.0)
-	suite.Greater(reader.MedianLatency(), time.Duration(0))
-	suite.Greater(reader.TotalTime(), time.Duration(0))
-
-	// Sanity checks
-	suite.LessOrEqual(reader.MinLatency(), reader.MaxLatency())
-	suite.LessOrEqual(reader.MinLatency(), reader.MedianLatency())
+	// Samples may be 0 on Windows: localhost httptest can finish inside
+	// one clock tick, so time.Since returns 0. Check consistency instead.
+	suite.GreaterOrEqual(reader.InitialLatency(), time.Duration(0))
+	suite.GreaterOrEqual(reader.MinLatency(), time.Duration(0))
+	suite.GreaterOrEqual(reader.AvgLatencyMs(), 0.0)
+	suite.GreaterOrEqual(reader.MaxLatency(), reader.MinLatency())
+	suite.GreaterOrEqual(reader.MedianLatency(), reader.MinLatency())
 	suite.LessOrEqual(reader.MedianLatency(), reader.MaxLatency())
+	suite.GreaterOrEqual(reader.TotalTime(), reader.MaxLatency())
 }
 
 func (suite *HttpChunkedReaderIntegrationSuite) TestErrorRecovery() {
