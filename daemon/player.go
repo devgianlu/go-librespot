@@ -323,17 +323,20 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 		p.state.player.Index = ctxTracks.Index()
 
-		// load current track into stream — skip forward if the transferred track is unplayable
-		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
-		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
-			return fmt.Errorf("failed loading current track (transfer): %w", err)
-		}
-
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeActive,
 		})
 
-		return nil
+		// See skip_next/skip_prev's comment on reply: loadCurrentTrackOrSkip
+		// below is the same kind of unavoidable network round trip (audio
+		// key, CDN storage resolve), and a transfer has even more ahead of
+		// it - the whole context to resolve first - with nothing prefetched
+		// yet for a session that's only just claiming this device.
+		reply(true)
+		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
+			p.app.log.WithError(err).Warn("failed loading current track for transfer")
+		}
+		return errAlreadyReplied
 	case "play":
 		p.state.setActive(true)
 
@@ -368,7 +371,15 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			}
 		}
 
-		return p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true)
+		// See skip_next/skip_prev's comment on reply: loadContext resolves
+		// the whole context and loads its first track from a cold start -
+		// more network round trips than a skip has, and nothing prefetched
+		// yet to shortcut any of them.
+		reply(true)
+		if err := p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true); err != nil {
+			p.app.log.WithError(err).Warn("failed loading context for play command")
+		}
+		return errAlreadyReplied
 	case "pause":
 		return p.pause(ctx)
 	case "resume":
