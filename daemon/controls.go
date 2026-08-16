@@ -434,8 +434,9 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 
 	// A prefetched stream was created at position zero, so a non-zero start
 	// position (an episode's resume point, or a transfer) has to be applied
-	// here — unlike the freshly created stream above, which is already there.
-	if prefetched && trackPosition > 0 {
+	// here unless the stream is declared to start from zero: seeking a few
+	// milliseconds in rewinds a stream the output is already playing.
+	if prefetched && !fromStart {
 		seekTo := max(0, min(trackPosition, int64(p.primaryStream.Media.Duration())))
 		if err := p.primaryStream.Source.SetPositionMs(seekTo); err != nil {
 			return fmt.Errorf("failed seeking prefetched stream for %s: %w", spotId, err)
