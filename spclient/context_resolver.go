@@ -11,6 +11,7 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"golang.org/x/exp/maps"
+	"google.golang.org/protobuf/proto"
 )
 
 type ContextResolver struct {
@@ -61,6 +62,19 @@ func hasResolvablePages(ctx *connectpb.Context) bool {
 }
 
 func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
+	if librespot.ContextUriType(spotCtx.Uri) == "prerelease" {
+		entityUri, err := sp.PrereleaseEntityUri(ctx, spotCtx.Uri)
+		if err != nil {
+			return nil, fmt.Errorf("failed resolving prerelease context %s: %w", spotCtx.Uri, err)
+		}
+
+		log.WithField("uri", spotCtx.Uri).Debugf("prerelease context stands for %s", entityUri)
+
+		spotCtx = proto.CloneOf(spotCtx)
+		spotCtx.Uri = entityUri
+		spotCtx.Url = ""
+	}
+
 	typ := librespot.InferSpotifyIdTypeFromContextUri(spotCtx.Uri)
 	if typ == librespot.SpotifyIdTypeUnknown {
 		return nil, fmt.Errorf("unsupported context type: %s", spotCtx.Uri)

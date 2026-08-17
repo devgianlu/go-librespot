@@ -405,9 +405,13 @@ func (c *Spclient) ExtendedMetadata(ctx context.Context, req *extmetadatapb.Batc
 }
 
 func (c *Spclient) ExtendedMetadataSimple(ctx context.Context, id librespot.SpotifyId, ext extmetadatapb.ExtensionKind, data proto.Message) error {
+	return c.ExtendedMetadataForUri(ctx, id.Uri(), ext, data)
+}
+
+func (c *Spclient) ExtendedMetadataForUri(ctx context.Context, uri string, ext extmetadatapb.ExtensionKind, data proto.Message) error {
 	resp, err := c.ExtendedMetadata(ctx, &extmetadatapb.BatchedEntityRequest{
 		EntityRequest: []*extmetadatapb.EntityRequest{{
-			EntityUri: id.Uri(),
+			EntityUri: uri,
 			Query: []*extmetadatapb.ExtensionQuery{{
 				ExtensionKind: ext,
 			}},
@@ -423,7 +427,7 @@ func (c *Spclient) ExtendedMetadataSimple(ctx context.Context, id librespot.Spot
 		}
 
 		for _, extData := range item.ExtensionData {
-			if extData.EntityUri != id.Uri() {
+			if extData.EntityUri != uri {
 				continue
 			}
 
