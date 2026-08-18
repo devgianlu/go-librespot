@@ -171,6 +171,8 @@ func (app *App) Run(ctx context.Context) error {
 		return app.runZeroconf(ctx)
 	case "interactive":
 		return app.runInteractive(ctx, app.cfg.Credentials.Interactive.CallbackPort)
+	case "device_auth":
+		return app.runDeviceAuth(ctx)
 	case "spotify_token":
 		return app.runSpotifyToken(ctx, app.cfg.Credentials.SpotifyToken.Username, app.cfg.Credentials.SpotifyToken.AccessToken)
 	default:
@@ -313,6 +315,10 @@ func (app *App) runSpotifyToken(ctx context.Context, username, token string) err
 
 func (app *App) runInteractive(ctx context.Context, callbackPort int) error {
 	return app.withCredentials(ctx, session.InteractiveCredentials{CallbackPort: callbackPort})
+}
+
+func (app *App) runDeviceAuth(ctx context.Context) error {
+	return app.withCredentials(ctx, session.DeviceAuthCredentials{})
 }
 
 func (app *App) withCredentials(ctx context.Context, creds any) (err error) {

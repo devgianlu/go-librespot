@@ -225,6 +225,7 @@
               "description": "The authentication method",
               "enum": [
                 "interactive",
+                "device_auth",
                 "spotify_token",
                 "zeroconf"
               ],
@@ -239,6 +240,11 @@
                   "default": 0
                 }
               }
+            },
+            "device_auth": {
+              "type": "object",
+              "description": "Authenticate by entering a code at spotify.com/pair on another device",
+              "properties": {}
             },
             "spotify_token": {
               "type": "object",
