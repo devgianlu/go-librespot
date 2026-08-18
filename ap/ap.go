@@ -124,11 +124,17 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 }
 
 func (ap *Accesspoint) ConnectSpotifyToken(ctx context.Context, username, token string) error {
-	return ap.Connect(ctx, &pb.LoginCredentials{
+	creds := &pb.LoginCredentials{
 		Typ:      pb.AuthenticationType_AUTHENTICATION_SPOTIFY_TOKEN.Enum(),
-		Username: proto.String(username),
 		AuthData: []byte(token),
-	})
+	}
+	// The device authorization flow's token response carries no username. Leave
+	// the field unset in that case and let the accesspoint derive it from the
+	// token, rather than sending an empty string.
+	if username != "" {
+		creds.Username = proto.String(username)
+	}
+	return ap.Connect(ctx, creds)
 }
 
 func (ap *Accesspoint) ConnectStored(ctx context.Context, username string, data []byte) error {

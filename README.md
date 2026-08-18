@@ -174,6 +174,24 @@ requires some manual steps to complete the authentication:
    curl http://127.0.0.1:36842/login?code=xxxxxxxx
    ```
 
+### Device authorization mode
+
+This mode associates your account with the device without a browser on the device itself: Spotify issues a short code
+which you enter at [spotify.com/pair](https://spotify.com/pair) from a phone or computer. Nothing has to listen on a
+port, so unlike interactive mode there is no redirect URL to copy around when go-librespot runs headless.
+
+1. Configure device authorization mode
+
+    ```yaml
+    zeroconf_enabled: false # Whether to keep the device discoverable at all times
+    credentials:
+      type: device_auth
+    ```
+
+2. Start the daemon to begin the authentication flow
+3. Open the link it logs, or go to [spotify.com/pair](https://spotify.com/pair) and enter the code it prints
+4. Approve the request; the daemon picks it up automatically and stores the credentials
+
 ### API server
 
 Optionally, an API server can be started to control and monitor the player. To enable this feature, add the following to

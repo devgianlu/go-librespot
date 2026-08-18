@@ -11,7 +11,6 @@ import (
 	"github.com/devgianlu/go-librespot/mercury"
 	"github.com/devgianlu/go-librespot/player"
 
-	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/apresolve"
 	"github.com/devgianlu/go-librespot/audio"
@@ -21,7 +20,6 @@ import (
 	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
 	"github.com/devgianlu/go-librespot/spclient"
 	"golang.org/x/oauth2"
-	spotifyoauth2 "golang.org/x/oauth2/spotify"
 )
 
 type Session struct {
@@ -110,39 +108,7 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 			return nil, fmt.Errorf("failed initializing oauth2 server: %w", err)
 		}
 
-		oauthConf := &oauth2.Config{
-			ClientID:    librespot.ClientIdHex,
-			RedirectURL: fmt.Sprintf("http://127.0.0.1:%d/login", callbackPort),
-			Scopes: []string{
-				"app-remote-control",
-				"playlist-modify",
-				"playlist-modify-private",
-				"playlist-modify-public",
-				"playlist-read",
-				"playlist-read-collaborative",
-				"playlist-read-private",
-				"streaming",
-				"ugc-image-upload",
-				"user-follow-modify",
-				"user-follow-read",
-				"user-library-modify",
-				"user-library-read",
-				"user-modify",
-				"user-modify-playback-state",
-				"user-modify-private",
-				"user-personalized",
-				"user-read-birthdate",
-				"user-read-currently-playing",
-				"user-read-email",
-				"user-read-play-history",
-				"user-read-playback-position",
-				"user-read-playback-state",
-				"user-read-private",
-				"user-read-recently-played",
-				"user-top-read",
-			},
-			Endpoint: spotifyoauth2.Endpoint,
-		}
+		oauthConf := newOAuthConfig(fmt.Sprintf("http://127.0.0.1:%d/login", callbackPort))
 
 		verifier := oauth2.GenerateVerifier()
 		url := oauthConf.AuthCodeURL("", oauth2.S256ChallengeOption(verifier))
@@ -164,6 +130,32 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 
 		if err := s.ap.ConnectSpotifyToken(ctx, token.Extra("username").(string), token.AccessToken); err != nil {
 			return nil, fmt.Errorf("failed authenticating accesspoint interactively: %w", err)
+		}
+	case DeviceAuthCredentials:
+		oauthConf := newOAuthConfig("")
+
+		da, err := oauthConf.DeviceAuth(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed requesting device code: %w", err)
+		}
+
+		verificationUrl := da.VerificationURIComplete
+		if verificationUrl == "" {
+			verificationUrl = da.VerificationURI
+		}
+		opts.Log.Infof("to complete authentication visit %s and, if prompted, enter code %s", verificationUrl, da.UserCode)
+
+		// Blocks until the user approves or declines, or the code expires.
+		token, err := oauthConf.DeviceAccessToken(ctx, da)
+		if err != nil {
+			return nil, fmt.Errorf("failed exchanging device code: %w", err)
+		}
+
+		// Unlike the authorization code flow, the device flow token response
+		// carries no username. The accesspoint derives one from the token.
+		username, _ := token.Extra("username").(string)
+		if err := s.ap.ConnectSpotifyToken(ctx, username, token.AccessToken); err != nil {
+			return nil, fmt.Errorf("failed authenticating accesspoint with device authorization: %w", err)
 		}
 	case SpotifyTokenCredentials:
 		if err := s.ap.ConnectSpotifyToken(ctx, creds.Username, creds.Token); err != nil {

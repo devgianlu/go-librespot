@@ -39,6 +39,11 @@ type InteractiveCredentials struct {
 	CallbackPort int
 }
 
+// DeviceAuthCredentials authenticates with the OAuth 2.0 device authorization
+// flow: Spotify issues a code that the user enters on another device. Nothing
+// listens on a port and no browser is needed on this machine.
+type DeviceAuthCredentials struct{}
+
 type SpotifyTokenCredentials struct {
 	Username string
 	Token    string
