@@ -210,7 +210,13 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 	return nil
 }
 
-func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestPayload) error {
+// errAlreadyReplied is returned by a handlePlayerCommand case that already
+// called reply itself, telling the caller not to reply again - a second
+// reply on the same dealer.Request would block forever, since nothing reads
+// its response channel a second time (see dealer.Request.Reply).
+var errAlreadyReplied = errors.New("player command already replied")
+
+func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestPayload, reply func(bool)) error {
 	p.state.lastCommand = &req
 
 	p.app.log.Debugf("handling %s player command from %s", req.Command.Endpoint, req.SentByDeviceId)
@@ -317,17 +323,20 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
 		p.state.player.Index = ctxTracks.Index()
 
-		// load current track into stream — skip forward if the transferred track is unplayable
-		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
-		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
-			return fmt.Errorf("failed loading current track (transfer): %w", err)
-		}
-
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeActive,
 		})
 
-		return nil
+		// See skip_next/skip_prev's comment on reply: loadCurrentTrackOrSkip
+		// below is the same kind of unavoidable network round trip (audio
+		// key, CDN storage resolve), and a transfer has even more ahead of
+		// it - the whole context to resolve first - with nothing prefetched
+		// yet for a session that's only just claiming this device.
+		reply(true)
+		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
+			p.app.log.WithError(err).Warn("failed loading current track for transfer")
+		}
+		return errAlreadyReplied
 	case "play":
 		p.state.setActive(true)
 
@@ -362,7 +371,15 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			}
 		}
 
-		return p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true)
+		// See skip_next/skip_prev's comment on reply: loadContext resolves
+		// the whole context and loads its first track from a cold start -
+		// more network round trips than a skip has, and nothing prefetched
+		// yet to shortcut any of them.
+		reply(true)
+		if err := p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true); err != nil {
+			p.app.log.WithError(err).Warn("failed loading context for play command")
+		}
+		return errAlreadyReplied
 	case "pause":
 		return p.pause(ctx)
 	case "resume":
@@ -391,9 +408,27 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 
 		return nil
 	case "skip_prev":
-		return p.skipPrev(ctx, req.Command.Options.AllowSeeking)
+		// Loading the new track's stream is a real network round trip (audio
+		// key, CDN storage resolve) with no cached fast path for a manual
+		// skip, unlike the natural end-of-track advance which usually has a
+		// prefetched stream ready. Left unacknowledged for that long, Spotify's
+		// backend has been observed to consider the dealer connection
+		// unresponsive and reset it - visible as a brief Connect
+		// disconnect/reconnect on every manual skip. Acknowledging the command
+		// immediately, before the load, decouples the two: the skip still
+		// takes as long as it takes, but Spotify already has its reply.
+		reply(true)
+		if err := p.skipPrev(ctx, req.Command.Options.AllowSeeking); err != nil {
+			p.app.log.WithError(err).Warn("failed skipping to previous track")
+		}
+		return errAlreadyReplied
 	case "skip_next":
-		return p.skipNext(ctx, req.Command.Track)
+		// See skip_prev above.
+		reply(true)
+		if err := p.skipNext(ctx, req.Command.Track); err != nil {
+			p.app.log.WithError(err).Warn("failed skipping to next track")
+		}
+		return errAlreadyReplied
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
 			p.app.log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
@@ -492,7 +527,7 @@ func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request)
 
 	switch req.MessageIdent {
 	case "hm://connect-state/v1/player/command":
-		return p.handlePlayerCommand(ctx, req.Payload)
+		return p.handlePlayerCommand(ctx, req.Payload, req.Reply)
 	default:
 		p.app.log.Warnf("unknown dealer request: %s", req.MessageIdent)
 		return nil
@@ -889,12 +924,17 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 				continue
 			}
 
-			if err := p.handleDealerRequest(p.ctx, req); err != nil {
-				p.app.log.WithError(err).Warn("failed handling dealer request")
-				req.Reply(false)
-			} else {
+			switch err := p.handleDealerRequest(p.ctx, req); {
+			case err == nil:
 				p.app.log.Debugf("sending successful reply for dealer request")
 				req.Reply(true)
+			case errors.Is(err, errAlreadyReplied):
+				// The handler already replied itself and reported its own
+				// failure, if any - replying again would block forever, since
+				// nothing reads a dealer.Request's response channel twice.
+			default:
+				p.app.log.WithError(err).Warn("failed handling dealer request")
+				req.Reply(false)
 			}
 		case req, ok := <-apiRecv:
 			if !ok {
