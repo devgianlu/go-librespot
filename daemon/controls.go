@@ -19,6 +19,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	playerpb "github.com/devgianlu/go-librespot/proto/spotify/player"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 	"google.golang.org/protobuf/proto"
 )
@@ -302,12 +303,11 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 
 type skipToFunc func(*connectpb.ContextTrack) bool
 
-func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context, skipTo skipToFunc, paused, drop bool, then func(error)) error {
-	ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
-	if err != nil {
-		return fmt.Errorf("failed creating track list: %w", err)
-	}
-
+// loadContext starts playing a context. The state that describes it is claimed
+// here, so controllers see the new context immediately; resolving the context
+// and walking it to the starting track runs on the loader lane, and the track
+// it lands on is loaded once it has.
+func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, paused, drop bool, then func(error)) {
 	p.state.setPaused(paused)
 
 	sessionId := make([]byte, 16)
@@ -331,48 +331,166 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 		}
 	}
 
-	p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, ctxTracks.Metadata())
+	// The previous context's surroundings do not describe this one, and the new
+	// track is not known until the context resolves.
+	p.state.player.Track = nil
+	p.state.player.PrevTracks = nil
+	p.state.player.NextTracks = nil
+	p.state.player.Index = nil
+	p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, nil)
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
+	p.state.player.IsPlaying = true
+	p.state.player.IsBuffering = true
+	p.state.player.PlaybackSpeed = 0
+	p.updateState()
 
-	if skipTo == nil {
-		// if shuffle is enabled, we'll start from a random track
-		if err := ctxTracks.ToggleShuffle(ctx, p.state.player.Options.ShufflingContext); err != nil {
-			return fmt.Errorf("failed shuffling context")
+	shuffle := p.state.player.Options.ShufflingContext
+	p.loadGen++
+
+	p.loader.submit(loaderJob{
+		name:  "resolve " + spotCtx.Uri,
+		class: classLoad,
+		gen:   p.loadGen,
+		run: func(ctx context.Context) loaderResult {
+			list, snap, err := resolveContext(ctx, p.app.log, p.sess.Spclient(), spotCtx, skipTo, shuffle)
+			if err != nil {
+				return loaderResult{
+					err:    err,
+					commit: func(_ *AppPlayer, err error) { then(err) },
+				}
+			}
+
+			return loaderResult{
+				commit: func(p *AppPlayer, err error) {
+					p.state.tracks = list
+					p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, snap.Metadata)
+					p.publishSnapshot(snap)
+
+					// skip forward if the track it landed on (or a run of them) is unplayable.
+					p.loadCurrentTrackOrSkip(paused, drop, true, func(err error) {
+						if err != nil {
+							err = fmt.Errorf("failed loading current track (load context): %w", err)
+						}
+						then(err)
+					})
+				},
+			}
+		},
+	})
+}
+
+// transferContext takes over playback from another device. The transfer itself
+// is claimed by the caller before this is reached; resolving the context and
+// finding the track being handed over runs on the loader lane.
+func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paused bool) {
+	spotCtx := transferState.CurrentSession.Context
+	shuffle := transferState.Options.GetShufflingContext()
+	current := transferState.Playback.CurrentTrack
+	queue := transferState.Queue
+
+	p.loadGen++
+
+	p.loader.submit(loaderJob{
+		name:  "transfer " + spotCtx.Uri,
+		class: classLoad,
+		gen:   p.loadGen,
+		run: func(ctx context.Context) loaderResult {
+			list, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
+			if err != nil {
+				return loaderResult{err: fmt.Errorf("failed creating track list: %w", err)}
+			}
+
+			// Seek to the transferred track, playing it ahead of the context if
+			// it cannot be located.
+			if err := list.TrySeekTo(ctx, current); err != nil {
+				return loaderResult{err: fmt.Errorf("failed seeking to track: %w", err)}
+			}
+
+			if err := list.ToggleShuffle(ctx, shuffle); err != nil {
+				return loaderResult{err: fmt.Errorf("failed shuffling context: %w", err)}
+			}
+
+			for _, track := range queue.GetTracks() {
+				list.AddToQueue(track)
+			}
+			list.SetPlayingQueue(queue.GetIsPlayingQueue())
+
+			snap := list.Snapshot(ctx, nil)
+
+			return loaderResult{
+				commit: func(p *AppPlayer, err error) {
+					if err != nil {
+						return
+					}
+
+					p.state.queueID = highestQueueID(queue.GetTracks())
+					p.state.tracks = list
+					p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, snap.Metadata)
+					p.publishSnapshot(snap)
+
+					// skip forward if the transferred track is unplayable, so a
+					// cast onto a refused track does not freeze the player.
+					p.loadCurrentTrackOrSkip(paused, true, false, func(err error) {
+						if err != nil {
+							p.app.log.WithError(err).Warn("failed loading current track (transfer)")
+						}
+					})
+				},
+			}
+		},
+	})
+}
+
+// highestQueueID reports the largest "q<number>" uid in a transferred queue, so
+// that ids handed out afterwards carry on from it rather than repeating. The
+// official clients start again at 0, which duplicates ids across a transfer and
+// makes reordering behave strangely.
+func highestQueueID(queued []*connectpb.ContextTrack) uint64 {
+	var highest uint64
+	for _, track := range queued {
+		if track.Uid == "" || track.Uid[0] != 'q' {
+			continue
 		}
 
-		// seek to the first track
-		if err := ctxTracks.TrySeek(ctx, func(_ *connectpb.ContextTrack) bool { return true }); err != nil {
-			return fmt.Errorf("failed seeking to track: %w", err)
-		}
-	} else {
-		// seek to the given track
-		if err := ctxTracks.TrySeek(ctx, skipTo); err != nil {
-			return fmt.Errorf("failed seeking to track: %w", err)
+		n, err := strconv.ParseUint(track.Uid[1:], 10, 64)
+		if err != nil {
+			continue
 		}
 
-		// shuffle afterwards
-		if err := ctxTracks.ToggleShuffle(ctx, p.state.player.Options.ShufflingContext); err != nil {
-			return fmt.Errorf("failed shuffling context")
-		}
+		highest = max(highest, n)
+	}
+	return highest
+}
+
+// resolveContext resolves a context and walks it to the track playback should
+// start from. Runs on the loader lane: the list it builds is not the daemon's
+// until the result is applied.
+func resolveContext(ctx context.Context, log librespot.Logger, sp *spclient.Spclient, spotCtx *connectpb.Context, skipTo skipToFunc, shuffle bool) (*tracks.List, *tracks.Snapshot, error) {
+	list, err := tracks.NewTrackListFromContext(ctx, log, sp, spotCtx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed creating track list: %w", err)
 	}
 
-	snap := ctxTracks.Snapshot(ctx, nil)
-	p.state.tracks = ctxTracks
-	p.publishSnapshot(snap)
-
-	p.resumeCurrentEpisode(ctx)
-
-	// load current track into stream — skip forward if it (or a run of tracks) is unplayable.
-	p.loadCurrentTrackOrSkip(paused, drop, func(err error) {
-		if err != nil {
-			err = fmt.Errorf("failed loading current track (load context): %w", err)
+	// Shuffling picks where to start, so with no track asked for it comes
+	// first; with one, it is applied around the track that was asked for.
+	if skipTo == nil {
+		if err := list.ToggleShuffle(ctx, shuffle); err != nil {
+			return nil, nil, fmt.Errorf("failed shuffling context: %w", err)
 		}
-		then(err)
-	})
+		skipTo = func(*connectpb.ContextTrack) bool { return true }
+	}
 
-	return nil
+	if err := list.TrySeek(ctx, skipTo); err != nil {
+		return nil, nil, fmt.Errorf("failed seeking to track: %w", err)
+	}
+
+	if err := list.ToggleShuffle(ctx, shuffle); err != nil {
+		return nil, nil, fmt.Errorf("failed shuffling context: %w", err)
+	}
+
+	return list, list.Snapshot(ctx, nil), nil
 }
 
 // isUnplayableMedia reports whether a load failed for a reason that skipping
@@ -389,10 +507,10 @@ func isUnplayableMedia(err error) bool {
 // advances forward to the first playable one instead of failing — so a
 // transfer, cast or context load that lands on a refused track does not freeze
 // the player. advanceNext walks a run of unplayable tracks, bounded.
-func (p *AppPlayer) loadCurrentTrackOrSkip(paused, drop bool, then func(error)) {
+func (p *AppPlayer) loadCurrentTrackOrSkip(paused, drop, resume bool, then func(error)) {
 	uri := p.state.player.Track.GetUri()
 
-	p.loadCurrentTrack(paused, drop, func(err error) {
+	p.loadCurrentTrack(paused, drop, resume, func(err error) {
 		if err == nil || !isUnplayableMedia(err) {
 			then(err)
 			return
@@ -412,7 +530,7 @@ func (p *AppPlayer) loadCurrentTrackOrSkip(paused, drop bool, then func(error)) 
 // loadCurrentTrack starts playing whatever the state points at. Only the
 // bookkeeping happens here: fetching the media runs on the loader lane, and then
 // is called back on the player loop once it has, with whatever went wrong.
-func (p *AppPlayer) loadCurrentTrack(paused, drop bool, then func(error)) {
+func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, then func(error)) {
 	if p.primaryStream != nil {
 		unloadPosition := p.player.PositionMs()
 		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream, unloadPosition)
@@ -494,9 +612,16 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool, then func(error)) {
 		class: classLoad,
 		gen:   p.loadGen,
 		run: func(ctx context.Context) loaderResult {
+			position, startsAtZero := trackPosition, fromStart
+			if resume {
+				if resumed, ok := p.lookupResumePosition(ctx, *spotId); ok {
+					position, startsAtZero = resumed, false
+				}
+			}
+
 			stream, err := p.fetchTrack(ctx, *spotId, fetchTrackOpts{
-				position:         trackPosition,
-				fromStart:        fromStart,
+				position:         position,
+				fromStart:        startsAtZero,
 				paused:           paused,
 				drop:             drop,
 				introPrefix:      introPrefix,
@@ -516,7 +641,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop bool, then func(error)) {
 			// it. Closing it here could close a stream still being read.
 			return loaderResult{
 				commit: func(p *AppPlayer, err error) {
-					p.commitLoad(stream, spotId.Uri(), paused, trackPosition, prefetchedStream != nil)
+					p.commitLoad(stream, spotId.Uri(), paused, position, prefetchedStream != nil)
 					then(err)
 				},
 			}
@@ -623,7 +748,8 @@ func (p *AppPlayer) commitLoad(stream *player.Stream, uri string, paused bool, t
 	// Track wholesale with a fresh ProvidedTrack from the track list.
 	enrichTrackMetadata(p.state.player.Track, stream.Media)
 
-	p.state.updateTimestamp()
+	p.state.player.Timestamp = time.Now().UnixMilli()
+	p.state.player.PositionAsOfTimestamp = trackPosition
 	p.state.player.PlaybackId = hex.EncodeToString(stream.PlaybackId)
 	p.state.player.Duration = int64(stream.Media.Duration())
 	p.state.player.IsPlaying = true
@@ -858,9 +984,7 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
-	p.resumeCurrentEpisode(ctx)
-
-	p.loadCurrentTrack(p.state.player.IsPaused, true, func(err error) {
+	p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
 		if err != nil {
 			p.app.log.WithError(err).Warn("failed loading current track (skip prev)")
 		}
@@ -904,9 +1028,8 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 	p.state.player.PositionAsOfTimestamp = 0
 
 	p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
-	p.resumeCurrentEpisode(ctx)
 
-	p.loadCurrentTrack(p.state.player.IsPaused, true, func(err error) {
+	p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
 		if err != nil {
 			p.app.log.WithError(err).Warn("failed loading current track (skip next)")
 		}
@@ -969,14 +1092,12 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 		p.state.player.IsBuffering = false
 	}
 
-	p.resumeCurrentEpisode(ctx)
-
 	// BAND-AID: Spotify makes a per-track, context-dependent decision on granting the legacy
 	// AES audio key. License-gated tracks are refused (AesKeyError, e.g. code 1) in ordinary
 	// playlist playback — even though they play on official clients, which establish a licensed
 	// context. We cannot decrypt a refused track, so skip it instead of freezing the player.
 	// Remove once proper key licensing (PlayPlay) is implemented — tracked separately.
-	p.loadCurrentTrack(!hasNextTrack, drop, func(err error) {
+	p.loadCurrentTrack(!hasNextTrack, drop, true, func(err error) {
 		if err == nil {
 			p.consecutiveUnplayableSkips = 0
 			then(hasNextTrack, nil)
@@ -1044,7 +1165,7 @@ func (p *AppPlayer) startAutoplay(ctx context.Context, drop bool, then func(bool
 	}
 
 	p.app.log.Debugf("resolved autoplay station: %s", spotCtx.Uri)
-	p.loadContext(ctx, spotCtx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop, func(err error) {
+	p.loadContext(spotCtx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop, func(err error) {
 		if err != nil {
 			p.app.log.WithError(err).Warnf("failed loading station for %s", contextUri)
 			then(false, nil)

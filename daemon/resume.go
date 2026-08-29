@@ -33,41 +33,34 @@ func (p *AppPlayer) goBestEffort(fn func(ctx context.Context)) {
 	}()
 }
 
-// resumeCurrentEpisode moves the pending start position of the current track
-// to its server-side resume point, if it is a partially listened episode.
+// lookupResumePosition reports where an episode was left off, if it is a
+// partially listened one. Returns false for a track, for an episode never
+// started, or when the resumption service cannot be reached — an episode
+// starting from the beginning is much better than one that won't play.
 //
 // Call it where playback is about to start a track from the beginning. A
 // transferred position is authoritative — the device handing over already
 // applied the resume point — so the transfer path deliberately does not.
-//
-// Failing to reach the resumption service is logged and otherwise ignored: an
-// episode starting from the beginning is much better than one that won't play.
-func (p *AppPlayer) resumeCurrentEpisode(ctx context.Context) {
-	if p.state.player.Track == nil {
-		return
-	}
-
-	id, err := librespot.SpotifyIdFromUri(p.state.player.Track.Uri)
-	if err != nil || id.Type() != librespot.SpotifyIdTypeEpisode {
-		return
+func (p *AppPlayer) lookupResumePosition(ctx context.Context, id librespot.SpotifyId) (int64, bool) {
+	if id.Type() != librespot.SpotifyIdTypeEpisode {
+		return 0, false
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, resumeTimeout)
 	defer cancel()
 
-	positionMs, err := p.sess.Spclient().ResumePositionMs(ctx, *id)
+	positionMs, err := p.sess.Spclient().ResumePositionMs(ctx, id)
 	if err != nil {
 		p.app.log.WithError(err).WithField("uri", id.Uri()).Warn("failed getting episode resume point")
-		return
+		return 0, false
 	}
 
 	if positionMs <= 0 {
-		return
+		return 0, false
 	}
 
 	p.app.log.WithField("uri", id.Uri()).Debugf("resuming episode at %dms", positionMs)
-	p.state.player.Timestamp = time.Now().UnixMilli()
-	p.state.player.PositionAsOfTimestamp = positionMs
+	return positionMs, true
 }
 
 // reportResumePosition stores how far into an episode playback has got.

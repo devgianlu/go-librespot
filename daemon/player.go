@@ -8,7 +8,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,7 +23,6 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
-	"github.com/devgianlu/go-librespot/tracks"
 )
 
 type AppPlayer struct {
@@ -268,11 +266,6 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		}
 		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
 
-		ctxTracks, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), transferState.CurrentSession.Context)
-		if err != nil {
-			return fmt.Errorf("failed creating track list: %w", err)
-		}
-
 		if sessId := transferState.CurrentSession.OriginalSessionId; sessId != nil {
 			p.state.player.SessionId = *sessId
 		} else {
@@ -282,8 +275,6 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		}
 
 		p.state.setActive(true)
-		p.state.player.IsPlaying = false
-		p.state.player.IsBuffering = false
 
 		// options
 		p.state.player.Options = transferState.Options
@@ -296,14 +287,14 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.setPaused(pause)
 
 		// current session
+		spotCtx := transferState.CurrentSession.Context
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
 		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
-		p.state.player.ContextUri = transferState.CurrentSession.Context.Uri
-		p.state.player.ContextUrl = transferState.CurrentSession.Context.Url
-		p.state.player.ContextRestrictions = transferState.CurrentSession.Context.Restrictions
+		p.state.player.ContextUri = spotCtx.Uri
+		p.state.player.ContextUrl = spotCtx.Url
+		p.state.player.ContextRestrictions = spotCtx.Restrictions
 		p.state.player.Suppressions = transferState.CurrentSession.Suppressions
-
-		p.state.player.ContextMetadata = contextMetadata(transferState.CurrentSession.Context.Metadata, ctxTracks.Metadata())
+		p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, nil)
 
 		// Claim the transfer before doing anything slow. The surrounding tracks
 		// are cleared rather than left as they are: they still describe the
@@ -319,56 +310,11 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.PlaybackSpeed = 0 // not progressing while buffering
 		p.flushState()
 
-		// Seek to the transferred track, playing it ahead of the context if it
-		// cannot be located.
-		if err := ctxTracks.TrySeekTo(ctx, transferState.Playback.CurrentTrack); err != nil {
-			return fmt.Errorf("failed seeking to track: %w", err)
-		}
-
-		// shuffle the context if needed
-		if err := ctxTracks.ToggleShuffle(ctx, transferState.Options.ShufflingContext); err != nil {
-			return fmt.Errorf("failed shuffling context")
-		}
-
-		// Set queueID to the highest queue ID found in the queue.
-		// The UIDs are of the form q0, q1, q2, etc.
-		// Spotify apps don't seem to do this (they start again at 0 after
-		// transfer), which means that queue IDs get duplicated when tracks are
-		// added before and after the transfer and reordering will lead to weird
-		// effects. But we can do better :)
-		p.state.queueID = 0
-		for _, track := range transferState.Queue.Tracks {
-			if track.Uid == "" || track.Uid[0] != 'q' {
-				continue // not of the "q<number>" format
-			}
-			n, err := strconv.ParseUint(track.Uid[1:], 10, 64)
-			if err != nil {
-				continue // not of the "q<number>" format
-			}
-			p.state.queueID = max(p.state.queueID, n)
-		}
-
-		// add all tracks from queue
-		for _, track := range transferState.Queue.Tracks {
-			ctxTracks.AddToQueue(track)
-		}
-		ctxTracks.SetPlayingQueue(transferState.Queue.IsPlayingQueue)
-
-		snap := ctxTracks.Snapshot(ctx, nil)
-		p.state.tracks = ctxTracks
-		p.publishSnapshot(snap)
-
-		// load current track into stream — skip forward if the transferred track is unplayable
-		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
-		p.loadCurrentTrackOrSkip(pause, true, func(err error) {
-			if err != nil {
-				p.app.log.WithError(err).Warn("failed loading current track (transfer)")
-			}
-		})
-
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeActive,
 		})
+
+		p.transferContext(&transferState, pause)
 
 		return nil
 	case "play":
@@ -405,12 +351,13 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			}
 		}
 
-		return p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true,
-			func(err error) {
-				if err != nil {
-					p.app.log.WithError(err).Warn("failed loading context for play command")
-				}
-			})
+		p.loadContext(req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true, func(err error) {
+			if err != nil {
+				p.app.log.WithError(err).Warn("failed loading context for play command")
+			}
+		})
+
+		return nil
 	case "pause":
 		return p.pause(ctx)
 	case "resume":
@@ -654,7 +601,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		// no audio plays from 0:00 while the track loads. The seek waits for the
 		// load to land rather than polling for it.
 		loadPaused := data.Paused || data.Position > 0
-		err = p.loadContext(ctx, spotCtx, skipTo, loadPaused, true, func(err error) {
+		p.loadContext(spotCtx, skipTo, loadPaused, true, func(err error) {
 			if err != nil {
 				p.app.log.WithError(err).Warn("failed loading context")
 				return
@@ -673,9 +620,6 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 				}
 			}
 		})
-		if err != nil {
-			return nil, fmt.Errorf("failed loading context: %w", err)
-		}
 
 		return nil, nil
 	case ApiRequestTypeGetVolume:
