@@ -661,3 +661,51 @@ func TestApiEventsWebsocketReceivesEmittedEvents(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"type":"volume","data":{"value":55,"max":100}}`, string(raw))
 }
+
+// A listener that stops reading must not hold up whoever emitted the event —
+// that caller is the player loop.
+func TestApiEmitDoesNotBlockOnAStalledClient(t *testing.T) {
+	s := &ConcreteApiServer{log: &librespot.NullLogger{}}
+	client := &wsClient{
+		events: make(chan *ApiEvent, wsEventQueueSize),
+		done:   make(chan struct{}),
+	}
+
+	s.clientsLock.Lock()
+	s.clients = append(s.clients, client)
+	s.clientsLock.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range uint32(wsEventQueueSize * 4) {
+			s.Emit(&ApiEvent{Type: ApiEventTypeVolume, Data: ApiEventDataVolume{Value: i, Max: 100}})
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Emit blocked on a client that never reads")
+	}
+
+	require.Len(t, client.events, wsEventQueueSize, "the queue is bounded")
+
+	// The events kept are the most recent ones: a listener that fell behind
+	// converges on the current state rather than replaying a stale backlog.
+	ev := <-client.events
+	require.Equal(t, uint32(wsEventQueueSize*3), ev.Data.(ApiEventDataVolume).Value)
+}
+
+// Once a client is gone, sending to it reports failure instead of filling a
+// queue nobody will drain.
+func TestApiSendToClosedClientGivesUp(t *testing.T) {
+	client := &wsClient{
+		events: make(chan *ApiEvent, 1),
+		done:   make(chan struct{}),
+	}
+	client.close()
+	client.close() // idempotent: both GetEvents and Close reach for it
+
+	require.False(t, client.send(&librespot.NullLogger{}, &ApiEvent{Type: ApiEventTypeVolume}))
+}
