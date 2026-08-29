@@ -282,9 +282,15 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 
 		p.state.player.ContextMetadata = contextMetadata(transferState.CurrentSession.Context.Metadata, ctxTracks.Metadata())
 
-		// Claim the transfer before doing anything slow.
+		// Claim the transfer before doing anything slow. The surrounding tracks
+		// are cleared rather than left as they are: they still describe the
+		// context being transferred away from, and this claim already carries
+		// the new context's uri and track.
 		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
 		p.state.player.Track = librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
+		p.state.player.PrevTracks = nil
+		p.state.player.NextTracks = nil
+		p.state.player.Index = nil
 		p.state.player.IsPlaying = true
 		p.state.player.IsBuffering = true
 		p.state.player.PlaybackSpeed = 0 // not progressing while buffering
