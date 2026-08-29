@@ -919,18 +919,23 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	p.player.SetVolume(newVal)
 
 	// Save the volume to the state
+	p.app.stateMu.Lock()
 	p.app.state.LastVolume = &newVal
-	if err := p.app.persistState(); err != nil {
-		p.app.log.WithError(err).Error("failed writing state after volume change")
-	}
+	p.app.stateMu.Unlock()
+	p.app.requestPersist()
 
-	// If there is a value in the channel buffer, remove it.
+	// Replace whatever is already queued. The mixer writes to this channel too,
+	// so the send has to tolerate losing the race for the freed slot: this
+	// player loop is the only reader, and blocking here would deadlock it.
 	select {
 	case <-p.volumeUpdate:
 	default:
 	}
 
-	p.volumeUpdate <- float32(newVal) / player.MaxStateVolume
+	select {
+	case p.volumeUpdate <- float32(newVal) / player.MaxStateVolume:
+	default:
+	}
 }
 
 // Send notification that the volume changed.

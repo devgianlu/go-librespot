@@ -45,6 +45,13 @@ type App struct {
 
 	audioCache *cache.Cache
 
+	// stateMu guards state and the store behind it. Two AppPlayers overlap
+	// briefly whenever a zeroconf session is replaced, and volume changes are
+	// written back from off the player loop.
+	stateMu   sync.Mutex
+	saving    bool
+	saveDirty bool
+
 	closed bool
 }
 
@@ -206,10 +213,45 @@ func (app *App) Close() error {
 }
 
 func (app *App) persistState() error {
+	app.stateMu.Lock()
+	defer app.stateMu.Unlock()
+
 	if err := app.stateStore.Save(app.state); err != nil {
 		return fmt.Errorf("persisting state: %w", err)
 	}
 	return nil
+}
+
+// requestPersist writes the state out off the caller's goroutine, coalescing
+// repeated requests into the one save still to come. Saving is a temp file plus
+// a rename, slow enough on the hardware this runs on to be worth keeping away
+// from the player loop.
+func (app *App) requestPersist() {
+	app.stateMu.Lock()
+	app.saveDirty = true
+	if app.saving {
+		app.stateMu.Unlock()
+		return
+	}
+	app.saving = true
+	app.stateMu.Unlock()
+
+	go func() {
+		for {
+			app.stateMu.Lock()
+			if !app.saveDirty {
+				app.saving = false
+				app.stateMu.Unlock()
+				return
+			}
+			app.saveDirty = false
+			app.stateMu.Unlock()
+
+			if err := app.persistState(); err != nil {
+				app.log.WithError(err).Error("failed persisting state")
+			}
+		}
+	}()
 }
 
 func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err error) {
