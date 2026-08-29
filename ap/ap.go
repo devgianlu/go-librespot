@@ -285,8 +285,15 @@ func (ap *Accesspoint) Send(ctx context.Context, pktType PacketType, payload []b
 	return nil
 }
 
+// recvChanSize buffers each receiver so that recvLoop can keep draining the
+// socket while a consumer is busy. recvLoop is also the goroutine that answers
+// pings and hands audio keys to the key provider, so a consumer that blocks it
+// stalls key delivery to every other consumer — and a consumer waiting on a key
+// then cannot make progress either.
+const recvChanSize = 32
+
 func (ap *Accesspoint) Receive(types ...PacketType) <-chan Packet {
-	ch := make(chan Packet)
+	ch := make(chan Packet, recvChanSize)
 	ap.connMu.RLock()
 	select {
 	case <-ap.done:
@@ -355,7 +362,11 @@ loop:
 
 				handled := false
 				for _, ch := range ll {
-					ch <- Packet{Type: pkt, Payload: payload}
+					select {
+					case ch <- Packet{Type: pkt, Payload: payload}:
+					case <-ap.done:
+						break loop
+					}
 					handled = true
 				}
 
