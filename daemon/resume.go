@@ -21,18 +21,6 @@ import (
 // best-effort and degrades to "start from the beginning".
 const resumeTimeout = 10 * time.Second
 
-// goBestEffort runs fn off the player loop, for work whose result the daemon
-// does not need: it may fail, be slow, or be abandoned when the player closes,
-// with no effect on playback. fn must not touch player state — whatever it
-// needs is captured before the call.
-func (p *AppPlayer) goBestEffort(fn func(ctx context.Context)) {
-	go func() {
-		ctx, cancel := context.WithTimeout(p.ctx, resumeTimeout)
-		defer cancel()
-		fn(ctx)
-	}()
-}
-
 // lookupResumePosition reports where an episode was left off, if it is a
 // partially listened one. Returns false for a track, for an episode never
 // started, or when the resumption service cannot be reached — an episode
@@ -78,7 +66,7 @@ func (p *AppPlayer) reportResumePosition(stream *player.Stream, positionMs int64
 	}
 
 	id := stream.RequestedId
-	p.goBestEffort(func(ctx context.Context) {
+	p.goDetached(resumeTimeout, func(ctx context.Context) {
 		if err := p.sess.Spclient().SetResumePositionMs(ctx, id, positionMs); err != nil {
 			p.app.log.WithError(err).WithField("uri", id.Uri()).
 				Warn("failed reporting episode resume point")
@@ -101,7 +89,7 @@ func (p *AppPlayer) reportResumeFinished(stream *player.Stream) {
 	p.resumeFinishedPlaybackId = stream.PlaybackId
 
 	id := stream.RequestedId
-	p.goBestEffort(func(ctx context.Context) {
+	p.goDetached(resumeTimeout, func(ctx context.Context) {
 		if err := p.sess.Spclient().SetResumeFinished(ctx, id); err != nil {
 			p.app.log.WithError(err).WithField("uri", id.Uri()).
 				Warn("failed reporting episode as finished")

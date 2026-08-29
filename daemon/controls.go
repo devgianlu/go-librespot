@@ -1082,7 +1082,7 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 	p.state.player.PositionAsOfTimestamp = 0
 
 	if !hasNextTrack && !p.app.cfg.DisableAutoplay && !strings.HasPrefix(p.state.player.ContextUri, "spotify:station:") {
-		p.startAutoplay(ctx, drop, then)
+		p.startAutoplay(drop, then)
 		return
 	}
 
@@ -1134,7 +1134,7 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 
 // startAutoplay resolves a station to carry on with once the context has run
 // out, and starts playing it.
-func (p *AppPlayer) startAutoplay(ctx context.Context, drop bool, then func(bool, error)) {
+func (p *AppPlayer) startAutoplay(drop bool, then func(bool, error)) {
 	p.state.player.Suppressions = &connectpb.Suppressions{}
 
 	// Consider all tracks as recent because we got here by reaching the end of the context
@@ -1154,24 +1154,42 @@ func (p *AppPlayer) startAutoplay(ctx context.Context, drop bool, then func(bool
 	contextUri := p.state.player.ContextUri
 	p.app.log.Debugf("resolving autoplay station for %d tracks", len(prevTrackUris))
 
-	spotCtx, err := p.sess.Spclient().ContextResolveAutoplay(ctx, &playerpb.AutoplayContextRequest{
-		ContextUri:     proto.String(contextUri),
-		RecentTrackUri: prevTrackUris,
-	})
-	if err != nil {
-		p.app.log.WithError(err).Warnf("failed resolving station for %s", contextUri)
-		then(false, nil)
-		return
-	}
+	p.loadGen++
+	p.loader.submit(loaderJob{
+		name:  "resolve station for " + contextUri,
+		class: classLoad,
+		gen:   p.loadGen,
+		run: func(ctx context.Context) loaderResult {
+			spotCtx, err := p.sess.Spclient().ContextResolveAutoplay(ctx, &playerpb.AutoplayContextRequest{
+				ContextUri:     proto.String(contextUri),
+				RecentTrackUri: prevTrackUris,
+			})
+			if err != nil {
+				return loaderResult{
+					err: fmt.Errorf("failed resolving station for %s: %w", contextUri, err),
+					// Running out of context is not a failure to report upwards:
+					// there is simply nothing more to play.
+					commit: func(_ *AppPlayer, _ error) { then(false, nil) },
+				}
+			}
 
-	p.app.log.Debugf("resolved autoplay station: %s", spotCtx.Uri)
-	p.loadContext(spotCtx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop, func(err error) {
-		if err != nil {
-			p.app.log.WithError(err).Warnf("failed loading station for %s", contextUri)
-			then(false, nil)
-			return
-		}
-		then(true, nil)
+			return loaderResult{commit: func(p *AppPlayer, err error) {
+				if err != nil {
+					then(false, nil)
+					return
+				}
+
+				p.app.log.Debugf("resolved autoplay station: %s", spotCtx.Uri)
+				p.loadContext(spotCtx, func(_ *connectpb.ContextTrack) bool { return true }, false, drop, func(err error) {
+					if err != nil {
+						p.app.log.WithError(err).Warnf("failed loading station for %s", contextUri)
+						then(false, nil)
+						return
+					}
+					then(true, nil)
+				})
+			}}
+		},
 	})
 }
 

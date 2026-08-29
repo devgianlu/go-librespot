@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -565,18 +566,6 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		return nil, nil
 	case ApiRequestTypePlay:
 		data := req.Data.(ApiPlay)
-		spotCtx, err := p.sess.Spclient().ContextResolve(ctx, data.Uri)
-		if err != nil {
-			return nil, fmt.Errorf("failed resolving context: %w", err)
-		}
-
-		p.state.setActive(true)
-		p.state.setPaused(data.Paused)
-		p.state.player.Suppressions = &connectpb.Suppressions{}
-		p.state.player.PlayOrigin = &connectpb.PlayOrigin{
-			FeatureIdentifier: "go-librespot",
-			FeatureVersion:    librespot.VersionNumberString(),
-		}
 
 		var skipTo skipToFunc
 		if len(data.SkipToUri) > 0 {
@@ -601,27 +590,56 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		// no audio plays from 0:00 while the track loads. The seek waits for the
 		// load to land rather than polling for it.
 		loadPaused := data.Paused || data.Position > 0
-		p.loadContext(spotCtx, skipTo, loadPaused, true, func(err error) {
-			if err != nil {
-				p.app.log.WithError(err).Warn("failed loading context")
-				return
-			}
 
-			if data.Position <= 0 {
-				return
-			}
-
-			if err := p.seek(ctx, data.Position); err != nil {
-				p.app.log.WithError(err).Warnf("failed seeking to initial position %dms", data.Position)
-			}
-			if !data.Paused {
-				if err := p.play(ctx); err != nil {
-					p.app.log.WithError(err).Warnf("failed resuming after initial seek")
+		p.loadGen++
+		p.loader.submit(loaderJob{
+			name:  "resolve " + data.Uri,
+			class: classLoad,
+			gen:   p.loadGen,
+			reply: apiReply(req),
+			run: func(ctx context.Context) loaderResult {
+				spotCtx, err := p.sess.Spclient().ContextResolve(ctx, data.Uri)
+				if err != nil {
+					return loaderResult{err: fmt.Errorf("failed resolving context: %w", err)}
 				}
-			}
+
+				return loaderResult{commit: func(p *AppPlayer, err error) {
+					if err != nil {
+						return
+					}
+
+					p.state.setActive(true)
+					p.state.setPaused(data.Paused)
+					p.state.player.Suppressions = &connectpb.Suppressions{}
+					p.state.player.PlayOrigin = &connectpb.PlayOrigin{
+						FeatureIdentifier: "go-librespot",
+						FeatureVersion:    librespot.VersionNumberString(),
+					}
+
+					p.loadContext(spotCtx, skipTo, loadPaused, true, func(err error) {
+						if err != nil {
+							p.app.log.WithError(err).Warn("failed loading context")
+							return
+						}
+
+						if data.Position <= 0 {
+							return
+						}
+
+						if err := p.seek(ctx, data.Position); err != nil {
+							p.app.log.WithError(err).Warnf("failed seeking to initial position %dms", data.Position)
+						}
+						if !data.Paused {
+							if err := p.play(ctx); err != nil {
+								p.app.log.WithError(err).Warnf("failed resuming after initial seek")
+							}
+						}
+					})
+				}}
+			},
 		})
 
-		return nil, nil
+		return nil, errReplyDeferred
 	case ApiRequestTypeGetVolume:
 		return &ApiVolume{
 			Max:   p.app.cfg.VolumeSteps,
@@ -657,13 +675,20 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		p.addToQueue(ctx, &connectpb.ContextTrack{Uri: req.Data.(string)})
 		return nil, nil
 	case ApiRequestTypeToken:
-		accessToken, err := p.sess.Spclient().GetAccessToken(ctx, true)
-		if err != nil {
-			return nil, fmt.Errorf("failed getting access token: %w", err)
-		}
-		return &ApiToken{
-			Token: accessToken,
-		}, nil
+		// Nothing here touches player state, so it is answered from its own
+		// goroutine rather than holding up the loop for a token renewal.
+		reply := apiReply(req)
+		p.goDetached(tokenTimeout, func(ctx context.Context) {
+			accessToken, err := p.sess.Spclient().GetAccessToken(ctx, true)
+			if err != nil {
+				reply.done(nil, fmt.Errorf("failed getting access token: %w", err))
+				return
+			}
+
+			reply.done(&ApiToken{Token: accessToken}, nil)
+		})
+
+		return nil, errReplyDeferred
 	case ApiRequestSetDeviceName:
 		p.setDeviceName(ctx, req.Data.(string))
 		return nil, nil
@@ -863,6 +888,10 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			}
 
 			data, err := p.handleApiRequest(p.ctx, req)
+			if errors.Is(err, errReplyDeferred) {
+				continue
+			}
+
 			req.Reply(data, err)
 		case mprisReq, ok := <-mprisRecv:
 			if !ok {

@@ -69,6 +69,30 @@ func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 	res.reply.done(res.value, res.err)
 }
 
+// errReplyDeferred reports that a handler has taken responsibility for
+// answering its request itself, once work it started elsewhere finishes.
+var errReplyDeferred = errors.New("reply deferred")
+
+// apiReply hands an API request's acknowledgement to work that finishes
+// elsewhere. The handler returns errReplyDeferred so the player loop knows not
+// to answer it as well.
+func apiReply(req ApiRequest) replyTo {
+	return replyTo{once: new(sync.Once), fn: req.Reply}
+}
+
+// goDetached runs fn off the player loop, for work that touches no player state
+// and that nothing here waits on. Whatever fn needs is captured before the call.
+func (p *AppPlayer) goDetached(timeout time.Duration, fn func(ctx context.Context)) {
+	go func() {
+		ctx, cancel := context.WithTimeout(p.ctx, timeout)
+		defer cancel()
+		fn(ctx)
+	}()
+}
+
+// tokenTimeout bounds an access token renewal made on behalf of an API caller.
+const tokenTimeout = 30 * time.Second
+
 // maxPendingPlayerEvents bounds how many player events are held while a load is
 // outstanding, so a load that never lands cannot grow the buffer without limit.
 const maxPendingPlayerEvents = 32
