@@ -33,9 +33,10 @@ type AppPlayer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	stop      chan struct{}
-	closeOnce sync.Once
-	logout    chan *AppPlayer
+	stop       chan struct{}
+	closeOnce  sync.Once
+	logout     chan *AppPlayer
+	logoutOnce sync.Once
 
 	player            *player.Player
 	initialVolumeOnce sync.Once
@@ -96,6 +97,26 @@ type AppPlayer struct {
 	// of refused tracks (even at the very start of a context) advances to the first playable
 	// one instead of freezing, and can never loop forever. Reset to 0 on any successful load.
 	consecutiveUnplayableSkips int
+}
+
+// requestLogout hands this player back to the daemon to be torn down and
+// replaced. The daemon rebuilds the session synchronously on the receiving
+// side, and only does so at all when zeroconf is enabled — nothing reads the
+// channel otherwise — so the handover happens off the player loop.
+func (p *AppPlayer) requestLogout() {
+	if !p.app.cfg.ZeroconfEnabled {
+		p.app.log.Debug("ignoring logout request because zeroconf is disabled")
+		return
+	}
+
+	p.logoutOnce.Do(func() {
+		go func() {
+			select {
+			case p.logout <- p:
+			case <-p.ctx.Done():
+			}
+		}()
+	})
 }
 
 func (p *AppPlayer) playbackReady() bool {
@@ -178,10 +199,9 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 
 		p.updateVolume(uint32(setVolCmd.Volume))
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/connect/logout") {
-		// this should happen only with zeroconf enabled
 		p.app.log.WithField("username", librespot.ObfuscateUsername(p.sess.Username())).
 			Debugf("requested logout out")
-		p.logout <- p
+		p.requestLogout()
 	} else if strings.HasPrefix(msg.Uri, "hm://connect-state/v1/cluster") {
 		var clusterUpdate connectpb.ClusterUpdate
 		if err := proto.Unmarshal(msg.Payload, &clusterUpdate); err != nil {

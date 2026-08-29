@@ -966,9 +966,7 @@ func (p *AppPlayer) stopPlayback(ctx context.Context) error {
 
 	p.schedulePrefetchNext()
 
-	if p.app.cfg.ZeroconfEnabled {
-		p.logout <- p
-	}
+	p.requestLogout()
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeInactive,
