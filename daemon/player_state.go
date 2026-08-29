@@ -238,6 +238,15 @@ func (p *AppPlayer) initState() {
 // the autoplay endpoint as the seed for a station.
 const maxAutoplaySeedTracks = 50
 
+// invalidateUpcoming forgets whatever was going to play next: any prefetch
+// still running has its result thrown away rather than switched or faded into.
+func (p *AppPlayer) invalidateUpcoming() {
+	p.loadGen++
+	p.secondaryStream = nil
+	p.secondarySource = nil
+	p.player.SetSecondaryStream(nil)
+}
+
 // publishSnapshot reports where the track list now stands: what is playing and
 // what surrounds it.
 func (p *AppPlayer) publishSnapshot(snap *tracks.Snapshot) {

@@ -263,7 +263,6 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		cancel:          playerCancel,
 		stop:            make(chan struct{}, 1),
 		logout:          app.logoutCh,
-		countryCode:     new(string),
 		volumeUpdate:    make(chan float32, 1),
 		playbackReadyCh: make(chan struct{}),
 	}
@@ -297,6 +296,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	}
 
 	appPlayer.initState()
+	appPlayer.loader = newLoaderLane(app.log)
 	appPlayer.statePush = newStatePushLane(app.log, appPlayer.sess.Spclient(), app.deviceId)
 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{
@@ -315,7 +315,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 		CrossfadeDuration: time.Duration(app.cfg.CrossfadeDuration) * time.Millisecond,
 
-		CountryCode: appPlayer.countryCode,
+		CountryCode: appPlayer.CountryCode,
 
 		AudioBackend:              app.cfg.AudioBackend,
 		AudioBackendRuntimeSocket: app.cfg.AudioBackendRuntimeSocket,

@@ -50,7 +50,7 @@ type Player struct {
 	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
 	normalisationPregain      float32
-	countryCode               *string
+	countryCode               func() string
 
 	sp       *spclient.Spclient
 	audioKey *audio.KeyProvider
@@ -132,8 +132,10 @@ type Options struct {
 	// a track change. Zero disables crossfading.
 	CrossfadeDuration time.Duration
 
-	// CountryCode specifies the country code to use for media restrictions.
-	CountryCode *string
+	// CountryCode reports the country code to use for media restrictions. It is
+	// read while building a stream, which happens off the daemon's player loop,
+	// so it is a function rather than a pointer the daemon writes through.
+	CountryCode func() string
 
 	// AudioBackend specifies the audio backend to use (alsa, pulseaudio, etc).
 	AudioBackend string
@@ -710,13 +712,13 @@ func (p *Player) getUnrestrictedTrack(ctx context.Context, spotId librespot.Spot
 	}
 
 	media := librespot.NewMediaFromTrack(&trackMeta)
-	if !isMediaRestricted(media, *p.countryCode) {
+	if !isMediaRestricted(media, p.countryCode()) {
 		return &trackMeta, nil
 	}
 
 	for _, alt := range trackMeta.Alternative {
 		media = librespot.NewMediaFromTrack(alt)
-		if !isMediaRestricted(media, *p.countryCode) {
+		if !isMediaRestricted(media, p.countryCode()) {
 			// Clear alternatives to avoid confusion
 			trackMeta.Alternative = nil
 
@@ -798,7 +800,7 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 
 		media = librespot.NewMediaFromEpisode(&episodeMeta)
-		if isMediaRestricted(media, *p.countryCode) {
+		if isMediaRestricted(media, p.countryCode()) {
 			return nil, librespot.ErrMediaRestricted
 		}
 

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/devgianlu/go-librespot/mpris"
@@ -42,6 +43,9 @@ type AppPlayer struct {
 	initialVolumeOnce sync.Once
 	volumeUpdate      chan float32
 
+	loader  *loaderLane
+	loadGen uint64
+
 	statePush         *statePushLane
 	stateTimer        *time.Timer
 	stateDirty        bool
@@ -52,8 +56,11 @@ type AppPlayer struct {
 
 	spotConnId string
 
-	prodInfo    *ProductInfo
-	countryCode *string
+	prodInfo *ProductInfo
+
+	// countryCode is written here on the player loop and read from the loader
+	// lane while a stream is being built.
+	countryCode atomic.Pointer[string]
 
 	hasSpotConnId          bool
 	hasInitialConnectState bool
@@ -121,6 +128,15 @@ func (p *AppPlayer) requestLogout() {
 	})
 }
 
+// CountryCode reports the country the account is registered in, empty until the
+// accesspoint has said. Safe to call from any goroutine.
+func (p *AppPlayer) CountryCode() string {
+	if code := p.countryCode.Load(); code != nil {
+		return *code
+	}
+	return ""
+}
+
 func (p *AppPlayer) playbackReady() bool {
 	select {
 	case <-p.playbackReadyCh:
@@ -156,7 +172,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 		p.prodInfo = &prod
 		return nil
 	case ap.PacketTypeCountryCode:
-		*p.countryCode = string(payload)
+		p.countryCode.Store(pointer(string(payload)))
 		p.hasCountryCode = true
 		p.notifyPlaybackReadyIfNeeded()
 		return nil
@@ -784,6 +800,7 @@ func (p *AppPlayer) Close() {
 	p.closeOnce.Do(func() {
 		p.cancel()
 		p.stop <- struct{}{}
+		p.loader.close()
 		p.statePush.close()
 		p.player.Close()
 		p.sess.Close()
@@ -926,6 +943,8 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 		case <-volumeTimer.C:
 			// We've gone some time without update, send the new value now.
 			p.volumeUpdated()
+		case res := <-p.loader.results:
+			p.applyLoaderResult(res)
 		case res := <-p.statePush.results:
 			p.applyStatePushResult(res)
 		case <-p.stateTimer.C:

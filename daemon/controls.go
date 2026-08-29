@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -22,11 +23,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// prefetchNext queues the stream for whatever plays next, so that the
+// transition into it is seamless. Only picking the track happens here; fetching
+// it runs on the loader lane, because a prefetch is a full track load — audio
+// key, storage resolve, first chunk, and any narration around it.
 func (p *AppPlayer) prefetchNext(ctx context.Context) {
-	// Limit ourselves to 30 seconds for prefetching
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
 	var nextUri string
 	var nextTrackMetadata map[string]string
 	if p.state.player.Options.RepeatingTrack {
@@ -63,25 +64,52 @@ func (p *AppPlayer) prefetchNext(ctx context.Context) {
 
 	p.app.log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
-	p.secondaryStream, err = p.player.NewStream(ctx, p.app.client, *nextId, p.app.cfg.Bitrate, 0)
-	if err != nil {
-		p.app.log.WithError(err).WithField("uri", nextId.String()).Warnf("failed prefetching %s stream", nextId.Type())
-		return
+	// Reaching a prefetched track always means arriving in turn, hence the
+	// introduction rather than the jump line.
+	metadata := maps.Clone(nextTrackMetadata)
+	p.loader.submit(loaderJob{
+		name:  "prefetch " + nextId.Uri(),
+		class: classPrefetch,
+		gen:   p.loadGen,
+		run: func(ctx context.Context) loaderResult {
+			stream, err := p.player.NewStream(ctx, p.app.client, *nextId, p.app.cfg.Bitrate, 0)
+			if err != nil {
+				return loaderResult{err: fmt.Errorf("failed prefetching %s stream: %w", nextId.Type(), err)}
+			}
+
+			// Narration is prefetched with the track. The player promotes this
+			// source the instant the current one ends, so if it were the bare
+			// track the music would be heard for however long the synthesis
+			// takes before the load replaces it.
+			source := p.narrate(ctx, metadata, nextId.Uri(), stream.Source, narrationIntroPrefix)
+
+			return loaderResult{
+				commit:  func(p *AppPlayer) { p.commitPrefetch(stream, source) },
+				discard: func() { closeSource(source) },
+			}
+		},
+	})
+}
+
+// closeSource releases a source the daemon built but is not going to play.
+// Decoders disagree on whether Close returns an error, so both shapes are tried.
+func closeSource(source librespot.AudioSource) {
+	switch c := source.(type) {
+	case interface{ Close() error }:
+		_ = c.Close()
+	case interface{ Close() }:
+		c.Close()
 	}
+}
 
-	// Narration is prefetched with the track. The player promotes this source
-	// the instant the current one ends, so if it were the bare track the music
-	// would be heard for however long the synthesis takes before the load
-	// replaces it. Reaching a prefetched track always means arriving in turn,
-	// hence the introduction rather than the jump line.
-	p.secondarySource = p.narrate(ctx, nextTrackMetadata, nextId.Uri(),
-		p.secondaryStream.Source, narrationIntroPrefix)
+func (p *AppPlayer) commitPrefetch(stream *player.Stream, source librespot.AudioSource) {
+	p.secondaryStream = stream
+	p.secondarySource = source
+	p.player.SetSecondaryStream(source)
 
-	p.player.SetSecondaryStream(p.secondarySource)
-
-	p.app.log.WithField("uri", nextId.Uri()).
-		Infof("prefetched %s %s (duration: %dms)", nextId.Type(),
-			strconv.QuoteToGraphic(p.secondaryStream.Media.Name()), p.secondaryStream.Media.Duration())
+	p.app.log.WithField("uri", stream.RequestedId.Uri()).
+		Infof("prefetched %s %s (duration: %dms)", stream.RequestedId.Type(),
+			strconv.QuoteToGraphic(stream.Media.Name()), stream.Media.Duration())
 }
 
 func (p *AppPlayer) schedulePrefetchNext() {
@@ -419,8 +447,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 		// The prefetched stream (if any) is not the track being loaded: clear
 		// it from the player too, so an upcoming track change cannot switch
 		// or fade into a stale stream.
-		p.secondaryStream = nil
-		p.player.SetSecondaryStream(nil)
+		p.invalidateUpcoming()
 		prefetched = false
 
 		var err error
@@ -561,8 +588,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 	if requiresUpdate {
 		// Repeat/shuffle changes alter which track comes next; a stream
 		// prefetched under the old plan must not be switched or faded into.
-		p.secondaryStream = nil
-		p.player.SetSecondaryStream(nil)
+		p.invalidateUpcoming()
 		p.schedulePrefetchNext()
 
 		p.updateState()
@@ -587,8 +613,7 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 
 	// The queued track plays next: a stream prefetched under the old plan
 	// must not be switched or faded into.
-	p.secondaryStream = nil
-	p.player.SetSecondaryStream(nil)
+	p.invalidateUpcoming()
 	p.schedulePrefetchNext()
 }
 
@@ -604,8 +629,7 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 
 	// The upcoming track may have changed: a stream prefetched under the old
 	// plan must not be switched or faded into.
-	p.secondaryStream = nil
-	p.player.SetSecondaryStream(nil)
+	p.invalidateUpcoming()
 	p.schedulePrefetchNext()
 }
 
