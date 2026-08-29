@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -547,47 +546,6 @@ func TestApiReopenOutput(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.Equal(t, "", ts.request().Data)
 	})
-}
-
-func TestApiWebApiPassesThroughMethodPathAndQuery(t *testing.T) {
-	ts := newTestServer(t, func(ApiRequest) (any, error) {
-		return []byte("raw-bytes"), nil
-	})
-
-	resp := ts.do(http.MethodGet, "/web-api/v1/me/player?market=from_token&limit=5", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "application/octet-stream", resp.Header.Get("Content-Type"))
-	require.Equal(t, "raw-bytes", body(t, resp))
-
-	req := ts.request()
-	require.Equal(t, ApiRequestTypeWebApi, req.Type)
-	data := req.Data.(ApiRequestDataWebApi)
-	require.Equal(t, http.MethodGet, data.Method)
-	require.Equal(t, "v1/me/player", data.Path)
-	require.Equal(t, "from_token", data.Query.Get("market"))
-	require.Equal(t, "5", data.Query.Get("limit"))
-}
-
-// /web-api/ is the one route registered by hand alongside the generated mux,
-// so check it still wins for every method and for paths deeper than the single
-// segment an OpenAPI path template could have described.
-func TestApiWebApiRoutingIsNotShadowedByGeneratedRoutes(t *testing.T) {
-	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
-		for _, path := range []string{"/web-api/v1", "/web-api/v1/me/player/devices"} {
-			t.Run(method+path, func(t *testing.T) {
-				ts := newTestServer(t, func(ApiRequest) (any, error) { return []byte("ok"), nil })
-
-				resp := ts.do(method, path, nil)
-				require.Equal(t, http.StatusOK, resp.StatusCode)
-
-				req := ts.request()
-				require.Equal(t, ApiRequestTypeWebApi, req.Type)
-				data := req.Data.(ApiRequestDataWebApi)
-				require.Equal(t, method, data.Method)
-				require.Equal(t, strings.TrimPrefix(path, "/web-api/"), data.Path)
-			})
-		}
-	}
 }
 
 func TestApiErrorsMapToStatusCodes(t *testing.T) {

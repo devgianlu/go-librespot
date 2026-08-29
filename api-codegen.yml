@@ -10,13 +10,3 @@ compatibility:
   # type name keeps "unknown" and "" out of the package scope as bare Unknown
   # and Empty.
   always-prefix-enum-values: true
-output-options:
-  # /web-api/{path} is a catch-all proxy: the path continues for any number of
-  # segments, which an OpenAPI path template cannot express and the generated
-  # router would therefore mis-route. It stays documented in the spec but its
-  # route is registered by hand in serve().
-  exclude-operation-ids:
-    - webApiGet
-    - webApiPost
-    - webApiPut
-    - webApiDelete

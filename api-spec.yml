@@ -376,66 +376,6 @@ paths:
       responses:
         101:
           description: Switching protocols to WebSocket
-  # Everything under /web-api/ is proxied verbatim to api.spotify.com with the
-  # session's bearer token attached, so the path continues for an arbitrary
-  # number of segments and every method is forwarded. OpenAPI can only describe
-  # a single path segment, so these operations are excluded from route
-  # generation (see api-codegen.yml) and the prefix is registered by hand; they
-  # are documented here so the spec still describes the whole API.
-  /web-api/{path}:
-    parameters:
-      - name: path
-        in: path
-        required: true
-        description: >-
-          The Spotify Web API path to call, for example `v1/me/player`. May
-          span several segments. The query string is forwarded as-is.
-        schema:
-          type: string
-    get:
-      operationId: webApiGet
-      description: Proxy a GET to the Spotify Web API
-      responses:
-        200:
-          description: The response from the Spotify Web API, forwarded verbatim
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-    post:
-      operationId: webApiPost
-      description: Proxy a POST to the Spotify Web API
-      responses:
-        200:
-          description: The response from the Spotify Web API, forwarded verbatim
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-    put:
-      operationId: webApiPut
-      description: Proxy a PUT to the Spotify Web API
-      responses:
-        200:
-          description: The response from the Spotify Web API, forwarded verbatim
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
-    delete:
-      operationId: webApiDelete
-      description: Proxy a DELETE to the Spotify Web API
-      responses:
-        200:
-          description: The response from the Spotify Web API, forwarded verbatim
-          content:
-            application/octet-stream:
-              schema:
-                type: string
-                format: binary
   /set_device_name:
     post:
       operationId: setDeviceName

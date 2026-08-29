@@ -1,15 +1,11 @@
 package session
 
 import (
-	"context"
-	"github.com/devgianlu/go-librespot/mercury"
-	"github.com/devgianlu/go-librespot/player"
-	"net/http"
-	"net/url"
-
 	"github.com/devgianlu/go-librespot/ap"
 	"github.com/devgianlu/go-librespot/audio"
 	"github.com/devgianlu/go-librespot/dealer"
+	"github.com/devgianlu/go-librespot/mercury"
+	"github.com/devgianlu/go-librespot/player"
 	"github.com/devgianlu/go-librespot/spclient"
 )
 
@@ -43,8 +39,4 @@ func (s *Session) Accesspoint() *ap.Accesspoint {
 
 func (s *Session) Mercury() *mercury.Client {
 	return s.hg
-}
-
-func (s *Session) WebApi(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
-	return s.sp.WebApiRequest(ctx, method, path, query, header, body)
 }
