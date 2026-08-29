@@ -26,6 +26,17 @@ import (
 	"github.com/devgianlu/go-librespot/session"
 )
 
+// AppPlayer owns the player's state and is the only thing that may touch it.
+// Everything it holds is read and written from the one goroutine running Run,
+// with no locking, which is what keeps the state consistent without any.
+//
+// The rule that makes that work: nothing reached from Run's select may block.
+// Anything that talks to the network, the disk or a peer belongs on one of the
+// lanes — the loader for track and context work, the state pusher for
+// connect-state, a detached goroutine for what nobody waits on — and comes back
+// as a result applied here. A handler that blocks stalls playback control,
+// stops the dealer socket being read, and delays the state pushes controllers
+// rely on to know the device is alive.
 type AppPlayer struct {
 	app  *App
 	sess *session.Session
@@ -187,11 +198,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 	}
 }
 
-func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message) error {
-	// Limit ourselves to 30 seconds for handling dealer messages
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
+func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 	if strings.HasPrefix(msg.Uri, "hm://pusher/v1/connections/") {
 		p.spotConnId = msg.Headers["Spotify-Connection-Id"]
 		p.hasSpotConnId = p.spotConnId != ""
@@ -246,7 +253,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 	return nil
 }
 
-func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestPayload) error {
+func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	p.state.lastCommand = &req
 
 	p.app.log.Debugf("handling %s player command from %s", req.Command.Endpoint, req.SentByDeviceId)
@@ -360,9 +367,9 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 
 		return nil
 	case "pause":
-		return p.pause(ctx)
+		return p.pause()
 	case "resume":
-		return p.play(ctx)
+		return p.play()
 	case "seek_to":
 		var position int64
 		if req.Command.Relative == "current" {
@@ -381,15 +388,15 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			return nil
 		}
 
-		if err := p.seek(ctx, position); err != nil {
+		if err := p.seek(position); err != nil {
 			return fmt.Errorf("failed seeking stream: %w", err)
 		}
 
 		return nil
 	case "skip_prev":
-		return p.skipPrev(ctx, req.Command.Options.AllowSeeking)
+		return p.skipPrev(req.Command.Options.AllowSeeking)
 	case "skip_next":
-		return p.skipNext(ctx, req.Command.Track)
+		return p.skipNext(req.Command.Track)
 	case "update_context":
 		if req.Command.Context.Uri != p.state.player.ContextUri {
 			p.app.log.Warnf("ignoring context update for wrong uri: %s", req.Command.Context.Uri)
@@ -408,24 +415,24 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		return nil
 	case "set_repeating_context":
 		val := req.Command.Value.(bool)
-		p.setOptions(ctx, &val, nil, nil)
+		p.setOptions(&val, nil, nil)
 		return nil
 	case "set_repeating_track":
 		val := req.Command.Value.(bool)
-		p.setOptions(ctx, nil, &val, nil)
+		p.setOptions(nil, &val, nil)
 		return nil
 	case "set_shuffling_context":
 		val := req.Command.Value.(bool)
-		p.setOptions(ctx, nil, nil, &val)
+		p.setOptions(nil, nil, &val)
 		return nil
 	case "set_options":
-		p.setOptions(ctx, req.Command.RepeatingContext, req.Command.RepeatingTrack, req.Command.ShufflingContext)
+		p.setOptions(req.Command.RepeatingContext, req.Command.RepeatingTrack, req.Command.ShufflingContext)
 		return nil
 	case "set_queue":
-		p.setQueue(ctx, req.Command.PrevTracks, req.Command.NextTracks)
+		p.setQueue(req.Command.PrevTracks, req.Command.NextTracks)
 		return nil
 	case "add_to_queue":
-		p.addToQueue(ctx, req.Command.Track)
+		p.addToQueue(req.Command.Track)
 		return nil
 	case "set_sleep_timer":
 		// Only one timer (of either mode) is active at a time: stop/drain
@@ -481,25 +488,17 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 	}
 }
 
-func (p *AppPlayer) handleDealerRequest(ctx context.Context, req dealer.Request) error {
-	// Limit ourselves to 30 seconds for handling dealer requests
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
+func (p *AppPlayer) handleDealerRequest(req dealer.Request) error {
 	switch req.MessageIdent {
 	case "hm://connect-state/v1/player/command":
-		return p.handlePlayerCommand(ctx, req.Payload)
+		return p.handlePlayerCommand(req.Payload)
 	default:
 		p.app.log.Warnf("unknown dealer request: %s", req.MessageIdent)
 		return nil
 	}
 }
 
-func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, error) {
-	// Limit ourselves to 30 seconds for handling API requests
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
+func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	switch req.Type {
 	case ApiRequestTypeRoot:
 		return &ApiRoot{PlaybackReady: p.playbackReady()}, nil
@@ -526,19 +525,19 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 		return resp, nil
 	case ApiRequestTypeResume:
-		_ = p.play(ctx)
+		_ = p.play()
 		return nil, nil
 	case ApiRequestTypePause:
-		_ = p.pause(ctx)
+		_ = p.pause()
 		return nil, nil
 	case ApiRequestTypeStop:
 		p.stopPlayback()
 		return nil, nil
 	case ApiRequestTypePlayPause:
 		if p.state.player.IsPaused {
-			_ = p.play(ctx)
+			_ = p.play()
 		} else {
-			_ = p.pause(ctx)
+			_ = p.pause()
 		}
 		return nil, nil
 	case ApiRequestTypeSeek:
@@ -551,17 +550,17 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 			position = data.Position
 		}
 
-		_ = p.seek(ctx, position)
+		_ = p.seek(position)
 		return nil, nil
 	case ApiRequestTypePrev:
-		_ = p.skipPrev(ctx, true)
+		_ = p.skipPrev(true)
 		return nil, nil
 	case ApiRequestTypeNext:
 		data := req.Data.(ApiNext)
 		if data.Uri != nil {
-			_ = p.skipNext(ctx, &connectpb.ContextTrack{Uri: *data.Uri})
+			_ = p.skipNext(&connectpb.ContextTrack{Uri: *data.Uri})
 		} else {
-			_ = p.skipNext(ctx, nil)
+			_ = p.skipNext(nil)
 		}
 		return nil, nil
 	case ApiRequestTypePlay:
@@ -626,11 +625,11 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 							return
 						}
 
-						if err := p.seek(ctx, data.Position); err != nil {
+						if err := p.seek(data.Position); err != nil {
 							p.app.log.WithError(err).Warnf("failed seeking to initial position %dms", data.Position)
 						}
 						if !data.Paused {
-							if err := p.play(ctx); err != nil {
+							if err := p.play(); err != nil {
 								p.app.log.WithError(err).Warnf("failed resuming after initial seek")
 							}
 						}
@@ -661,18 +660,18 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
 		val := req.Data.(bool)
-		p.setOptions(ctx, &val, nil, nil)
+		p.setOptions(&val, nil, nil)
 		return nil, nil
 	case ApiRequestTypeSetRepeatingTrack:
 		val := req.Data.(bool)
-		p.setOptions(ctx, nil, &val, nil)
+		p.setOptions(nil, &val, nil)
 		return nil, nil
 	case ApiRequestTypeSetShufflingContext:
 		val := req.Data.(bool)
-		p.setOptions(ctx, nil, nil, &val)
+		p.setOptions(nil, nil, &val)
 		return nil, nil
 	case ApiRequestTypeAddToQueue:
-		p.addToQueue(ctx, &connectpb.ContextTrack{Uri: req.Data.(string)})
+		p.addToQueue(&connectpb.ContextTrack{Uri: req.Data.(string)})
 		return nil, nil
 	case ApiRequestTypeToken:
 		// Nothing here touches player state, so it is answered from its own
@@ -690,7 +689,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 
 		return nil, errReplyDeferred
 	case ApiRequestSetDeviceName:
-		p.setDeviceName(ctx, req.Data.(string))
+		p.setDeviceName(req.Data.(string))
 		return nil, nil
 	case ApiRequestTypeReopenOutput:
 		if err := p.player.ReopenOutput(req.Data.(string)); err != nil {
@@ -702,7 +701,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 	}
 }
 
-func (p *AppPlayer) setDeviceName(ctx context.Context, name string) {
+func (p *AppPlayer) setDeviceName(name string) {
 	p.app.SetDeviceName(name)
 
 	p.state.device.Name = name
@@ -713,25 +712,21 @@ func pointer[T any](d T) *T {
 	return &d
 }
 
-func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2PlayerCommand) error {
-	// Limit ourselves to 30 seconds for handling mpris commands
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
+func (p *AppPlayer) handleMprisEvent(req mpris.MediaPlayer2PlayerCommand) error {
 	switch req.Type {
 	case mpris.MediaPlayer2PlayerCommandTypeNext:
-		return p.skipNext(ctx, nil)
+		return p.skipNext(nil)
 	case mpris.MediaPlayer2PlayerCommandTypePrevious:
-		return p.skipPrev(ctx, true)
+		return p.skipPrev(true)
 	case mpris.MediaPlayer2PlayerCommandTypePlay:
-		return p.play(ctx)
+		return p.play()
 	case mpris.MediaPlayer2PlayerCommandTypePause:
-		return p.pause(ctx)
+		return p.pause()
 	case mpris.MediaPlayer2PlayerCommandTypePlayPause:
 		if p.state.player.IsPaused {
-			return p.play(ctx)
+			return p.play()
 		} else {
-			return p.pause(ctx)
+			return p.pause()
 		}
 	case mpris.MediaPlayer2PlayerCommandTypeStop:
 		p.stopPlayback()
@@ -741,18 +736,18 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 		dt := req.Argument
 		switch dt {
 		case mpris.None:
-			p.setOptions(ctx, pointer(false), pointer(false), nil)
+			p.setOptions(pointer(false), pointer(false), nil)
 		case mpris.Playlist:
-			p.setOptions(ctx, pointer(true), pointer(false), nil)
+			p.setOptions(pointer(true), pointer(false), nil)
 		case mpris.Track:
-			p.setOptions(ctx, pointer(true), pointer(true), nil)
+			p.setOptions(pointer(true), pointer(true), nil)
 		default:
 			p.app.log.Warnf("mpris loop status argument is invalid (%s)", req.Argument)
 		}
 		return nil
 	case mpris.MediaPlayer2PlayerCommandShuffleChanged:
 		sh := req.Argument.(bool)
-		p.setOptions(ctx, nil, nil, &sh)
+		p.setOptions(nil, nil, &sh)
 		return nil
 	case mpris.MediaPlayer2PlayerCommandVolumeChanged:
 		volRelative := req.Argument.(float64)
@@ -773,10 +768,10 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 		}
 
 		newPositionAbs := arg.PositionUs / 1000
-		return p.seek(ctx, newPositionAbs)
+		return p.seek(newPositionAbs)
 	case mpris.MediaPlayer2PlayerCommandTypeSeek:
 		newPosAbs := p.player.PositionMs() + req.Argument.(int64)/1000
-		return p.seek(ctx, newPosAbs)
+		return p.seek(newPosAbs)
 	case mpris.MediaPlayer2PlayerCommandTypeOpenUri, mpris.MediaPlayer2PlayerCommandRateChanged:
 		p.app.log.Warnf("unimplemented mpris event %d", req.Type)
 		return fmt.Errorf("unimplemented mpris event %d", req.Type)
@@ -862,7 +857,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 				continue
 			}
 
-			if err := p.handleDealerMessage(p.ctx, msg); err != nil {
+			if err := p.handleDealerMessage(msg); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer message")
 			}
 		case req, ok := <-reqRecv:
@@ -874,7 +869,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 				continue
 			}
 
-			if err := p.handleDealerRequest(p.ctx, req); err != nil {
+			if err := p.handleDealerRequest(req); err != nil {
 				p.app.log.WithError(err).Warn("failed handling dealer request")
 				req.Reply(false)
 			} else {
@@ -887,7 +882,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 				continue
 			}
 
-			data, err := p.handleApiRequest(p.ctx, req)
+			data, err := p.handleApiRequest(req)
 			if errors.Is(err, errReplyDeferred) {
 				continue
 			}
@@ -900,7 +895,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			}
 
 			p.app.log.Tracef("new mpris message %v", mprisReq)
-			err := p.handleMprisEvent(p.ctx, mprisReq)
+			err := p.handleMprisEvent(mprisReq)
 			dbusError := mpris.MediaPlayer2PlayerCommandResponse{
 				Err: &dbus.Error{},
 			}
@@ -920,7 +915,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 				continue
 			}
 
-			p.handlePlayerEvent(p.ctx, &ev)
+			p.handlePlayerEvent(&ev)
 		case <-p.prefetchTimer.C:
 			p.prefetchNext()
 		case <-p.sleepTimer.C:
@@ -928,7 +923,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			// up - so the app stops showing the timer as active in the same
 			// state push that reports playback paused.
 			p.state.player.SleepTimer = nil
-			if err := p.pause(p.ctx); err != nil {
+			if err := p.pause(); err != nil {
 				p.app.log.WithError(err).Warn("failed pausing playback for sleep timer")
 			}
 		case volume := <-p.volumeUpdate:

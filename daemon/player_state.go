@@ -234,10 +234,6 @@ func (p *AppPlayer) initState() {
 	p.state.reset()
 }
 
-// listWalkTimeout bounds a walk of the track list started from somewhere with no
-// deadline of its own.
-const listWalkTimeout = 30 * time.Second
-
 // maxAutoplaySeedTracks bounds how many recently played tracks are offered to
 // the autoplay endpoint as the seed for a station.
 const maxAutoplaySeedTracks = 50

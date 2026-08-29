@@ -179,11 +179,7 @@ func (p *AppPlayer) emitMprisUpdate(playbackStatus mpris.PlaybackStatus) {
 	)
 }
 
-func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
-	// Limit ourselves to 30 seconds for handling player events
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
+func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 	switch ev.Type {
 	case player.EventTypePlay:
 		p.state.player.IsPlaying = true
@@ -285,7 +281,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		if p.sleepAtEndOfTrack {
 			p.sleepAtEndOfTrack = false
 			p.state.player.SleepTimer = nil
-			if err := p.pause(ctx); err != nil {
+			if err := p.pause(); err != nil {
 				p.app.log.WithError(err).Warn("failed pausing playback for sleep timer")
 			}
 			return
@@ -783,7 +779,7 @@ func (p *AppPlayer) commitLoad(stream *player.Stream, uri string, paused bool, t
 	})
 }
 
-func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
+func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
 	var requiresUpdate bool
 	if repeatingContext != nil && *repeatingContext != p.state.player.Options.RepeatingContext {
 		p.state.player.Options.RepeatingContext = *repeatingContext
@@ -856,7 +852,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 	}
 }
 
-func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrack) {
+func (p *AppPlayer) addToQueue(track *connectpb.ContextTrack) {
 	if p.state.tracks == nil {
 		p.app.log.Warnf("cannot add to queue without a context")
 		return
@@ -889,7 +885,7 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 		})
 }
 
-func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
+func (p *AppPlayer) setQueue(prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
 	if p.state.tracks == nil {
 		p.app.log.Warnf("cannot set queue without a context")
 		return
@@ -916,7 +912,7 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 		})
 }
 
-func (p *AppPlayer) play(ctx context.Context) error {
+func (p *AppPlayer) play() error {
 	if p.primaryStream == nil {
 		// Asked for during a load: record it so the track starts playing when
 		// it lands, rather than losing the command.
@@ -952,7 +948,7 @@ func (p *AppPlayer) play(ctx context.Context) error {
 	return nil
 }
 
-func (p *AppPlayer) pause(ctx context.Context) error {
+func (p *AppPlayer) pause() error {
 	if p.primaryStream == nil {
 		// See play: a pause during a load is applied when the load lands.
 		if p.loadInFlight {
@@ -984,7 +980,7 @@ func (p *AppPlayer) pause(ctx context.Context) error {
 	return nil
 }
 
-func (p *AppPlayer) seek(ctx context.Context, position int64) error {
+func (p *AppPlayer) seek(position int64) error {
 	if p.primaryStream == nil {
 		return fmt.Errorf("no primary stream")
 	}
@@ -1024,9 +1020,9 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 	return nil
 }
 
-func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
+func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 	if allowSeeking && p.player.PositionMs() > 3000 {
-		return p.seek(ctx, 0)
+		return p.seek(0)
 	}
 
 	p.sess.Events().OnPlayerSkipBackward(p.primaryStream, p.player.PositionMs())
@@ -1063,7 +1059,7 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 	return nil
 }
 
-func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack) error {
+func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
 	p.sess.Events().OnPlayerSkipForward(p.primaryStream, p.player.PositionMs(), track != nil)
 
 	if track == nil {

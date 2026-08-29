@@ -172,7 +172,7 @@ func (p *AppPlayer) drainPendingPlayerEvents() {
 	p.pendingPlayerEvents = nil
 
 	for i := range pending {
-		p.handlePlayerEvent(p.ctx, &pending[i])
+		p.handlePlayerEvent(&pending[i])
 	}
 }
 
