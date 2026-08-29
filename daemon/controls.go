@@ -137,7 +137,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.player.IsPlaying = true
 		p.state.setPaused(false)
 		p.state.player.IsBuffering = false
-		p.updateState(ctx)
+		p.updateState()
 
 		p.sess.Events().OnPlayerPlay(
 			p.primaryStream,
@@ -163,7 +163,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.player.IsPlaying = true
 		p.state.setPaused(false)
 		p.state.player.IsBuffering = false
-		p.updateState(ctx)
+		p.updateState()
 
 		p.sess.Events().OnPlayerResume(p.primaryStream, p.state.trackPosition())
 
@@ -182,7 +182,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 		p.state.player.IsPlaying = true
 		p.state.setPaused(true)
 		p.state.player.IsBuffering = false
-		p.updateState(ctx)
+		p.updateState()
 
 		p.sess.Events().OnPlayerPause(
 			p.primaryStream,
@@ -394,7 +394,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	p.state.player.IsBuffering = true
 	p.state.player.IsPaused = paused
 	p.state.player.PlaybackSpeed = 0 // not progressing while buffering
-	p.updateState(ctx)
+	p.updateState()
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeWillPlay,
@@ -503,7 +503,7 @@ func (p *AppPlayer) loadCurrentTrack(ctx context.Context, paused, drop bool) err
 	p.state.player.IsPlaying = true
 	p.state.player.IsBuffering = false
 	p.state.setPaused(paused) // update IsPaused and PlaybackSpeed
-	p.updateState(ctx)
+	p.updateState()
 	p.schedulePrefetchNext()
 
 	p.app.server.Emit(&ApiEvent{
@@ -570,7 +570,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 		p.player.SetSecondaryStream(nil)
 		p.schedulePrefetchNext()
 
-		p.updateState(ctx)
+		p.updateState()
 	}
 }
 
@@ -589,7 +589,7 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 	p.state.tracks.AddToQueue(track)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
-	p.updateState(ctx)
+	p.updateState()
 
 	// The queued track plays next: a stream prefetched under the old plan
 	// must not be switched or faded into.
@@ -607,7 +607,7 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 	p.state.tracks.SetQueue(prev, next)
 	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
 	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, next)
-	p.updateState(ctx)
+	p.updateState()
 
 	// The upcoming track may have changed: a stream prefetched under the old
 	// plan must not be switched or faded into.
@@ -638,7 +638,7 @@ func (p *AppPlayer) play(ctx context.Context) error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.setPaused(false)
-	p.updateState(ctx)
+	p.updateState()
 	p.schedulePrefetchNext()
 
 	return nil
@@ -663,7 +663,7 @@ func (p *AppPlayer) pause(ctx context.Context) error {
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = streamPos
 	p.state.setPaused(true)
-	p.updateState(ctx)
+	p.updateState()
 	p.schedulePrefetchNext()
 
 	return nil
@@ -684,7 +684,7 @@ func (p *AppPlayer) seek(ctx context.Context, position int64) error {
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = position
-	p.updateState(ctx)
+	p.updateState()
 	p.schedulePrefetchNext()
 
 	p.sess.Events().OnPlayerSeek(p.primaryStream, oldPosition, position)
@@ -941,14 +941,8 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 // Send notification that the volume changed.
 // The original change can come from anywhere: from Spotify Connect, from the
 // REST API, or from a volume mixer.
-func (p *AppPlayer) volumeUpdated(ctx context.Context) {
-	// Limit ourselves to 5 seconds for handling volume updates
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	if err := p.putConnectState(ctx, connectpb.PutStateReason_VOLUME_CHANGED); err != nil {
-		p.app.log.WithError(err).Error("failed put state after volume change")
-	}
+func (p *AppPlayer) volumeUpdated() {
+	p.pushState(connectpb.PutStateReason_VOLUME_CHANGED)
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeVolume,
@@ -959,15 +953,13 @@ func (p *AppPlayer) volumeUpdated(ctx context.Context) {
 	})
 }
 
-func (p *AppPlayer) stopPlayback(ctx context.Context) error {
+func (p *AppPlayer) stopPlayback() {
 	p.player.Stop()
 	p.primaryStream = nil
 	p.secondaryStream = nil
 
 	p.state.reset()
-	if err := p.putConnectState(ctx, connectpb.PutStateReason_BECAME_INACTIVE); err != nil {
-		return fmt.Errorf("failed inactive state put: %w", err)
-	}
+	p.pushState(connectpb.PutStateReason_BECAME_INACTIVE)
 
 	p.schedulePrefetchNext()
 
@@ -976,6 +968,4 @@ func (p *AppPlayer) stopPlayback(ctx context.Context) error {
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeInactive,
 	})
-
-	return nil
 }

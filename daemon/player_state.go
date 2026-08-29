@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,6 +16,7 @@ import (
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
+	"google.golang.org/protobuf/proto"
 )
 
 type State struct {
@@ -255,9 +255,10 @@ func (p *AppPlayer) stateRetryDelay(err error) time.Duration {
 	return d - rand.N(d/5)
 }
 
-// updateState PUTs the latest connect-state, at most one per statePutMinInterval: immediately
-// and synchronously when the budget allows, else deferred to the timer so a burst coalesces.
-func (p *AppPlayer) updateState(ctx context.Context) {
+// updateState hands the latest connect-state to the push lane, at most one per
+// statePutMinInterval: immediately when the budget allows, else deferred to the
+// timer so a burst coalesces.
+func (p *AppPlayer) updateState() {
 	p.stateDirty = true
 	if p.statePutScheduled {
 		return
@@ -267,7 +268,7 @@ func (p *AppPlayer) updateState(ctx context.Context) {
 		p.stateTimer.Reset(wait)
 		return
 	}
-	p.flushState(ctx)
+	p.flushState()
 }
 
 func contextMetadata(fromCommand, fromResolver map[string]string) map[string]string {
@@ -277,11 +278,26 @@ func contextMetadata(fromCommand, fromResolver map[string]string) map[string]str
 	return metadata
 }
 
-func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutStateReason) error {
-	if reason == connectpb.PutStateReason_BECAME_INACTIVE {
-		return p.sess.Spclient().PutConnectStateInactive(ctx, p.spotConnId, false)
+// pushState hands the current connect state to the push lane. Runs on the Run
+// goroutine, and never blocks: the state is marshalled here so that the lane
+// carries bytes rather than protos this loop goes on mutating.
+func (p *AppPlayer) pushState(reason connectpb.PutStateReason) {
+	p.stateSeq++
+	push := statePush{seq: p.stateSeq, reason: reason, spotConnId: p.spotConnId}
+
+	if reason != connectpb.PutStateReason_BECAME_INACTIVE {
+		body, err := proto.Marshal(p.buildStateRequest(reason))
+		if err != nil {
+			p.app.log.WithError(err).Error("failed marshalling connect state")
+			return
+		}
+		push.body = body
 	}
 
+	p.statePush.submit(push)
+}
+
+func (p *AppPlayer) buildStateRequest(reason connectpb.PutStateReason) *connectpb.PutStateRequest {
 	putStateReq := &connectpb.PutStateRequest{
 		ClientSideTimestamp: uint64(time.Now().UnixMilli()),
 		MemberType:          connectpb.MemberType_CONNECT_STATE,
@@ -306,17 +322,38 @@ func (p *AppPlayer) putConnectState(ctx context.Context, reason connectpb.PutSta
 		putStateReq.LastCommandSentByDeviceId = p.state.lastCommand.SentByDeviceId
 	}
 
-	// finally send the state update
-	cluster, err := p.sess.Spclient().PutConnectState(ctx, p.spotConnId, putStateReq)
-	if err != nil {
-		return err
+	return putStateReq
+}
+
+// applyStatePushResult folds the outcome of a push back into the state. Runs on
+// the Run goroutine.
+func (p *AppPlayer) applyStatePushResult(res statePushResult) {
+	if res.publicIp != "" {
+		p.state.device.PublicIp = res.publicIp
 	}
 
-	if device := cluster.Device[p.app.deviceId]; device != nil && device.PublicIp != "" {
-		p.state.device.PublicIp = device.PublicIp
+	if res.err != nil {
+		p.app.log.WithError(res.err).Errorf("failed put state because %s", res.reason)
+
+		// Only the newest push is worth resending; an older one describes state
+		// that has already been superseded.
+		if res.seq == p.stateSeq {
+			p.stateDirty = true
+			p.stateRetries++
+			p.statePutScheduled = true
+			p.stateTimer.Reset(p.stateRetryDelay(res.err))
+		}
+		return
 	}
 
-	return nil
+	p.stateRetries = 0
+
+	// Any push registers the device, so playback readiness does not hinge on
+	// the initial one in particular having got through.
+	if !p.hasInitialConnectState {
+		p.hasInitialConnectState = true
+		p.notifyPlaybackReadyIfNeeded()
+	}
 }
 
 // coverImageSizes maps the ProvidedTrack metadata keys Spotify's clients look

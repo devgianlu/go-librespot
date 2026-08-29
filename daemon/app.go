@@ -280,6 +280,9 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.sleepTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.sleepTimer.Stop()
 
+	appPlayer.stateTimer = time.NewTimer(math.MaxInt64)
+	appPlayer.stateTimer.Stop()
+
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,
 		DeviceType:  app.deviceType,
@@ -294,6 +297,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	}
 
 	appPlayer.initState()
+	appPlayer.statePush = newStatePushLane(app.log, appPlayer.sess.Spclient(), app.deviceId)
 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{
 		Spclient: appPlayer.sess.Spclient(),

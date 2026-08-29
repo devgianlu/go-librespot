@@ -240,6 +240,14 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 	if err != nil {
 		return nil, fmt.Errorf("failed marshalling PutStateRequest: %w", err)
 	}
+
+	return c.PutConnectStateRaw(ctx, spotConnId, reqProto.PutStateReason, reqBody)
+}
+
+// PutConnectStateRaw PUTs an already marshalled PutStateRequest. Marshalling in
+// the caller lets it hand over a snapshot of state it goes on mutating, rather
+// than a proto this call would walk from another goroutine.
+func (c *Spclient) PutConnectStateRaw(ctx context.Context, spotConnId string, reason connectpb.PutStateReason, reqBody []byte) (*connectpb.Cluster, error) {
 	respBody, err := backoff.RetryWithData(func() ([]byte, error) {
 		resp, err := c.Request(
 			ctx,
@@ -277,7 +285,7 @@ func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqPr
 			}
 			return nil, reqErr
 		} else {
-			c.log.Debugf("put connect state because %s", reqProto.PutStateReason)
+			c.log.Debugf("put connect state because %s", reason)
 			return io.ReadAll(resp.Body)
 		}
 	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 2), ctx))

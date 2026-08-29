@@ -42,11 +42,13 @@ type AppPlayer struct {
 	initialVolumeOnce sync.Once
 	volumeUpdate      chan float32
 
+	statePush         *statePushLane
 	stateTimer        *time.Timer
 	stateDirty        bool
 	statePutScheduled bool
 	lastStatePut      time.Time
 	stateRetries      int
+	stateSeq          uint64
 
 	spotConnId string
 
@@ -173,13 +175,7 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		p.hasSpotConnId = p.spotConnId != ""
 		p.app.log.Debugf("received connection id: %s...%s", p.spotConnId[:16], p.spotConnId[len(p.spotConnId)-16:])
 
-		// put the initial state
-		if err := p.putConnectState(ctx, connectpb.PutStateReason_NEW_DEVICE); err != nil {
-			return fmt.Errorf("failed initial state put: %w", err)
-		}
-
-		p.hasInitialConnectState = true
-		p.notifyPlaybackReadyIfNeeded()
+		p.pushState(connectpb.PutStateReason_NEW_DEVICE)
 
 		if !p.app.cfg.ExternalVolume && len(p.app.cfg.MixerDevice) == 0 {
 			// update initial volume
@@ -221,7 +217,8 @@ func (p *AppPlayer) handleDealerMessage(ctx context.Context, msg dealer.Message)
 		}
 		p.app.log.Infof("playback was transferred to %s", name)
 
-		return p.stopPlayback(ctx)
+		p.stopPlayback()
+		return nil
 	}
 
 	return nil
@@ -291,7 +288,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		p.state.player.IsPlaying = true
 		p.state.player.IsBuffering = true
 		p.state.player.PlaybackSpeed = 0 // not progressing while buffering
-		p.flushState(ctx)
+		p.flushState()
 
 		// Seek to the transferred track, playing it ahead of the context if it
 		// cannot be located.
@@ -425,7 +422,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			p.state.player.ContextMetadata[k] = v
 		}
 
-		p.updateState(ctx)
+		p.updateState()
 		return nil
 	case "set_repeating_context":
 		val := req.Command.Value.(bool)
@@ -494,7 +491,7 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			p.state.player.SleepTimer = nil
 		}
 
-		p.updateState(ctx)
+		p.updateState()
 		return nil
 	default:
 		p.app.log.Warnf("unsupported player command %q payload: %s", req.Command.Endpoint, req.RawCommand)
@@ -553,7 +550,7 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		_ = p.pause(ctx)
 		return nil, nil
 	case ApiRequestTypeStop:
-		_ = p.stopPlayback(ctx)
+		p.stopPlayback()
 		return nil, nil
 	case ApiRequestTypePlayPause:
 		if p.state.player.IsPaused {
@@ -698,7 +695,7 @@ func (p *AppPlayer) setDeviceName(ctx context.Context, name string) {
 	p.app.SetDeviceName(name)
 
 	p.state.device.Name = name
-	p.updateState(ctx)
+	p.updateState()
 }
 
 func pointer[T any](d T) *T {
@@ -726,7 +723,8 @@ func (p *AppPlayer) handleMprisEvent(ctx context.Context, req mpris.MediaPlayer2
 			return p.pause(ctx)
 		}
 	case mpris.MediaPlayer2PlayerCommandTypeStop:
-		return p.stopPlayback(ctx)
+		p.stopPlayback()
+		return nil
 	case mpris.MediaPlayer2PlayerCommandLoopStatusChanged:
 		p.app.log.Tracef("mpris loop status argument %s", req.Argument)
 		dt := req.Argument
@@ -782,6 +780,7 @@ func (p *AppPlayer) Close() {
 	p.closeOnce.Do(func() {
 		p.cancel()
 		p.stop <- struct{}{}
+		p.statePush.close()
 		p.player.Close()
 		p.sess.Close()
 	})
@@ -802,9 +801,6 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 
 	volumeTimer := time.NewTimer(time.Minute)
 	volumeTimer.Stop() // don't emit a volume change event at start
-
-	p.stateTimer = time.NewTimer(time.Minute)
-	p.stateTimer.Stop() // armed on demand by updateState
 
 	// The accesspoint and the dealer only close their receivers after giving
 	// up on reconnecting, so losing either means the session is gone for good
@@ -925,32 +921,23 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			volumeTimer.Reset(100 * time.Millisecond)
 		case <-volumeTimer.C:
 			// We've gone some time without update, send the new value now.
-			p.volumeUpdated(p.ctx)
+			p.volumeUpdated()
+		case res := <-p.statePush.results:
+			p.applyStatePushResult(res)
 		case <-p.stateTimer.C:
 			p.statePutScheduled = false
 			if !p.stateDirty {
 				break
 			}
-			p.flushState(p.ctx)
+			p.flushState()
 		}
 	}
 }
 
-// flushState PUTs the latest connect-state and records the send time. A failed push is
-// rescheduled rather than dropped: the state it carried is the only copy Spotify would
-// have got, and nothing else resends it until the next transition happens to come along.
-// Runs on the Run goroutine.
-func (p *AppPlayer) flushState(ctx context.Context) {
-	p.lastStatePut = time.Now()
-	if err := p.putConnectState(ctx, connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
-		p.app.log.WithError(err).Error("failed put state after update")
-
-		p.stateRetries++
-		p.statePutScheduled = true
-		p.stateTimer.Reset(p.stateRetryDelay(err))
-		return
-	}
-
+// flushState hands the latest connect-state to the push lane and records the
+// send time. Runs on the Run goroutine.
+func (p *AppPlayer) flushState() {
 	p.stateDirty = false
-	p.stateRetries = 0
+	p.lastStatePut = time.Now()
+	p.pushState(connectpb.PutStateReason_PLAYER_STATE_CHANGED)
 }
