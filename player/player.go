@@ -775,16 +775,17 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 		}
 
 		if p.normalisationEnabled {
+			var params *audiofilespb.NormalizationParams
 			if p.normalisationUseAlbumGain {
-				normalisationFactor = calculateNormalisationFactor(
-					audioFilesResp.DefaultAlbumNormalizationParams,
-					p.normalisationPregain,
-				)
+				params = audioFilesResp.DefaultAlbumNormalizationParams
 			} else {
-				normalisationFactor = calculateNormalisationFactor(
-					audioFilesResp.DefaultFileNormalizationParams,
-					p.normalisationPregain,
-				)
+				params = audioFilesResp.DefaultFileNormalizationParams
+			}
+
+			if params != nil {
+				normalisationFactor = calculateNormalisationFactor(params, p.normalisationPregain)
+			} else {
+				normalisationFactor = 1
 			}
 		} else {
 			normalisationFactor = 1
