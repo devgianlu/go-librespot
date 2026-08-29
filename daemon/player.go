@@ -46,6 +46,13 @@ type AppPlayer struct {
 	loader  *loaderLane
 	loadGen uint64
 
+	// loadInFlight is set while a track load is outstanding. The player is
+	// handed its new stream from the loader lane, so the event announcing
+	// playback can reach the loop before the load has been recorded; holding
+	// those events until it has keeps handlers from seeing a half-loaded track.
+	loadInFlight        bool
+	pendingPlayerEvents []player.Event
+
 	statePush         *statePushLane
 	stateTimer        *time.Timer
 	stateDirty        bool
@@ -353,9 +360,11 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 
 		// load current track into stream — skip forward if the transferred track is unplayable
 		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.
-		if err := p.loadCurrentTrackOrSkip(ctx, pause, true); err != nil {
-			return fmt.Errorf("failed loading current track (transfer): %w", err)
-		}
+		p.loadCurrentTrackOrSkip(pause, true, func(err error) {
+			if err != nil {
+				p.app.log.WithError(err).Warn("failed loading current track (transfer)")
+			}
+		})
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeActive,
@@ -396,7 +405,12 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 			}
 		}
 
-		return p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true)
+		return p.loadContext(ctx, req.Command.Context, skipTo, req.Command.Options.InitiallyPaused, true,
+			func(err error) {
+				if err != nil {
+					p.app.log.WithError(err).Warn("failed loading context for play command")
+				}
+			})
 	case "pause":
 		return p.pause(ctx)
 	case "resume":
@@ -637,14 +651,19 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 		}
 
 		// When starting at a position, load paused and seek before unpausing so
-		// no audio plays from 0:00 while the track loads. loadContext returns
-		// once the track is loaded, so no polling is needed to time the seek.
+		// no audio plays from 0:00 while the track loads. The seek waits for the
+		// load to land rather than polling for it.
 		loadPaused := data.Paused || data.Position > 0
-		if err := p.loadContext(ctx, spotCtx, skipTo, loadPaused, true); err != nil {
-			return nil, fmt.Errorf("failed loading context: %w", err)
-		}
+		err = p.loadContext(ctx, spotCtx, skipTo, loadPaused, true, func(err error) {
+			if err != nil {
+				p.app.log.WithError(err).Warn("failed loading context")
+				return
+			}
 
-		if data.Position > 0 {
+			if data.Position <= 0 {
+				return
+			}
+
 			if err := p.seek(ctx, data.Position); err != nil {
 				p.app.log.WithError(err).Warnf("failed seeking to initial position %dms", data.Position)
 			}
@@ -653,6 +672,9 @@ func (p *AppPlayer) handleApiRequest(ctx context.Context, req ApiRequest) (any, 
 					p.app.log.WithError(err).Warnf("failed resuming after initial seek")
 				}
 			}
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed loading context: %w", err)
 		}
 
 		return nil, nil
@@ -918,6 +940,10 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 		case ev, ok := <-playerRecv:
 			if !ok {
 				playerRecv = nil
+				continue
+			}
+
+			if p.deferPlayerEvent(ev) {
 				continue
 			}
 

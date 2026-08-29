@@ -226,7 +226,7 @@ func TestApplyLoaderResultDiscardsSupersededWork(t *testing.T) {
 	p.applyLoaderResult(loaderResult{
 		gen:     2,
 		reply:   reply,
-		commit:  func(*AppPlayer) { committed = true },
+		commit:  func(*AppPlayer, error) { committed = true },
 		discard: func() { discarded = true },
 	})
 
@@ -238,11 +238,12 @@ func TestApplyLoaderResultDiscardsSupersededWork(t *testing.T) {
 	require.ErrorIs(t, err, ErrSuperseded)
 }
 
-// A job that failed still owes its caller the failure, and must not commit.
-func TestApplyLoaderResultReportsFailureWithoutCommitting(t *testing.T) {
+// A job that failed still reaches its commit, so whoever asked for the load
+// learns it did not happen, and still owes its caller the failure.
+func TestApplyLoaderResultReportsFailure(t *testing.T) {
 	p := &AppPlayer{app: &App{log: &librespot.NullLogger{}}, loadGen: 1}
 
-	var committed bool
+	var committed error
 	reply, answered := recordingReply(t)
 	boom := errors.New("boom")
 
@@ -251,10 +252,10 @@ func TestApplyLoaderResultReportsFailureWithoutCommitting(t *testing.T) {
 		name:   "load",
 		err:    boom,
 		reply:  reply,
-		commit: func(*AppPlayer) { committed = true },
+		commit: func(_ *AppPlayer, err error) { committed = err },
 	})
 
-	require.False(t, committed)
+	require.ErrorIs(t, committed, boom)
 
 	err, called := answered()
 	require.True(t, called)

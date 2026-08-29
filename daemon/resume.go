@@ -17,10 +17,21 @@ import (
 //
 // Only episodes have resume points; everything here is a no-op for tracks.
 
-// resumeTimeout bounds a resume point lookup or report. These run on the
-// player's own goroutine, so a stalled backend must not hold up playback: the
-// feature is best-effort and degrades to "start from the beginning".
+// resumeTimeout bounds a resume point lookup or report. The feature is
+// best-effort and degrades to "start from the beginning".
 const resumeTimeout = 10 * time.Second
+
+// goBestEffort runs fn off the player loop, for work whose result the daemon
+// does not need: it may fail, be slow, or be abandoned when the player closes,
+// with no effect on playback. fn must not touch player state — whatever it
+// needs is captured before the call.
+func (p *AppPlayer) goBestEffort(fn func(ctx context.Context)) {
+	go func() {
+		ctx, cancel := context.WithTimeout(p.ctx, resumeTimeout)
+		defer cancel()
+		fn(ctx)
+	}()
+}
 
 // resumeCurrentEpisode moves the pending start position of the current track
 // to its server-side resume point, if it is a partially listened episode.
@@ -60,7 +71,7 @@ func (p *AppPlayer) resumeCurrentEpisode(ctx context.Context) {
 }
 
 // reportResumePosition stores how far into an episode playback has got.
-func (p *AppPlayer) reportResumePosition(ctx context.Context, stream *player.Stream, positionMs int64) {
+func (p *AppPlayer) reportResumePosition(stream *player.Stream, positionMs int64) {
 	if stream == nil || stream.RequestedId.Type() != librespot.SpotifyIdTypeEpisode || positionMs <= 0 {
 		return
 	}
@@ -73,37 +84,37 @@ func (p *AppPlayer) reportResumePosition(ctx context.Context, stream *player.Str
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, resumeTimeout)
-	defer cancel()
+	id := stream.RequestedId
+	p.goBestEffort(func(ctx context.Context) {
+		if err := p.sess.Spclient().SetResumePositionMs(ctx, id, positionMs); err != nil {
+			p.app.log.WithError(err).WithField("uri", id.Uri()).
+				Warn("failed reporting episode resume point")
+			return
+		}
 
-	if err := p.sess.Spclient().SetResumePositionMs(ctx, stream.RequestedId, positionMs); err != nil {
-		p.app.log.WithError(err).WithField("uri", stream.RequestedId.Uri()).
-			Warn("failed reporting episode resume point")
-		return
-	}
-
-	p.app.log.WithField("uri", stream.RequestedId.Uri()).Debugf("reported episode position %dms", positionMs)
+		p.app.log.WithField("uri", id.Uri()).Debugf("reported episode position %dms", positionMs)
+	})
 }
 
 // reportResumeFinished marks an episode as listened to the end, so that
 // playing it again starts it over instead of resuming near the end.
-func (p *AppPlayer) reportResumeFinished(ctx context.Context, stream *player.Stream) {
+func (p *AppPlayer) reportResumeFinished(stream *player.Stream) {
 	if stream == nil || stream.RequestedId.Type() != librespot.SpotifyIdTypeEpisode {
 		return
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, resumeTimeout)
-	defer cancel()
 
 	// Recorded even if the report fails: either way this stream reached its
 	// end, and reporting a near-end position for it would be wrong.
 	p.resumeFinishedPlaybackId = stream.PlaybackId
 
-	if err := p.sess.Spclient().SetResumeFinished(ctx, stream.RequestedId); err != nil {
-		p.app.log.WithError(err).WithField("uri", stream.RequestedId.Uri()).
-			Warn("failed reporting episode as finished")
-		return
-	}
+	id := stream.RequestedId
+	p.goBestEffort(func(ctx context.Context) {
+		if err := p.sess.Spclient().SetResumeFinished(ctx, id); err != nil {
+			p.app.log.WithError(err).WithField("uri", id.Uri()).
+				Warn("failed reporting episode as finished")
+			return
+		}
 
-	p.app.log.WithField("uri", stream.RequestedId.Uri()).Debug("reported episode as finished")
+		p.app.log.WithField("uri", id.Uri()).Debug("reported episode as finished")
+	})
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 )
 
 var (
@@ -43,6 +44,11 @@ func (r replyTo) done(data any, err error) {
 // applyLoaderResult folds a finished job back into the state. Runs on the Run
 // goroutine, which is what makes commit safe to write state from.
 func (p *AppPlayer) applyLoaderResult(res loaderResult) {
+	if res.class == classLoad && res.gen == p.loadGen {
+		p.loadInFlight = false
+		defer p.drainPendingPlayerEvents()
+	}
+
 	if res.gen != p.loadGen {
 		// A newer command has already changed what the daemon is trying to do,
 		// so this result describes a decision nobody is waiting for any more.
@@ -55,11 +61,41 @@ func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 
 	if res.err != nil {
 		p.app.log.WithError(res.err).Warnf("failed %s", res.name)
-	} else if res.commit != nil {
-		res.commit(p)
+	}
+	if res.commit != nil {
+		res.commit(p, res.err)
 	}
 
 	res.reply.done(res.value, res.err)
+}
+
+// maxPendingPlayerEvents bounds how many player events are held while a load is
+// outstanding, so a load that never lands cannot grow the buffer without limit.
+const maxPendingPlayerEvents = 32
+
+// deferPlayerEvent holds an event until the load in flight has been recorded,
+// reporting whether it took it.
+func (p *AppPlayer) deferPlayerEvent(ev player.Event) bool {
+	if !p.loadInFlight {
+		return false
+	}
+
+	if len(p.pendingPlayerEvents) >= maxPendingPlayerEvents {
+		p.app.log.Warn("dropping a player event while waiting on a load")
+		return true
+	}
+
+	p.pendingPlayerEvents = append(p.pendingPlayerEvents, ev)
+	return true
+}
+
+func (p *AppPlayer) drainPendingPlayerEvents() {
+	pending := p.pendingPlayerEvents
+	p.pendingPlayerEvents = nil
+
+	for i := range pending {
+		p.handlePlayerEvent(p.ctx, &pending[i])
+	}
 }
 
 type loaderClass uint8
@@ -110,8 +146,9 @@ type loaderJob struct {
 }
 
 // loaderResult is what comes back to the player loop. commit performs the state
-// writes, and runs only while the result still describes what the daemon is
-// trying to do; discard releases anything the job opened when it does not.
+// writes and reports the outcome, and runs only while the result still describes
+// what the daemon is trying to do; discard releases anything the job opened when
+// it does not.
 type loaderResult struct {
 	name  string
 	gen   uint64
@@ -120,7 +157,7 @@ type loaderResult struct {
 
 	value   any
 	err     error
-	commit  func(p *AppPlayer)
+	commit  func(p *AppPlayer, err error)
 	discard func()
 }
 
