@@ -8,6 +8,8 @@ import (
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/player"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	"github.com/devgianlu/go-librespot/tracks"
 )
 
 var (
@@ -49,9 +51,11 @@ func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 		defer p.drainPendingPlayerEvents()
 	}
 
-	if res.gen != p.loadGen {
-		// A newer command has already changed what the daemon is trying to do,
-		// so this result describes a decision nobody is waiting for any more.
+	// A mutation is applied whatever else has happened since: it already changed
+	// the track list, and refusing to report that would leave the state
+	// describing a list that no longer exists. Only decisions about what to play
+	// go stale.
+	if res.class != classMutate && res.gen != p.loadGen {
 		if res.discard != nil {
 			res.discard()
 		}
@@ -67,6 +71,56 @@ func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 	}
 
 	res.reply.done(res.value, res.err)
+}
+
+// ErrNoContext reports that a command needing a track list arrived when the
+// daemon has no context loaded.
+var ErrNoContext = errors.New("no context")
+
+// listJob runs walk with exclusive use of the track list on the loader lane,
+// then applies on the player loop what the list looks like afterwards.
+//
+// The list is reachable from nowhere else: walking it fetches context pages over
+// the network, and neither it nor the resolver behind it is safe to touch from
+// two goroutines. commit is given the snapshot walk left behind, or the error
+// that stopped it.
+func (p *AppPlayer) listJob(name string, class loaderClass, nextHint []*connectpb.ContextTrack,
+	walk func(ctx context.Context, list *tracks.List) error,
+	commit func(p *AppPlayer, snap *tracks.Snapshot, err error),
+) {
+	list := p.state.tracks
+	if list == nil {
+		commit(p, nil, ErrNoContext)
+		return
+	}
+
+	p.loader.submit(loaderJob{
+		name:  name,
+		class: class,
+		gen:   p.loadGen,
+		run: func(ctx context.Context) loaderResult {
+			if err := walk(ctx, list); err != nil {
+				return loaderResult{
+					err:    err,
+					commit: func(p *AppPlayer, err error) { commit(p, nil, err) },
+				}
+			}
+
+			snap := list.Snapshot(ctx, nextHint)
+
+			return loaderResult{commit: func(p *AppPlayer, err error) {
+				// A context load may have replaced the list while this was
+				// queued behind it; describing the old one would report the
+				// wrong context entirely.
+				if p.state.tracks != list {
+					commit(p, nil, ErrSuperseded)
+					return
+				}
+
+				commit(p, snap, err)
+			}}
+		},
+	})
 }
 
 // errReplyDeferred reports that a handler has taken responsibility for

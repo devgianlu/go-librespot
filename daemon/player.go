@@ -922,7 +922,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 
 			p.handlePlayerEvent(p.ctx, &ev)
 		case <-p.prefetchTimer.C:
-			p.prefetchNext(p.ctx)
+			p.prefetchNext()
 		case <-p.sleepTimer.C:
 			// Cleared before pause(), whose own updateState call picks this
 			// up - so the app stops showing the timer as active in the same

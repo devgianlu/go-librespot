@@ -28,26 +28,46 @@ import (
 // transition into it is seamless. Only picking the track happens here; fetching
 // it runs on the loader lane, because a prefetch is a full track load — audio
 // key, storage resolve, first chunk, and any narration around it.
-func (p *AppPlayer) prefetchNext(ctx context.Context) {
-	var nextUri string
-	var nextTrackMetadata map[string]string
-	if p.state.player.Options.RepeatingTrack {
-		// With repeat-track enabled the next thing to play is this same
-		// track again; prefetch it like any other upcoming track so the
-		// transition (including a crossfade) is seamless.
-		nextUri = p.state.player.Track.GetUri()
-		nextTrackMetadata = p.state.player.Track.GetMetadata()
-	} else {
-		next := p.state.tracks.PeekNext(ctx)
-		if next == nil {
-			return
-		}
+func (p *AppPlayer) prefetchNext() {
+	repeatingTrack := p.state.player.Options.RepeatingTrack
 
-		nextUri = next.Uri
-		nextTrackMetadata = next.Metadata
+	// With repeat-track enabled the next thing to play is this same track
+	// again; prefetch it like any other upcoming track so the transition
+	// (including a crossfade) is seamless.
+	repeatUri := p.state.player.Track.GetUri()
+	repeatMetadata := maps.Clone(p.state.player.Track.GetMetadata())
+
+	if repeatingTrack {
+		p.submitPrefetch(repeatUri, repeatMetadata)
+		return
 	}
 
-	if nextUri == "" {
+	if p.state.tracks == nil {
+		return
+	}
+
+	var nextUri string
+	var nextMetadata map[string]string
+	p.listJob("peek next", classPrefetch, nil,
+		func(ctx context.Context, list *tracks.List) error {
+			if next := list.PeekNext(ctx); next != nil {
+				nextUri, nextMetadata = next.Uri, maps.Clone(next.Metadata)
+			}
+			return nil
+		},
+		func(p *AppPlayer, _ *tracks.Snapshot, err error) {
+			if err != nil || nextUri == "" {
+				return
+			}
+
+			p.submitPrefetch(nextUri, nextMetadata)
+		})
+}
+
+// submitPrefetch queues the stream for uri unless it is already the one waiting.
+// Runs on the player loop, so it can check what is already prefetched.
+func (p *AppPlayer) submitPrefetch(uri string, metadata map[string]string) {
+	if uri == "" {
 		// It should be implemented some day (the ContextTrack has enough
 		// information to infer the track Uri) but it's hard to reproduce this
 		// issue.
@@ -55,9 +75,9 @@ func (p *AppPlayer) prefetchNext(ctx context.Context) {
 		return
 	}
 
-	nextId, err := librespot.SpotifyIdFromUri(nextUri)
+	nextId, err := librespot.SpotifyIdFromUri(uri)
 	if err != nil {
-		p.app.log.WithError(err).WithField("uri", nextUri).Warn("failed parsing prefetch uri")
+		p.app.log.WithError(err).WithField("uri", uri).Warn("failed parsing prefetch uri")
 		return
 	} else if p.secondaryStream != nil && p.secondaryStream.Is(*nextId) {
 		return
@@ -65,9 +85,6 @@ func (p *AppPlayer) prefetchNext(ctx context.Context) {
 
 	p.app.log.WithField("uri", nextId.Uri()).Debugf("prefetching next %s", nextId.Type())
 
-	// Reaching a prefetched track always means arriving in turn, hence the
-	// introduction rather than the jump line.
-	metadata := maps.Clone(nextTrackMetadata)
 	p.loader.submit(loaderJob{
 		name:  "prefetch " + nextId.Uri(),
 		class: classPrefetch,
@@ -81,7 +98,9 @@ func (p *AppPlayer) prefetchNext(ctx context.Context) {
 			// Narration is prefetched with the track. The player promotes this
 			// source the instant the current one ends, so if it were the bare
 			// track the music would be heard for however long the synthesis
-			// takes before the load replaces it.
+			// takes before the load replaces it. Reaching a prefetched track
+			// always means arriving in turn, hence the introduction rather than
+			// the jump line.
 			source := p.narrate(ctx, metadata, nextId.Uri(), stream.Source, narrationIntroPrefix)
 
 			return loaderResult{
@@ -793,20 +812,36 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 	}
 
 	if p.state.tracks != nil && shufflingContext != nil && *shufflingContext != p.state.player.Options.ShufflingContext {
-		if err := p.state.tracks.ToggleShuffle(ctx, *shufflingContext); err != nil {
-			p.app.log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", *shufflingContext)
-			return
-		}
+		shuffle := *shufflingContext
 
-		p.state.player.Options.ShufflingContext = *shufflingContext
-		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
-
+		// Reported straight away: this is what the shuffle button binds to, and
+		// reordering the context can take a walk of every page. Reverted below
+		// if that walk fails.
+		p.state.player.Options.ShufflingContext = shuffle
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeShuffleContext,
 			Data: ApiEventDataShuffleContext{
-				Value: *shufflingContext,
+				Value: shuffle,
 			},
 		})
+
+		p.listJob("shuffle context", classMutate, nil,
+			func(ctx context.Context, list *tracks.List) error {
+				return list.ToggleShuffle(ctx, shuffle)
+			},
+			func(p *AppPlayer, snap *tracks.Snapshot, err error) {
+				if err != nil {
+					p.app.log.WithError(err).Errorf("failed toggling shuffle context (value: %t)", shuffle)
+					p.state.player.Options.ShufflingContext = !shuffle
+					p.updateState()
+					return
+				}
+
+				p.publishSnapshot(snap)
+				p.invalidateUpcoming()
+				p.schedulePrefetchNext()
+				p.updateState()
+			})
 
 		requiresUpdate = true
 	}
@@ -833,14 +868,25 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 		track.Uid = fmt.Sprintf("q%d", p.state.queueID)
 	}
 
-	p.state.tracks.AddToQueue(track)
-	p.publishUpcoming(p.state.tracks.Snapshot(ctx, nil))
-	p.updateState()
+	p.listJob("add to queue", classMutate, nil,
+		func(_ context.Context, list *tracks.List) error {
+			list.AddToQueue(track)
+			return nil
+		},
+		func(p *AppPlayer, snap *tracks.Snapshot, err error) {
+			if err != nil {
+				p.app.log.WithError(err).Warn("failed adding to queue")
+				return
+			}
 
-	// The queued track plays next: a stream prefetched under the old plan
-	// must not be switched or faded into.
-	p.invalidateUpcoming()
-	p.schedulePrefetchNext()
+			p.publishUpcoming(snap)
+
+			// The queued track plays next: a stream prefetched under the old
+			// plan must not be switched or faded into.
+			p.invalidateUpcoming()
+			p.schedulePrefetchNext()
+			p.updateState()
+		})
 }
 
 func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack, next []*connectpb.ContextTrack) {
@@ -849,14 +895,25 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 		return
 	}
 
-	p.state.tracks.SetQueue(prev, next)
-	p.publishUpcoming(p.state.tracks.Snapshot(ctx, next))
-	p.updateState()
+	p.listJob("set queue", classMutate, next,
+		func(_ context.Context, list *tracks.List) error {
+			list.SetQueue(prev, next)
+			return nil
+		},
+		func(p *AppPlayer, snap *tracks.Snapshot, err error) {
+			if err != nil {
+				p.app.log.WithError(err).Warn("failed setting queue")
+				return
+			}
 
-	// The upcoming track may have changed: a stream prefetched under the old
-	// plan must not be switched or faded into.
-	p.invalidateUpcoming()
-	p.schedulePrefetchNext()
+			p.publishUpcoming(snap)
+
+			// The upcoming track may have changed: a stream prefetched under
+			// the old plan must not be switched or faded into.
+			p.invalidateUpcoming()
+			p.schedulePrefetchNext()
+			p.updateState()
+		})
 }
 
 func (p *AppPlayer) play(ctx context.Context) error {
@@ -974,21 +1031,34 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 
 	p.sess.Events().OnPlayerSkipBackward(p.primaryStream, p.player.PositionMs())
 
-	if p.state.tracks != nil {
-		p.app.log.Debug("skip previous track")
-		p.state.tracks.GoPrev()
-
-		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
+	if p.state.tracks == nil {
+		return nil
 	}
 
-	p.state.player.Timestamp = time.Now().UnixMilli()
-	p.state.player.PositionAsOfTimestamp = 0
+	p.app.log.Debug("skip previous track")
+	p.loadGen++
 
-	p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
-		if err != nil {
-			p.app.log.WithError(err).Warn("failed loading current track (skip prev)")
-		}
-	})
+	p.listJob("skip previous", classLoad, nil,
+		func(_ context.Context, list *tracks.List) error {
+			list.GoPrev()
+			return nil
+		},
+		func(p *AppPlayer, snap *tracks.Snapshot, err error) {
+			if err != nil {
+				p.app.log.WithError(err).Warn("failed skipping to previous track")
+				return
+			}
+
+			p.publishSnapshot(snap)
+			p.state.player.Timestamp = time.Now().UnixMilli()
+			p.state.player.PositionAsOfTimestamp = 0
+
+			p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
+				if err != nil {
+					p.app.log.WithError(err).Warn("failed loading current track (skip prev)")
+				}
+			})
+		})
 
 	return nil
 }
@@ -1019,21 +1089,29 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 	// Skipping straight to a chosen track is a jump, so the DJ introduces it
 	// with its jump line rather than the one for arriving in sequence.
 	p.narrationJumped = true
+	p.loadGen++
 
-	if err := p.state.tracks.TrySeekTo(ctx, track); err != nil {
-		return err
-	}
+	p.listJob("skip to "+track.GetUri(), classLoad, nil,
+		func(ctx context.Context, list *tracks.List) error {
+			return list.TrySeekTo(ctx, track)
+		},
+		func(p *AppPlayer, snap *tracks.Snapshot, err error) {
+			if err != nil {
+				p.narrationJumped = false
+				p.app.log.WithError(err).Warn("failed skipping to track")
+				return
+			}
 
-	p.state.player.Timestamp = time.Now().UnixMilli()
-	p.state.player.PositionAsOfTimestamp = 0
+			p.publishSnapshot(snap)
+			p.state.player.Timestamp = time.Now().UnixMilli()
+			p.state.player.PositionAsOfTimestamp = 0
 
-	p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
-
-	p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
-		if err != nil {
-			p.app.log.WithError(err).Warn("failed loading current track (skip next)")
-		}
-	})
+			p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
+				if err != nil {
+					p.app.log.WithError(err).Warn("failed loading current track (skip next)")
+				}
+			})
+		})
 
 	return nil
 }
@@ -1046,43 +1124,67 @@ const maxConsecutiveUnplayableSkips = 50
 // whether there was one. A run of unplayable tracks is walked forward, bounded
 // by maxConsecutiveUnplayableSkips so a fully gated context cannot loop forever.
 func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack bool, err error)) {
-	// Walking the context can fetch pages. This runs from a load completing as
-	// well as from a command, so it cannot borrow a handler's budget.
-	ctx, cancel := context.WithTimeout(p.ctx, listWalkTimeout)
-	defer cancel()
+	if p.state.tracks == nil {
+		p.advanceTo(false, nil, drop, then)
+		return
+	}
 
-	var uri string
+	// Repeat-track means the next thing to play is this same track: nothing to
+	// navigate, and so no walk of the context either.
+	if !forceNext && p.state.player.Options.RepeatingTrack {
+		p.state.player.IsPaused = false
+		p.advanceTo(true, nil, drop, then)
+		return
+	}
+
+	repeatingContext := p.state.player.Options.RepeatingContext
+	p.loadGen++
+
 	var hasNextTrack bool
-	if p.state.tracks != nil {
-		if !forceNext && p.state.player.Options.RepeatingTrack {
-			hasNextTrack = true
-			p.state.player.IsPaused = false
-		} else {
-			// try to get the next track
-			hasNextTrack = p.state.tracks.GoNext(ctx)
+	var seed []string
+	p.listJob("advance", classLoad, nil,
+		func(ctx context.Context, list *tracks.List) error {
+			hasNextTrack = list.GoNext(ctx)
 
 			// if we could not get the next track we probably ended the context
 			if !hasNextTrack {
-				hasNextTrack = p.state.tracks.GoStart(ctx)
-
 				// if repeating is disabled move to the first track, but do not start it
-				if !p.state.player.Options.RepeatingContext {
-					hasNextTrack = false
+				hasNextTrack = list.GoStart(ctx) && repeatingContext
+			}
+
+			// Running out of context means autoplay is next, and it is seeded
+			// with what was recently played. Gathered here because the list is
+			// only reachable from this side.
+			if !hasNextTrack {
+				for _, track := range list.AllTracks(maxAutoplaySeedTracks) {
+					seed = append(seed, track.Uri)
 				}
 			}
 
-			p.state.player.IsPaused = !hasNextTrack
-		}
+			return nil
+		},
+		func(p *AppPlayer, snap *tracks.Snapshot, err error) {
+			if err != nil {
+				then(false, err)
+				return
+			}
 
-		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
-		uri = p.state.player.Track.GetUri()
-	}
+			p.state.player.IsPaused = !hasNextTrack
+			p.publishSnapshot(snap)
+			p.advanceTo(hasNextTrack, seed, drop, then)
+		})
+}
+
+// advanceTo starts whatever advanceNext settled on, or hands over to autoplay
+// when the context has run out.
+func (p *AppPlayer) advanceTo(hasNextTrack bool, seed []string, drop bool, then func(hasNextTrack bool, err error)) {
+	uri := p.state.player.Track.GetUri()
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = 0
 
 	if !hasNextTrack && !p.app.cfg.DisableAutoplay && !strings.HasPrefix(p.state.player.ContextUri, "spotify:station:") {
-		p.startAutoplay(drop, then)
+		p.startAutoplay(seed, drop, then)
 		return
 	}
 
@@ -1134,16 +1236,8 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 
 // startAutoplay resolves a station to carry on with once the context has run
 // out, and starts playing it.
-func (p *AppPlayer) startAutoplay(drop bool, then func(bool, error)) {
+func (p *AppPlayer) startAutoplay(prevTrackUris []string, drop bool, then func(bool, error)) {
 	p.state.player.Suppressions = &connectpb.Suppressions{}
-
-	// Consider all tracks as recent because we got here by reaching the end of the context
-	var prevTrackUris []string
-	if p.state.tracks != nil {
-		for _, track := range p.state.tracks.AllTracks(maxAutoplaySeedTracks) {
-			prevTrackUris = append(prevTrackUris, track.Uri)
-		}
-	}
 
 	if len(prevTrackUris) == 0 {
 		p.app.log.Warnf("cannot resolve autoplay station because there are no previous tracks in context %s", p.state.player.ContextUri)
