@@ -3,6 +3,7 @@ package tracks
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/spclient"
 	"golang.org/x/exp/rand"
+	"google.golang.org/protobuf/proto"
 )
 
 type ContextResolver interface {
@@ -162,20 +164,65 @@ func (tl *List) Seek(ctx context.Context, f func(*connectpb.ContextTrack) bool) 
 	return fmt.Errorf("could not find track")
 }
 
-func (tl *List) AllTracks(ctx context.Context) []*connectpb.ProvidedTrack {
-	tracks := make([]*connectpb.ProvidedTrack, 0, tl.tracks.len())
-
-	iter := tl.tracks.iterStart()
-	for iter.next(ctx) {
-		curr := iter.get()
-		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), curr.item))
+// AllTracks returns the tracks already loaded, oldest first, keeping at most the
+// last max of them. It never fetches: its one caller seeds an autoplay station
+// with recently played tracks, and is reached by having run out of context — so
+// whatever is still unfetched is by definition not recent.
+func (tl *List) AllTracks(max int) []*connectpb.ProvidedTrack {
+	items := tl.tracks.resident()
+	if max > 0 && len(items) > max {
+		items = items[len(items)-max:]
 	}
 
-	if err := iter.error(); err != nil {
-		tl.log.WithError(err).Error("failed fetching all tracks")
+	tracks := make([]*connectpb.ProvidedTrack, 0, len(items))
+	for _, item := range items {
+		tracks = append(tracks, librespot.ContextTrackToProvidedTrack(tl.ctx.Type(), item))
 	}
 
 	return tracks
+}
+
+// Snapshot is a plain-data view of a List: everything the daemon publishes about
+// it, owning all of its own memory. Building one is how the list stays behind a
+// single accessor while what it describes is read from elsewhere.
+type Snapshot struct {
+	Metadata map[string]string
+	Current  *connectpb.ProvidedTrack
+	Prev     []*connectpb.ProvidedTrack
+	Next     []*connectpb.ProvidedTrack
+	Index    *connectpb.ContextIndex
+}
+
+// cloneProvided copies a track away from the list that produced it.
+// ContextTrackToProvidedTrack hands over the ContextTrack's own metadata map,
+// and the list goes on writing to that map as queueing and autoplay flags
+// change, so a track that outlives the call has to own its copy.
+func cloneProvided(track *connectpb.ProvidedTrack) *connectpb.ProvidedTrack {
+	if track == nil {
+		return nil
+	}
+
+	return proto.Clone(track).(*connectpb.ProvidedTrack)
+}
+
+func cloneProvidedAll(tracks []*connectpb.ProvidedTrack) []*connectpb.ProvidedTrack {
+	for i, track := range tracks {
+		tracks[i] = cloneProvided(track)
+	}
+	return tracks
+}
+
+// Snapshot builds the view of this list the daemon publishes. nextHint, when
+// non-nil, supplies the upcoming order from a set_queue command; otherwise the
+// upcoming tracks are walked out of the context, which may fetch pages.
+func (tl *List) Snapshot(ctx context.Context, nextHint []*connectpb.ContextTrack) *Snapshot {
+	return &Snapshot{
+		Metadata: maps.Clone(tl.Metadata()),
+		Current:  cloneProvided(tl.CurrentTrack()),
+		Prev:     cloneProvidedAll(tl.PrevTracks()),
+		Next:     cloneProvidedAll(tl.NextTracks(ctx, nextHint)),
+		Index:    tl.Index(),
+	}
 }
 
 const MaxTracksInContext = 32

@@ -144,7 +144,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.player.ContextUri,
 			p.state.player.Options.ShufflingContext,
 			p.state.player.PlayOrigin,
-			p.state.tracks.CurrentTrack(),
+			p.state.player.Track,
 			p.state.trackPosition(),
 		)
 
@@ -189,7 +189,7 @@ func (p *AppPlayer) handlePlayerEvent(ctx context.Context, ev *player.Event) {
 			p.state.player.ContextUri,
 			p.state.player.Options.ShufflingContext,
 			p.state.player.PlayOrigin,
-			p.state.tracks.CurrentTrack(),
+			p.state.player.Track,
 			p.state.trackPosition(),
 		)
 
@@ -325,11 +325,9 @@ func (p *AppPlayer) loadContext(ctx context.Context, spotCtx *connectpb.Context,
 		}
 	}
 
+	snap := ctxTracks.Snapshot(ctx, nil)
 	p.state.tracks = ctxTracks
-	p.state.player.Track = ctxTracks.CurrentTrack()
-	p.state.player.PrevTracks = ctxTracks.PrevTracks()
-	p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
-	p.state.player.Index = ctxTracks.Index()
+	p.publishSnapshot(snap)
 
 	p.resumeCurrentEpisode(ctx)
 
@@ -548,10 +546,7 @@ func (p *AppPlayer) setOptions(ctx context.Context, repeatingContext *bool, repe
 		}
 
 		p.state.player.Options.ShufflingContext = *shufflingContext
-		p.state.player.Track = p.state.tracks.CurrentTrack()
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
-		p.state.player.Index = p.state.tracks.Index()
+		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeShuffleContext,
@@ -587,8 +582,7 @@ func (p *AppPlayer) addToQueue(ctx context.Context, track *connectpb.ContextTrac
 	}
 
 	p.state.tracks.AddToQueue(track)
-	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
+	p.publishUpcoming(p.state.tracks.Snapshot(ctx, nil))
 	p.updateState()
 
 	// The queued track plays next: a stream prefetched under the old plan
@@ -605,8 +599,7 @@ func (p *AppPlayer) setQueue(ctx context.Context, prev []*connectpb.ContextTrack
 	}
 
 	p.state.tracks.SetQueue(prev, next)
-	p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-	p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, next)
+	p.publishUpcoming(p.state.tracks.Snapshot(ctx, next))
 	p.updateState()
 
 	// The upcoming track may have changed: a stream prefetched under the old
@@ -720,10 +713,7 @@ func (p *AppPlayer) skipPrev(ctx context.Context, allowSeeking bool) error {
 		p.app.log.Debug("skip previous track")
 		p.state.tracks.GoPrev()
 
-		p.state.player.Track = p.state.tracks.CurrentTrack()
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
-		p.state.player.Index = p.state.tracks.Index()
+		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
 	}
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
@@ -754,10 +744,7 @@ func (p *AppPlayer) skipNext(ctx context.Context, track *connectpb.ContextTrack)
 		p.state.player.Timestamp = time.Now().UnixMilli()
 		p.state.player.PositionAsOfTimestamp = 0
 
-		p.state.player.Track = p.state.tracks.CurrentTrack()
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
-		p.state.player.Index = p.state.tracks.Index()
+		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
 
 		p.resumeCurrentEpisode(ctx)
 
@@ -813,10 +800,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 			p.state.player.IsPaused = !hasNextTrack
 		}
 
-		p.state.player.Track = p.state.tracks.CurrentTrack()
-		p.state.player.PrevTracks = p.state.tracks.PrevTracks()
-		p.state.player.NextTracks = p.state.tracks.NextTracks(ctx, nil)
-		p.state.player.Index = p.state.tracks.Index()
+		p.publishSnapshot(p.state.tracks.Snapshot(ctx, nil))
 
 		uri = p.state.player.Track.Uri
 	}
@@ -830,7 +814,7 @@ func (p *AppPlayer) advanceNext(ctx context.Context, forceNext, drop bool) (bool
 		// Consider all tracks as recent because we got here by reaching the end of the context
 		var prevTrackUris []string
 		if p.state.tracks != nil {
-			for _, track := range p.state.tracks.AllTracks(ctx) {
+			for _, track := range p.state.tracks.AllTracks(maxAutoplaySeedTracks) {
 				prevTrackUris = append(prevTrackUris, track.Uri)
 			}
 		}

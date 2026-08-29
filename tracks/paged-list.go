@@ -214,3 +214,12 @@ func (l *pagedList[T]) clear() {
 func (l *pagedList[T]) len() int {
 	return len(l.list)
 }
+
+// resident returns the items already loaded, oldest first, without fetching.
+func (l *pagedList[T]) resident() []T {
+	out := make([]T, 0, len(l.list))
+	for _, item := range l.list {
+		out = append(out, item.item)
+	}
+	return out
+}

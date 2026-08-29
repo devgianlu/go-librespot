@@ -242,6 +242,49 @@ func (suite *TrackListInternalSuite) TestSeekToQueuedTrackWithoutUid() {
 	suite.Equal("spotify:track:queued2", suite.list.CurrentTrack().Uri)
 }
 
+// A snapshot leaves the list behind: it is read from another goroutine while
+// the list carries on being queued into and walked, so it must share nothing —
+// least of all the metadata map ContextTrackToProvidedTrack hands straight over.
+func (suite *TrackListInternalSuite) TestSnapshotSharesNothingWithTheList() {
+	suite.resolver.EXPECT().Metadata().Return(map[string]string{"context_description": "Test"}).Maybe()
+	suite.playingContext(5)
+	suite.list.AddToQueue(queued("q1", "spotify:track:queued1"))
+
+	snap := suite.list.Snapshot(context.Background(), nil)
+	suite.Require().Equal(trackUri(0), snap.Current.Uri)
+	suite.Require().Equal("spotify:track:queued1", snap.Next[0].Uri)
+	suite.Require().Equal("true", snap.Next[0].Metadata["is_queued"])
+
+	// What the list still hands out aliases its own tracks, so writing through
+	// it reaches anything that kept a reference.
+	live := suite.list.NextTracks(context.Background(), nil)
+	live[0].Metadata["is_queued"] = "rewritten"
+	snap.Metadata["context_description"] = "Mutated"
+
+	suite.Equal("true", snap.Next[0].Metadata["is_queued"], "the snapshot kept its own copy")
+	suite.Equal("Test", suite.list.Metadata()["context_description"])
+}
+
+// AllTracks seeds an autoplay station, and is reached by having run out of
+// context: anything not already loaded is by definition not recently played, so
+// it must never turn into a fetch.
+func (suite *TrackListInternalSuite) TestAllTracksIsResidentAndBounded() {
+	suite.expectEndlessPages()
+	suite.Require().NoError(suite.list.TrySeek(context.Background(), func(t *connectpb.ContextTrack) bool {
+		return t.Uri == trackUri(20)
+	}))
+
+	loaded := suite.list.tracks.len()
+	suite.Require().Greater(loaded, 3)
+
+	all := suite.list.AllTracks(3)
+	suite.Len(all, 3)
+	suite.Equal(trackUri(loaded-1), all[2].Uri, "the most recent tracks are the ones kept")
+
+	suite.Len(suite.list.AllTracks(0), loaded, "no bound keeps everything resident")
+	suite.Equal(loaded, suite.list.tracks.len(), "nothing was fetched")
+}
+
 func TestTrackListInternalSuite(t *testing.T) {
 	suite.Run(t, new(TrackListInternalSuite))
 }

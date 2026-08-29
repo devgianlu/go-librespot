@@ -331,11 +331,9 @@ func (p *AppPlayer) handlePlayerCommand(ctx context.Context, req dealer.RequestP
 		}
 		ctxTracks.SetPlayingQueue(transferState.Queue.IsPlayingQueue)
 
+		snap := ctxTracks.Snapshot(ctx, nil)
 		p.state.tracks = ctxTracks
-		p.state.player.Track = ctxTracks.CurrentTrack()
-		p.state.player.PrevTracks = ctxTracks.PrevTracks()
-		p.state.player.NextTracks = ctxTracks.NextTracks(ctx, nil)
-		p.state.player.Index = ctxTracks.Index()
+		p.publishSnapshot(snap)
 
 		// load current track into stream — skip forward if the transferred track is unplayable
 		// (Spotify refused its key / restricted), so a cast onto a refused track doesn't freeze.

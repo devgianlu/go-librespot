@@ -234,6 +234,26 @@ func (p *AppPlayer) initState() {
 	p.state.reset()
 }
 
+// maxAutoplaySeedTracks bounds how many recently played tracks are offered to
+// the autoplay endpoint as the seed for a station.
+const maxAutoplaySeedTracks = 50
+
+// publishSnapshot reports where the track list now stands: what is playing and
+// what surrounds it.
+func (p *AppPlayer) publishSnapshot(snap *tracks.Snapshot) {
+	p.state.player.Track = snap.Current
+	p.state.player.Index = snap.Index
+	p.publishUpcoming(snap)
+}
+
+// publishUpcoming reports only what surrounds the current track, leaving the
+// track itself alone — it carries metadata from the media, which a fresh one
+// off the track list would not have.
+func (p *AppPlayer) publishUpcoming(snap *tracks.Snapshot) {
+	p.state.player.PrevTracks = snap.Prev
+	p.state.player.NextTracks = snap.Next
+}
+
 // statePutMinInterval is the minimum spacing between connect-state PUTs.
 const statePutMinInterval = 200 * time.Millisecond
 
