@@ -3,12 +3,15 @@
 package daemon
 
 import (
+	"errors"
 	"net"
 	"testing"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
@@ -256,4 +259,33 @@ func TestContextMetadataDoesNotAliasInputs(t *testing.T) {
 
 	require.NotContains(t, fromCommand, "c")
 	require.NotContains(t, fromResolver, "c")
+}
+
+// TestStateRetryDelayHonoursRetryAfter checks that a rate limited push waits
+// exactly as long as the backend asked, with no jitter applied on top.
+func TestStateRetryDelayHonoursRetryAfter(t *testing.T) {
+	p := &AppPlayer{stateRetries: 5}
+
+	require.Equal(t, 7*time.Second, p.stateRetryDelay(&spclient.RateLimitedError{RetryAfter: 7 * time.Second}))
+}
+
+// TestStateRetryDelayBacksOff checks that repeated failures back off from the
+// coalescing interval up to the cap, and never past it.
+func TestStateRetryDelayBacksOff(t *testing.T) {
+	p := &AppPlayer{}
+	err := errors.New("boom")
+
+	var prev time.Duration
+	for range 20 {
+		d := p.stateRetryDelay(err)
+
+		require.GreaterOrEqual(t, d, statePutMinInterval*4/5)
+		require.LessOrEqual(t, d, statePutMaxBackoff)
+		require.GreaterOrEqual(t, d, prev*4/5, "backoff must not shrink between attempts")
+
+		prev = d
+		p.stateRetries++
+	}
+
+	require.GreaterOrEqual(t, prev, statePutMaxBackoff*4/5, "backoff should reach the cap")
 }

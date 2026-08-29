@@ -3,8 +3,10 @@ package daemon
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"maps"
+	"math/rand/v2"
 	"net"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 )
 
@@ -233,6 +236,24 @@ func (p *AppPlayer) initState() {
 
 // statePutMinInterval is the minimum spacing between connect-state PUTs.
 const statePutMinInterval = 200 * time.Millisecond
+
+// statePutMaxBackoff caps how long a failing connect-state push waits before
+// being resent. State is coalesced, so a long wait costs nothing but freshness.
+const statePutMaxBackoff = 30 * time.Second
+
+// stateRetryDelay is how long to hold a failed connect-state push before
+// resending it: the cooldown the backend asked for, or an exponential backoff
+// from the coalescing interval. Jittered downwards so that many devices coming
+// back from one outage do not resend in lockstep.
+func (p *AppPlayer) stateRetryDelay(err error) time.Duration {
+	var rl *spclient.RateLimitedError
+	if errors.As(err, &rl) {
+		return rl.RetryAfter
+	}
+
+	d := min(statePutMinInterval<<min(p.stateRetries, 8), statePutMaxBackoff)
+	return d - rand.N(d/5)
+}
 
 // updateState PUTs the latest connect-state, at most one per statePutMinInterval: immediately
 // and synchronously when the budget allows, else deferred to the timer so a burst coalesces.

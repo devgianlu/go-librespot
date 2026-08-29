@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -24,7 +23,6 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
-	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 )
 
@@ -47,6 +45,7 @@ type AppPlayer struct {
 	stateDirty        bool
 	statePutScheduled bool
 	lastStatePut      time.Time
+	stateRetries      int
 
 	spotConnId string
 
@@ -917,20 +916,21 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 	}
 }
 
-// flushState PUTs the latest connect-state and records the send time. On a rate-limit it
-// schedules a coalesced resend after the cooldown. Runs on the Run goroutine.
+// flushState PUTs the latest connect-state and records the send time. A failed push is
+// rescheduled rather than dropped: the state it carried is the only copy Spotify would
+// have got, and nothing else resends it until the next transition happens to come along.
+// Runs on the Run goroutine.
 func (p *AppPlayer) flushState(ctx context.Context) {
-	p.stateDirty = false
 	p.lastStatePut = time.Now()
 	if err := p.putConnectState(ctx, connectpb.PutStateReason_PLAYER_STATE_CHANGED); err != nil {
 		p.app.log.WithError(err).Error("failed put state after update")
 
-		// Rate-limited: resend the latest state after the cooldown instead of dropping it.
-		var rl *spclient.RateLimitedError
-		if errors.As(err, &rl) {
-			p.stateDirty = true
-			p.statePutScheduled = true
-			p.stateTimer.Reset(rl.RetryAfter)
-		}
+		p.stateRetries++
+		p.statePutScheduled = true
+		p.stateTimer.Reset(p.stateRetryDelay(err))
+		return
 	}
+
+	p.stateDirty = false
+	p.stateRetries = 0
 }
