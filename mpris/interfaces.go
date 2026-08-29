@@ -86,7 +86,10 @@ func (p MediaPlayer2PlayerInterface) Props() map[string]*prop.Prop {
 }
 
 func (p MediaPlayer2PlayerInterface) enqueueCommand(command MediaPlayer2PlayerCommand) *dbus.Error {
-	command.response = make(chan MediaPlayer2PlayerCommandResponse)
+	// Buffered so that replying never waits on this goroutine getting back to
+	// the read below: the reply comes from the player loop, which must not
+	// block on a D-Bus caller.
+	command.response = make(chan MediaPlayer2PlayerCommandResponse, 1)
 
 	select {
 	case p.commands <- command:
