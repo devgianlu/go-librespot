@@ -388,8 +388,36 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 			panic("zeroconf is disabled and no credentials are present")
 		}
 
+		// Nothing else owns the player in this mode: App.Close closes the API
+		// server, mpris and zeroconf but never the AppPlayer, so on
+		// SIGINT/SIGTERM Run below never returns and the process stays up.
+		// Stop the player on cancellation, mirroring what the zeroconf branch
+		// does with setSession(nil) when ctx is done.
+		//
+		// The same goroutine drains logoutCh, which only the zeroconf branch
+		// reads today. Without a reader, loseSession parks the player loop for
+		// ever on its send and the daemon lives on with a dead session. There
+		// is no other session to swap in here, so the daemon stops and reports
+		// the loss rather than pretending to be alive.
+		sessionLost := make(chan struct{})
+		go func() {
+			select {
+			case <-ctx.Done():
+			case <-app.logoutCh:
+				close(sessionLost)
+			}
+
+			appPlayer.Close()
+		}()
+
 		appPlayer.Run(app.server.Receive(), app.mpris.Receive())
-		return nil
+
+		select {
+		case <-sessionLost:
+			return errors.New("session lost and cannot be restored without zeroconf")
+		default:
+			return nil
+		}
 	}
 
 	if err := app.resolver.FetchAll(ctx); err != nil {
