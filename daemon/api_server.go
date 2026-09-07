@@ -26,6 +26,7 @@ const timeout = 10 * time.Second
 type ApiServer interface {
 	Emit(ev *ApiEvent)
 	Receive() <-chan ApiRequest
+	SetAuthCode(auth *ApiDeviceAuth)
 	Close() error
 }
 
@@ -42,6 +43,9 @@ type ConcreteApiServer struct {
 	listener net.Listener
 
 	requests chan ApiRequest
+
+	// authCode is the pending device authorization pairing code.
+	authCode atomic.Pointer[ApiDeviceAuth]
 
 	clients     []*websocket.Conn
 	clientsLock sync.RWMutex
@@ -339,6 +343,8 @@ func (s *StubApiServer) Receive() <-chan ApiRequest {
 	return make(<-chan ApiRequest)
 }
 
+func (s *StubApiServer) SetAuthCode(*ApiDeviceAuth) {}
+
 func (s *StubApiServer) Close() error {
 	return nil
 }
@@ -411,6 +417,17 @@ func (s *ConcreteApiServer) GetRoot(w http.ResponseWriter, _ *http.Request) {
 
 func (s *ConcreteApiServer) GetStatus(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeStatus}, w)
+}
+
+func (s *ConcreteApiServer) GetAuthCode(w http.ResponseWriter, _ *http.Request) {
+	auth := s.authCode.Load()
+	if auth == nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(auth)
 }
 
 func (s *ConcreteApiServer) GetToken(w http.ResponseWriter, _ *http.Request) {
@@ -654,6 +671,10 @@ func (s *ConcreteApiServer) Emit(ev *ApiEvent) {
 
 func (s *ConcreteApiServer) Receive() <-chan ApiRequest {
 	return s.requests
+}
+
+func (s *ConcreteApiServer) SetAuthCode(auth *ApiDeviceAuth) {
+	s.authCode.Store(auth)
 }
 
 func (s *ConcreteApiServer) Close() error {

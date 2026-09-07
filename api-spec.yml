@@ -204,6 +204,24 @@ components:
         token:
           description: The access token
           type: string
+    deviceAuth:
+      x-go-name: ApiDeviceAuth
+      description: The pairing details of an in-flight device authorization flow
+      type: object
+      required: [ url, code, expires_at ]
+      properties:
+        url:
+          description: >-
+            The URL the user must visit to approve the request. It usually
+            embeds the code already, in which case entering it is not needed.
+          type: string
+        code:
+          description: The code the user must enter at the URL, if prompted
+          type: string
+        expires_at:
+          description: When the code stops being accepted
+          type: string
+          format: date-time
     play:
       x-go-name: ApiPlay
       description: An initiate playback payload
@@ -366,6 +384,23 @@ paths:
                 $ref: '#/components/schemas/token'
         204:
           description: No active session
+  /auth/code:
+    get:
+      operationId: getAuthCode
+      description: >-
+        Returns the pairing URL and code of the device authorization flow the
+        daemon is waiting on, so a UI can show them instead of having the user
+        read the logs. Only the `device_auth` credentials type ever has one, and
+        only until the user approves the request or the code expires.
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/deviceAuth'
+        204:
+          description: No device authorization flow is waiting for the user
   /events:
     get:
       operationId: getEvents

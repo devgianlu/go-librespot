@@ -318,7 +318,20 @@ func (app *App) runInteractive(ctx context.Context, callbackPort int) error {
 }
 
 func (app *App) runDeviceAuth(ctx context.Context) error {
-	return app.withCredentials(ctx, session.DeviceAuthCredentials{})
+	return app.withCredentials(ctx, session.DeviceAuthCredentials{
+		OnCode: func(code *session.DeviceAuthCode) {
+			if code == nil {
+				app.server.SetAuthCode(nil)
+				return
+			}
+
+			app.server.SetAuthCode(&ApiDeviceAuth{
+				Url:       code.VerificationUrl,
+				Code:      code.UserCode,
+				ExpiresAt: code.ExpiresAt,
+			})
+		},
+	})
 }
 
 func (app *App) withCredentials(ctx context.Context, creds any) (err error) {
