@@ -78,9 +78,9 @@
           "default": "alsa"
         },
         "audio_backend_runtime_socket": {
-           "type": "string",
-           "description": "The audio backend runtime socket, useful only with pulseaudio as a backend",
-           "default": ""
+          "type": "string",
+          "description": "The audio backend runtime socket, useful only with pulseaudio as a backend",
+          "default": ""
         },
         "audio_device": {
           "type": "string",
@@ -211,6 +211,18 @@
             "overwrite": {
               "type": "boolean",
               "description": "Whether an existing completed export may be replaced",
+              "default": false
+            }
+          }
+        },
+        "audiotape_tagger": {
+          "type": "object",
+          "description": "Applies metadata from AudioTape JSON sidecars to exported Ogg/Vorbis files",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether AudioTape metadata tagging is enabled",
               "default": false
             }
           }
@@ -369,8 +381,7 @@
           "default": false
         }
       },
-      "required": [
-      ],
+      "required": [],
       "title": "config"
     }
   }

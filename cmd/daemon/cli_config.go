@@ -88,6 +88,10 @@ type cliConfig struct {
 		Overwrite bool   `koanf:"overwrite"`
 	} `koanf:"audio_export"`
 
+	AudioTapeTagger struct {
+		Enabled bool `koanf:"enabled"`
+	} `koanf:"audiotape_tagger"`
+
 	Credentials struct {
 		Type        string `koanf:"type"`
 		Interactive struct {
@@ -158,7 +162,8 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 	dc.AudioExport.Enabled = c.AudioExport.Enabled
 	dc.AudioExport.Directory = c.AudioExport.Directory
 	dc.AudioExport.Overwrite = c.AudioExport.Overwrite
-	if dc.AudioExport.Enabled && dc.AudioExport.Directory == "" {
+	dc.AudioTapeTagger.Enabled = c.AudioTapeTagger.Enabled
+	if (dc.AudioExport.Enabled || dc.AudioTapeTagger.Enabled) && dc.AudioExport.Directory == "" {
 		dc.AudioExport.Directory = filepath.Join(c.ConfigDir, "audio-export")
 	}
 	dc.Credentials.Type = c.Credentials.Type
@@ -219,10 +224,11 @@ func loadCLIConfig(cfg *cliConfig) error {
 
 		"credentials.type": "zeroconf",
 
-		"cache.enabled":          false,
-		"cache.size_limit":       "1GB",
-		"audio_export.enabled":   false,
-		"audio_export.overwrite": false,
+		"cache.enabled":            false,
+		"cache.size_limit":         "1GB",
+		"audio_export.enabled":     false,
+		"audio_export.overwrite":   false,
+		"audiotape_tagger.enabled": false,
 
 		"zeroconf_backend": "builtin",
 

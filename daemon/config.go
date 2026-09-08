@@ -44,10 +44,10 @@ type Config struct {
 	// "default", "small", "medium", "large", "xlarge".
 	ImageSize string
 
-	Cache       CacheConfig
-	AudioExport AudioExportConfig
-
-	Credentials CredentialsConfig
+	Cache           CacheConfig
+	AudioExport     AudioExportConfig
+	AudioTapeTagger AudioTapeTaggerConfig
+	Credentials     CredentialsConfig
 }
 
 // CacheConfig configures the on-disk cache for downloaded (encrypted) audio
@@ -67,6 +67,11 @@ type AudioExportConfig struct {
 	Enabled   bool
 	Directory string
 	Overwrite bool
+}
+
+// AudioTapeTaggerConfig configures metadata tagging for exported Ogg/Vorbis tracks.
+type AudioTapeTaggerConfig struct {
+	Enabled bool
 }
 
 type CredentialsConfig struct {

@@ -13,6 +13,7 @@ import (
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/apresolve"
+	"github.com/devgianlu/go-librespot/audiotagger"
 	"github.com/devgianlu/go-librespot/cache"
 	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
@@ -159,6 +160,13 @@ func (app *App) SetDeviceName(name string) {
 // error occurs. The credential type configured in cfg.Credentials.Type
 // determines which login flow is used.
 func (app *App) Run(ctx context.Context) error {
+	if app.cfg.AudioTapeTagger.Enabled {
+		go func() {
+			if err := audiotagger.Run(ctx, app.cfg.AudioExport.Directory, 3*time.Second); err != nil {
+				app.log.Errorf("AudioTape Tagger stopped: %v", err)
+			}
+		}()
+	}
 	go func() {
 		select {
 		case <-ctx.Done():
