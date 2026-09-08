@@ -192,6 +192,9 @@ port, so unlike interactive mode there is no redirect URL to copy around when go
 3. Open the link it logs, or go to [spotify.com/pair](https://spotify.com/pair) and enter the code it prints
 4. Approve the request; the daemon picks it up automatically and stores the credentials
 
+With the API server enabled, the same link and code are also served at `GET /auth/code` for as long as the daemon is
+waiting, so a frontend can show them instead of asking the user to read the logs.
+
 ### API server
 
 Optionally, an API server can be started to control and monitor the player. To enable this feature, add the following to

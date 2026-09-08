@@ -8,6 +8,7 @@ package daemon
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 // Defines values for TrackCodec.
@@ -24,6 +25,18 @@ const (
 type ApiAddToQueue struct {
 	// Uri The URI for the track that should be added
 	Uri string `json:"uri"`
+}
+
+// ApiDeviceAuth The pairing details of an in-flight device authorization flow
+type ApiDeviceAuth struct {
+	// Code The code the user must enter at the URL, if prompted
+	Code string `json:"code"`
+
+	// ExpiresAt When the code stops being accepted
+	ExpiresAt time.Time `json:"expires_at"`
+
+	// Url The URL the user must visit to approve the request. It usually embeds the code already, in which case entering it is not needed.
+	Url string `json:"url"`
 }
 
 // ApiNext A skip to next payload
@@ -246,6 +259,9 @@ type ServerInterface interface {
 	// (GET /)
 	GetRoot(w http.ResponseWriter, r *http.Request)
 
+	// (GET /auth/code)
+	GetAuthCode(w http.ResponseWriter, r *http.Request)
+
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
 
@@ -318,6 +334,20 @@ func (siw *ServerInterfaceWrapper) GetRoot(w http.ResponseWriter, r *http.Reques
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetRoot(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAuthCode operation middleware
+func (siw *ServerInterfaceWrapper) GetAuthCode(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAuthCode(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -714,6 +744,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc("GET "+options.BaseURL+"/{$}", wrapper.GetRoot)
+	m.HandleFunc("GET "+options.BaseURL+"/auth/code", wrapper.GetAuthCode)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
 	m.HandleFunc("POST "+options.BaseURL+"/player/add_to_queue", wrapper.PlayerAddToQueue)
 	m.HandleFunc("POST "+options.BaseURL+"/player/next", wrapper.PlayerNext)

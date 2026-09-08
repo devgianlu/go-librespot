@@ -145,8 +145,19 @@ func NewSessionFromOptions(ctx context.Context, opts *Options) (*Session, error)
 		}
 		opts.Log.Infof("to complete authentication visit %s and, if prompted, enter code %s", verificationUrl, da.UserCode)
 
+		if creds.OnCode != nil {
+			creds.OnCode(&DeviceAuthCode{
+				VerificationUrl: verificationUrl,
+				UserCode:        da.UserCode,
+				ExpiresAt:       da.Expiry,
+			})
+		}
+
 		// Blocks until the user approves or declines, or the code expires.
 		token, err := oauthConf.DeviceAccessToken(ctx, da)
+		if creds.OnCode != nil {
+			creds.OnCode(nil)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed exchanging device code: %w", err)
 		}

@@ -25,8 +25,9 @@ import (
 // saw are readable afterwards. Built by hand rather than through NewApiServer
 // because only the struct exposes the listener address.
 type testServer struct {
-	t   *testing.T
-	url string
+	t      *testing.T
+	url    string
+	server *ConcreteApiServer
 
 	received chan ApiRequest
 }
@@ -48,6 +49,7 @@ func newTestServer(t *testing.T, reply func(req ApiRequest) (any, error)) *testS
 	ts := &testServer{
 		t:        t,
 		url:      "http://" + listener.Addr().String(),
+		server:   s,
 		received: make(chan ApiRequest, 16),
 	}
 
@@ -126,6 +128,7 @@ func body(t *testing.T, resp *http.Response) string {
 var endpointMethods = map[string][]string{
 	"/":                       {http.MethodGet},
 	"/status":                 {http.MethodGet},
+	"/auth/code":              {http.MethodGet},
 	"/token":                  {http.MethodPost},
 	"/set_device_name":        {http.MethodPost},
 	"/player/play":            {http.MethodPost},
@@ -172,6 +175,40 @@ func TestApiRoot(t *testing.T) {
 	require.JSONEq(t, `{"playback_ready":true}`, body(t, resp))
 
 	require.Equal(t, ApiRequestTypeRoot, ts.request().Type)
+}
+
+// The pairing code is answered from the server's own state, never forwarded:
+// the device authorization flow blocks the daemon before anything drains the
+// request channel, so a request that had to reach a player would hang for as
+// long as the code is worth having.
+func TestApiAuthCode(t *testing.T) {
+	ts := newTestServer(t, okReply)
+
+	resp := ts.do(http.MethodGet, "/auth/code", nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	ts.requireNoRequest()
+
+	expiry := time.Now().Add(5 * time.Minute).UTC().Truncate(time.Second)
+	ts.server.SetAuthCode(&ApiDeviceAuth{
+		Url:       "https://spotify.com/pair?code=ABCDEF",
+		Code:      "ABCDEF",
+		ExpiresAt: expiry,
+	})
+
+	resp = ts.do(http.MethodGet, "/auth/code", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	require.JSONEq(t, fmt.Sprintf(
+		`{"url":"https://spotify.com/pair?code=ABCDEF","code":"ABCDEF","expires_at":%q}`,
+		expiry.Format(time.RFC3339),
+	), body(t, resp))
+	ts.requireNoRequest()
+
+	// Cleared once the user has approved the request or the code has expired.
+	ts.server.SetAuthCode(nil)
+
+	resp = ts.do(http.MethodGet, "/auth/code", nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
 func TestApiStatus(t *testing.T) {
