@@ -261,17 +261,14 @@ func writeTagsAtomic(oggPath string, comments []string, mode os.FileMode) error 
 
 	args := []string{
 		"-w",
-		"-q",
 		"-R",
-		"-o",
-		tmpPath,
 	}
 
 	for _, comment := range comments {
 		args = append(args, "-t", comment)
 	}
 
-	args = append(args, oggPath)
+	args = append(args, oggPath, tmpPath)
 
 	cmd := exec.Command("vorbiscomment", args...)
 
