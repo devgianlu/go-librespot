@@ -202,7 +202,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
 				ContextUri: p.state.player.ContextUri,
-				Uri:        p.state.player.Track.Uri,
+				Uri:        p.state.player.Track.GetUri(),
 				Resume:     false,
 				PlayOrigin: p.state.playOrigin(),
 			},
@@ -221,7 +221,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			Type: ApiEventTypePlaying,
 			Data: ApiEventDataPlaying{
 				ContextUri: p.state.player.ContextUri,
-				Uri:        p.state.player.Track.Uri,
+				Uri:        p.state.player.Track.GetUri(),
 				Resume:     true,
 				PlayOrigin: p.state.playOrigin(),
 			},
@@ -247,7 +247,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			Type: ApiEventTypePaused,
 			Data: ApiEventDataPaused{
 				ContextUri: p.state.player.ContextUri,
-				Uri:        p.state.player.Track.Uri,
+				Uri:        p.state.player.Track.GetUri(),
 				PlayOrigin: p.state.playOrigin(),
 			},
 		})
@@ -263,7 +263,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			Type: ApiEventTypeNotPlaying,
 			Data: ApiEventDataNotPlaying{
 				ContextUri: p.state.player.ContextUri,
-				Uri:        p.state.player.Track.Uri,
+				Uri:        p.state.player.Track.GetUri(),
 				PlayOrigin: p.state.playOrigin(),
 			},
 		})
@@ -347,7 +347,9 @@ func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, p
 	}
 
 	// The previous context's surroundings do not describe this one, and the new
-	// track is not known until the context resolves.
+	// track is not known until the context resolves. The stream that was
+	// playing carries on until then and may still raise events, so nothing on
+	// the loop may assume Track is set.
 	p.state.player.Track = nil
 	p.state.player.PrevTracks = nil
 	p.state.player.NextTracks = nil
@@ -1011,7 +1013,7 @@ func (p *AppPlayer) seek(position int64) error {
 		Type: ApiEventTypeSeek,
 		Data: ApiEventDataSeek{
 			ContextUri: p.state.player.ContextUri,
-			Uri:        p.state.player.Track.Uri,
+			Uri:        p.state.player.Track.GetUri(),
 			Position:   int(position),
 			Duration:   int(p.primaryStream.Media.Duration()),
 			PlayOrigin: p.state.playOrigin(),

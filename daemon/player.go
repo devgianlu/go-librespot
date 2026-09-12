@@ -768,8 +768,8 @@ func (p *AppPlayer) handleMprisEvent(req mpris.MediaPlayer2PlayerCommand) error 
 
 		if arg.ObjectPath.IsValid() {
 			spotifyId := strings.Join(strings.Split(string(arg.ObjectPath), "/")[3:], ":")
-			if spotifyId != p.state.player.Track.Uri {
-				return fmt.Errorf("seek tries to jump to different uri, not yet supported (got: %s, expected: %s)", spotifyId, p.state.player.Track.Uri)
+			if spotifyId != p.state.player.Track.GetUri() {
+				return fmt.Errorf("seek tries to jump to different uri, not yet supported (got: %s, expected: %s)", spotifyId, p.state.player.Track.GetUri())
 			}
 		}
 
