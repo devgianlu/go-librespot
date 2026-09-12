@@ -112,6 +112,9 @@ components:
         - device_type
         - device_name
         - play_origin
+        - play_origin_device_id
+        - context_uri
+        - context_name
         - stopped
         - paused
         - buffering
@@ -137,8 +140,29 @@ components:
         play_origin:
           description: >-
             Who started the playback, "go-librespot" identifies the API as the
-            play origin, everything else is Spotify own stuff
+            play origin, everything else is Spotify own stuff, null when
+            nothing has started playback yet
           type: string
+          nullable: true
+        play_origin_device_id:
+          description: >-
+            The device ID that sent the command starting the playback, null
+            when the playback was started locally through this API
+          type: string
+          nullable: true
+        context_uri:
+          description: >-
+            The URI of the context playback is coming from, null when there is
+            no context
+          type: string
+          nullable: true
+        context_name:
+          description: >-
+            The display name of the context, for example the playlist or album
+            name, null when there is no context or the resolver did not provide
+            a description
+          type: string
+          nullable: true
         stopped:
           description: Whether the player is stopped
           type: boolean

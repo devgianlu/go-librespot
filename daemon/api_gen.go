@@ -119,6 +119,12 @@ type ApiStatus struct {
 	// Buffering Whether the player is buffering
 	Buffering bool `json:"buffering"`
 
+	// ContextName The display name of the context, for example the playlist or album name, null when there is no context or the resolver did not provide a description
+	ContextName *string `json:"context_name"`
+
+	// ContextUri The URI of the context playback is coming from, null when there is no context
+	ContextUri *string `json:"context_uri"`
+
 	// DeviceId The player device ID
 	DeviceId string `json:"device_id"`
 
@@ -131,8 +137,11 @@ type ApiStatus struct {
 	// Paused Whether the player is paused
 	Paused bool `json:"paused"`
 
-	// PlayOrigin Who started the playback, "go-librespot" identifies the API as the play origin, everything else is Spotify own stuff
-	PlayOrigin string `json:"play_origin"`
+	// PlayOrigin Who started the playback, "go-librespot" identifies the API as the play origin, everything else is Spotify own stuff, null when nothing has started playback yet
+	PlayOrigin *string `json:"play_origin"`
+
+	// PlayOriginDeviceId The device ID that sent the command starting the playback, null when the playback was started locally through this API
+	PlayOriginDeviceId *string `json:"play_origin_device_id"`
 
 	// RepeatContext Whether the repeat context feature is enabled
 	RepeatContext bool `json:"repeat_context"`

@@ -242,22 +242,29 @@ func TestApiStatus(t *testing.T) {
 func TestApiStatusWireFormat(t *testing.T) {
 	coverUrl := "https://i.scdn.co/image/xxx"
 	bitrate, sampleRate, bitDepth := 160, 44100, 16
+	playOrigin := "go-librespot"
+	originDeviceId := "def"
+	contextUri := "spotify:playlist:xxx"
+	contextName := "Some Playlist"
 
 	ts := newTestServer(t, func(ApiRequest) (any, error) {
 		return &ApiStatus{
-			Username:       "someone",
-			DeviceId:       "abc",
-			DeviceType:     "COMPUTER",
-			DeviceName:     "test device",
-			PlayOrigin:     "go-librespot",
-			Stopped:        false,
-			Paused:         false,
-			Buffering:      false,
-			Volume:         42,
-			VolumeSteps:    100,
-			RepeatContext:  false,
-			RepeatTrack:    false,
-			ShuffleContext: false,
+			Username:           "someone",
+			DeviceId:           "abc",
+			DeviceType:         "COMPUTER",
+			DeviceName:         "test device",
+			PlayOrigin:         &playOrigin,
+			PlayOriginDeviceId: &originDeviceId,
+			ContextUri:         &contextUri,
+			ContextName:        &contextName,
+			Stopped:            false,
+			Paused:             false,
+			Buffering:          false,
+			Volume:             42,
+			VolumeSteps:        100,
+			RepeatContext:      false,
+			RepeatTrack:        false,
+			ShuffleContext:     false,
 			Track: &ApiTrack{
 				Uri:           "spotify:track:xxx",
 				Name:          "Some Song",
@@ -286,6 +293,9 @@ func TestApiStatusWireFormat(t *testing.T) {
 		"device_type": "COMPUTER",
 		"device_name": "test device",
 		"play_origin": "go-librespot",
+		"play_origin_device_id": "def",
+		"context_uri": "spotify:playlist:xxx",
+		"context_name": "Some Playlist",
 		"stopped": false,
 		"paused": false,
 		"buffering": false,
@@ -324,6 +334,12 @@ func TestApiStatusWireFormatNulls(t *testing.T) {
 
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(body(t, resp)), &got))
+
+	for _, field := range []string{"play_origin", "play_origin_device_id", "context_uri", "context_name"} {
+		value, present := got[field]
+		require.True(t, present, "%s must be present", field)
+		require.Nil(t, value, "%s must be null", field)
+	}
 
 	track, ok := got["track"].(map[string]any)
 	require.True(t, ok)

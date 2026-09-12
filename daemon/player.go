@@ -499,25 +499,36 @@ func (p *AppPlayer) handleDealerRequest(req dealer.Request) error {
 	}
 }
 
+// nonEmpty returns a pointer to s, or nil when s is empty.
+func nonEmpty(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	switch req.Type {
 	case ApiRequestTypeRoot:
 		return &ApiRoot{PlaybackReady: p.playbackReady()}, nil
 	case ApiRequestTypeStatus:
 		resp := &ApiStatus{
-			Username:       p.sess.Username(),
-			DeviceId:       p.app.deviceId,
-			DeviceType:     p.app.deviceType.String(),
-			DeviceName:     p.app.cfg.DeviceName,
-			VolumeSteps:    p.app.cfg.VolumeSteps,
-			Volume:         p.apiVolume(),
-			RepeatContext:  p.state.player.Options.RepeatingContext,
-			RepeatTrack:    p.state.player.Options.RepeatingTrack,
-			ShuffleContext: p.state.player.Options.ShufflingContext,
-			Stopped:        !p.state.player.IsPlaying,
-			Paused:         p.state.player.IsPaused,
-			Buffering:      p.state.player.IsBuffering,
-			PlayOrigin:     p.state.player.PlayOrigin.FeatureIdentifier,
+			Username:           p.sess.Username(),
+			DeviceId:           p.app.deviceId,
+			DeviceType:         p.app.deviceType.String(),
+			DeviceName:         p.app.cfg.DeviceName,
+			VolumeSteps:        p.app.cfg.VolumeSteps,
+			Volume:             p.apiVolume(),
+			RepeatContext:      p.state.player.Options.RepeatingContext,
+			RepeatTrack:        p.state.player.Options.RepeatingTrack,
+			ShuffleContext:     p.state.player.Options.ShufflingContext,
+			Stopped:            !p.state.player.IsPlaying,
+			Paused:             p.state.player.IsPaused,
+			Buffering:          p.state.player.IsBuffering,
+			PlayOrigin:         nonEmpty(p.state.player.PlayOrigin.FeatureIdentifier),
+			PlayOriginDeviceId: nonEmpty(p.state.player.PlayOrigin.DeviceIdentifier),
+			ContextUri:         nonEmpty(p.state.player.ContextUri),
+			ContextName:        nonEmpty(p.state.player.ContextMetadata["context_description"]),
 		}
 
 		if p.primaryStream != nil && p.prodInfo != nil {
