@@ -215,6 +215,31 @@ func TestLoaderCloseAnswersQueuedJobs(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoSession)
 }
 
+// Stopping playback abandons every load and prefetch, running or queued, and
+// leaves queue edits alone.
+func TestLoaderDropLoadsCancelsAndKeepsMutations(t *testing.T) {
+	l := newTestLoaderLane()
+
+	// Stand in for a load in flight, so the cancellation can be observed
+	// without racing the lane goroutine for the queue.
+	ctx, cancel := context.WithCancel(context.Background())
+	l.running = &runningJob{class: classLoad, cancel: cancel}
+
+	loadReply, loadAnswered := recordingReply(t)
+	l.submit(idleJob("queue a", classMutate, noReply))
+	l.submit(idleJob("prefetch a", classPrefetch, noReply))
+	l.submit(idleJob("load a", classLoad, loadReply))
+
+	l.dropLoads()
+
+	require.ErrorIs(t, ctx.Err(), context.Canceled, "the running load was not cancelled")
+	require.Equal(t, []string{"queue a"}, queuedNames(l))
+
+	err, answered := loadAnswered()
+	require.True(t, answered, "a dropped job still owes its caller an answer")
+	require.ErrorIs(t, err, ErrSuperseded)
+}
+
 // A superseded result must release whatever its job opened: a built stream owns
 // an open CDN reader or cache file that nothing else will close.
 func TestApplyLoaderResultDiscardsSupersededWork(t *testing.T) {

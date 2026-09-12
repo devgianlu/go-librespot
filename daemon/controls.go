@@ -654,10 +654,18 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, then func(error)
 				}
 			}
 
-			// No discard: fetchTrack hands the source to the player before
-			// returning, and the player drops it when the next load replaces
-			// it. Closing it here could close a stream still being read.
+			// fetchTrack has already handed the source to the player, so there
+			// is nothing here to close: the next load replaces it, and closing
+			// it now could close a stream still being read. If this result is
+			// thrown away because playback was stopped, though, no next load is
+			// coming, and the player has to be told again. discard runs on the
+			// player loop, so it can see whether that is the case.
 			return loaderResult{
+				discard: func() {
+					if !p.loadInFlight && p.primaryStream == nil {
+						p.player.Stop()
+					}
+				},
 				commit: func(p *AppPlayer, err error) {
 					p.commitLoad(stream, spotId.Uri(), paused, position, prefetchedStream != nil)
 					then(err)
@@ -1339,6 +1347,16 @@ func (p *AppPlayer) volumeUpdated() {
 }
 
 func (p *AppPlayer) stopPlayback() {
+	// Whatever is being loaded is not wanted any more. Cancel it, and make
+	// sure a result that lands anyway is thrown away rather than published
+	// over the inactive state below; the events the player raised for it go
+	// with it. Before loads left the loop none could be outstanding here.
+	p.loadGen++
+	p.prefetchGen++
+	p.loader.dropLoads()
+	p.loadInFlight = false
+	p.pendingPlayerEvents = nil
+
 	p.player.Stop()
 	p.primaryStream = nil
 	p.secondaryStream = nil

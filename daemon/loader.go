@@ -301,12 +301,7 @@ func (l *loaderLane) submit(job loaderJob) {
 
 	switch job.class {
 	case classLoad:
-		dropped, l.queue = partitionQueue(l.queue, func(q loaderJob) bool {
-			return q.class == classLoad || q.class == classPrefetch
-		})
-		if l.running != nil && l.running.class != classMutate {
-			l.running.cancel()
-		}
+		dropped = l.dropLoadsLocked()
 	case classPrefetch:
 		if l.hasPendingLoad() {
 			l.mu.Unlock()
@@ -338,6 +333,36 @@ func (l *loaderLane) submit(job loaderJob) {
 	case l.wake <- struct{}{}:
 	default:
 	}
+}
+
+// dropLoadsLocked cancels the load or prefetch in flight and removes those
+// queued, returning them so the caller can answer them once the lock is
+// released. Mutations are left alone: they cancel nothing and are never
+// dropped. Called with the lock held.
+func (l *loaderLane) dropLoadsLocked() []loaderJob {
+	var dropped []loaderJob
+	dropped, l.queue = partitionQueue(l.queue, func(q loaderJob) bool {
+		return q.class == classLoad || q.class == classPrefetch
+	})
+	if l.running != nil && l.running.class != classMutate {
+		l.running.cancel()
+	}
+	return dropped
+}
+
+// dropLoads abandons every load and prefetch, running or queued, for a caller
+// that has stopped playback and wants nothing to land after it. Never blocks:
+// it is called from the player loop.
+func (l *loaderLane) dropLoads() {
+	l.mu.Lock()
+	if l.closed {
+		l.mu.Unlock()
+		return
+	}
+	dropped := l.dropLoadsLocked()
+	l.mu.Unlock()
+
+	replyAll(dropped, ErrSuperseded)
 }
 
 // hasPendingLoad reports whether a load is queued or running. Called with the
