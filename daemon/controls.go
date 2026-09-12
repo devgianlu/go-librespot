@@ -1093,6 +1093,13 @@ func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
 		return nil
 	}
 
+	// Checked before the counter moves: with no list to seek in there is no
+	// load to replace whatever is in flight, so superseding it would leave the
+	// player waiting on a landing that never comes.
+	if p.state.tracks == nil {
+		return fmt.Errorf("cannot skip to %s: %w", track.GetUri(), ErrNoContext)
+	}
+
 	// Skipping straight to a chosen track is a jump, so the DJ introduces it
 	// with its jump line rather than the one for arriving in sequence.
 	p.narrationJumped = true
