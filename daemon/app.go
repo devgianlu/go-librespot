@@ -393,8 +393,10 @@ func (app *App) withCredentials(ctx context.Context, creds any) (err error) {
 				return nil, err
 			}
 
+			app.stateMu.Lock()
 			app.state.Credentials.Username = appPlayer.sess.Username()
 			app.state.Credentials.Data = appPlayer.sess.StoredCredentials()
+			app.stateMu.Unlock()
 
 			if err = app.persistState(); err != nil {
 				return nil, err
@@ -642,8 +644,10 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 		}
 
 		if app.cfg.Credentials.Zeroconf.PersistCredentials {
+			app.stateMu.Lock()
 			app.state.Credentials.Username = newAppPlayer.sess.Username()
 			app.state.Credentials.Data = newAppPlayer.sess.StoredCredentials()
+			app.stateMu.Unlock()
 
 			if err := app.persistState(); err != nil {
 				app.log.WithError(err).Errorf("failed persisting zeroconf credentials")
