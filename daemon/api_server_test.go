@@ -145,6 +145,7 @@ var endpointMethods = map[string][]string{
 	"/player/shuffle_context": {http.MethodPost},
 	"/player/add_to_queue":    {http.MethodPost},
 	"/player/output":          {http.MethodPost},
+	"/context/tracks":         {http.MethodGet},
 }
 
 func TestApiRejectsWrongMethod(t *testing.T) {

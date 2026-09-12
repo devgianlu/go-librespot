@@ -45,6 +45,13 @@ type App struct {
 
 	audioCache *cache.Cache
 
+	// metaCache and contextLists back the opt-in metadata features. They live
+	// here rather than on the player so that a session swap (logout, a new
+	// zeroconf user) keeps what was fetched. Both are nil when metadata.enabled
+	// is false, and every helper treats a nil cache as a no-op.
+	metaCache    *trackMetaCache
+	contextLists *contextListCache
+
 	// stateMu guards state and the store behind it. Two AppPlayers overlap
 	// briefly whenever a zeroconf session is replaced, and volume changes are
 	// written back from off the player loop.
@@ -143,6 +150,11 @@ func New(opts *Options) (*App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed initializing audio cache: %w", err)
 		}
+	}
+
+	if app.cfg.Metadata.Enabled {
+		app.metaCache = newTrackMetaCache()
+		app.contextLists = newContextListCache()
 	}
 
 	return app, nil
@@ -282,6 +294,9 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.stateTimer = time.NewTimer(math.MaxInt64)
 	appPlayer.stateTimer.Stop()
 
+	appPlayer.metaPrefetchTimer = time.NewTimer(math.MaxInt64)
+	appPlayer.metaPrefetchTimer.Stop()
+
 	if appPlayer.sess, err = session.NewSessionFromOptions(ctx, &session.Options{
 		Log:         app.log,
 		DeviceType:  app.deviceType,
@@ -298,6 +313,9 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.initState()
 	appPlayer.loader = newLoaderLane(app.log)
 	appPlayer.statePush = newStatePushLane(app.log, appPlayer.sess.Spclient(), app.deviceId)
+	if app.metaCache != nil {
+		appPlayer.meta = newMetaFetcher(app.log, app.metaCache, appPlayer.sess.Spclient())
+	}
 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{
 		Spclient: appPlayer.sess.Spclient(),

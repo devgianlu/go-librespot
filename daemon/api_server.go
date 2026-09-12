@@ -127,7 +127,14 @@ const (
 	ApiRequestTypeToken               ApiRequestType = "token"
 	ApiRequestSetDeviceName           ApiRequestType = "set_device_name"
 	ApiRequestTypeReopenOutput        ApiRequestType = "reopen_output"
+	ApiRequestTypeContextTracks       ApiRequestType = "context_tracks"
 )
+
+// ApiRequestDataContextTracks carries the uri query parameter of the context
+// listing request; the spec generates payloads only for request bodies.
+type ApiRequestDataContextTracks struct {
+	Uri string
+}
 
 type ApiEventType string
 
@@ -480,6 +487,10 @@ func (s *ConcreteApiServer) GetAuthCode(w http.ResponseWriter, _ *http.Request) 
 
 func (s *ConcreteApiServer) GetToken(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeToken}, w)
+}
+
+func (s *ConcreteApiServer) GetContextTracks(w http.ResponseWriter, _ *http.Request, params GetContextTracksParams) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeContextTracks, Data: ApiRequestDataContextTracks{Uri: params.Uri}}, w)
 }
 
 func (s *ConcreteApiServer) PlayerResume(w http.ResponseWriter, _ *http.Request) {

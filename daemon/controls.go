@@ -130,6 +130,7 @@ func (p *AppPlayer) commitPrefetch(stream *player.Stream, source librespot.Audio
 	p.secondaryStream = stream
 	p.secondarySource = source
 	p.player.SetSecondaryStream(source)
+	p.app.metaCache.putStream(stream.RequestedId.Uri(), stream.Media)
 
 	p.app.log.WithField("uri", stream.RequestedId.Uri()).
 		Infof("prefetched %s %s (duration: %dms)", stream.RequestedId.Type(),
@@ -384,6 +385,7 @@ func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, p
 					p.state.tracks = list
 					p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, snap.Metadata)
 					p.publishSnapshot(snap)
+					p.scheduleContextMetaPrefetch(spotCtx.Uri)
 
 					// skip forward if the track it landed on (or a run of them) is unplayable.
 					p.loadCurrentTrackOrSkip(paused, drop, true, func(err error) {
@@ -446,6 +448,7 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 					p.state.tracks = list
 					p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, snap.Metadata)
 					p.publishSnapshot(snap)
+					p.scheduleContextMetaPrefetch(spotCtx.Uri)
 
 					// skip forward if the transferred track is unplayable, so a
 					// cast onto a refused track does not freeze the player.
@@ -773,6 +776,7 @@ func (p *AppPlayer) commitLoad(stream *player.Stream, uri string, paused bool, t
 	// track. This has to happen after the assignments above, which replace
 	// Track wholesale with a fresh ProvidedTrack from the track list.
 	enrichTrackMetadata(p.state.player.Track, stream.Media)
+	p.app.metaCache.putStream(uri, stream.Media)
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
 	p.state.player.PositionAsOfTimestamp = trackPosition
