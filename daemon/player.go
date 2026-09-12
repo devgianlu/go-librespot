@@ -53,8 +53,14 @@ type AppPlayer struct {
 	initialVolumeOnce sync.Once
 	volumeUpdate      chan float32
 
-	loader  *loaderLane
-	loadGen uint64
+	loader *loaderLane
+
+	// loadGen stamps track and context work, prefetchGen what is fetched ahead
+	// for the transition after it. They are separate because a queue edit or
+	// an option change makes whatever was prefetched wrong without making the
+	// track being loaded wrong: only the counter that moved discards results.
+	loadGen     uint64
+	prefetchGen uint64
 
 	// loadInFlight is set while a track load is outstanding. The player is
 	// handed its new stream from the loader lane, so the event announcing

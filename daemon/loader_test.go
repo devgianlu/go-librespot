@@ -238,6 +238,34 @@ func TestApplyLoaderResultDiscardsSupersededWork(t *testing.T) {
 	require.ErrorIs(t, err, ErrSuperseded)
 }
 
+// A queue edit or option change invalidates what was prefetched, not the track
+// being loaded: the load in flight must still land, or the player is left
+// playing a stream the loop never records.
+func TestApplyLoaderResultKeepsLoadAcrossPrefetchInvalidation(t *testing.T) {
+	p := &AppPlayer{app: &App{log: &librespot.NullLogger{}}, loadGen: 3, prefetchGen: 1, loadInFlight: true}
+
+	// What invalidateUpcoming does to the counters.
+	p.prefetchGen++
+
+	var loadCommitted, prefetchCommitted, prefetchDiscarded bool
+	p.applyLoaderResult(loaderResult{
+		class:   classPrefetch,
+		gen:     1,
+		commit:  func(*AppPlayer, error) { prefetchCommitted = true },
+		discard: func() { prefetchDiscarded = true },
+	})
+	p.applyLoaderResult(loaderResult{
+		class:  classLoad,
+		gen:    3,
+		commit: func(*AppPlayer, error) { loadCommitted = true },
+	})
+
+	require.True(t, prefetchDiscarded, "the stale prefetch is thrown away")
+	require.False(t, prefetchCommitted)
+	require.True(t, loadCommitted, "the load is still wanted")
+	require.False(t, p.loadInFlight)
+}
+
 // A job that failed still reaches its commit, so whoever asked for the load
 // learns it did not happen, and still owes its caller the failure.
 func TestApplyLoaderResultReportsFailure(t *testing.T) {

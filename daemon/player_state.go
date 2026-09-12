@@ -240,8 +240,9 @@ const maxAutoplaySeedTracks = 50
 
 // invalidateUpcoming forgets whatever was going to play next: any prefetch
 // still running has its result thrown away rather than switched or faded into.
+// Only the prefetch counter moves — a track load in flight is still wanted.
 func (p *AppPlayer) invalidateUpcoming() {
-	p.loadGen++
+	p.prefetchGen++
 	p.clearUpcoming()
 }
 

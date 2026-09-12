@@ -55,7 +55,7 @@ func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 	// the track list, and refusing to report that would leave the state
 	// describing a list that no longer exists. Only decisions about what to play
 	// go stale.
-	if res.class != classMutate && res.gen != p.loadGen {
+	if res.class != classMutate && res.gen != p.generation(res.class) {
 		if res.discard != nil {
 			res.discard()
 		}
@@ -71,6 +71,15 @@ func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 	}
 
 	res.reply.done(res.value, res.err)
+}
+
+// generation reports the counter a job of this class is stamped with, so that
+// its result can be told from one the loop has since moved past.
+func (p *AppPlayer) generation(class loaderClass) uint64 {
+	if class == classPrefetch {
+		return p.prefetchGen
+	}
+	return p.loadGen
 }
 
 // ErrNoContext reports that a command needing a track list arrived when the
@@ -97,7 +106,7 @@ func (p *AppPlayer) listJob(name string, class loaderClass, nextHint []*connectp
 	p.loader.submit(loaderJob{
 		name:  name,
 		class: class,
-		gen:   p.loadGen,
+		gen:   p.generation(class),
 		run: func(ctx context.Context) loaderResult {
 			if err := walk(ctx, list); err != nil {
 				return loaderResult{

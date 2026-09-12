@@ -88,7 +88,7 @@ func (p *AppPlayer) submitPrefetch(uri string, metadata map[string]string) {
 	p.loader.submit(loaderJob{
 		name:  "prefetch " + nextId.Uri(),
 		class: classPrefetch,
-		gen:   p.loadGen,
+		gen:   p.prefetchGen,
 		run: func(ctx context.Context) loaderResult {
 			stream, err := p.player.NewStream(ctx, p.app.client, *nextId, p.app.cfg.Bitrate, 0)
 			if err != nil {
@@ -592,6 +592,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, then func(error)
 
 	// This load supersedes any older one, and anything prefetched for it.
 	p.loadGen++
+	p.prefetchGen++
 
 	var prefetchedStream *player.Stream
 	var prefetchedSource librespot.AudioSource
