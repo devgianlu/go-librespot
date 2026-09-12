@@ -131,16 +131,11 @@ type AppPlayer struct {
 	consecutiveUnplayableSkips int
 }
 
-// requestLogout hands this player back to the daemon to be torn down and
-// replaced. The daemon rebuilds the session synchronously on the receiving
-// side, and only does so at all when zeroconf is enabled — nothing reads the
-// channel otherwise — so the handover happens off the player loop.
+// requestLogout hands this player back to the daemon to be torn down. With
+// zeroconf the daemon rebuilds the session synchronously on the receiving side
+// and carries on; without it there is nothing to swap in, so the daemon stops.
+// Either way the handover happens off the player loop.
 func (p *AppPlayer) requestLogout() {
-	if !p.app.cfg.ZeroconfEnabled {
-		p.app.log.Debug("ignoring logout request because zeroconf is disabled")
-		return
-	}
-
 	p.logoutOnce.Do(func() {
 		go func() {
 			select {

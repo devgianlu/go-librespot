@@ -1373,7 +1373,11 @@ func (p *AppPlayer) stopPlayback() {
 
 	p.schedulePrefetchNext()
 
-	p.requestLogout()
+	// Going inactive hands the session back only where another user can take
+	// it over. Without zeroconf the logout would stop the daemon instead.
+	if p.app.cfg.ZeroconfEnabled {
+		p.requestLogout()
+	}
 
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeInactive,
