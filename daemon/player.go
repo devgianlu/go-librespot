@@ -69,6 +69,10 @@ type AppPlayer struct {
 	loadInFlight        bool
 	pendingPlayerEvents []player.Event
 
+	// lastSkipAt is when the previous next or prev was pressed; a press that
+	// follows it within SkipDebounce is part of a burst.
+	lastSkipAt time.Time
+
 	statePush         *statePushLane
 	stateTimer        *time.Timer
 	stateDirty        bool
