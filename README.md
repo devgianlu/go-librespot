@@ -22,7 +22,7 @@
 ## Features
 
 - 🎵 **Spotify Connect** — show up as a speaker in the Spotify app and stream to it from any device on your network (Spotify Premium required).
-- 🔊 **Multiple audio backends** — ALSA, PulseAudio, WASAPI on Windows, or a raw named pipe for custom routing.
+- 🔊 **Multiple audio backends** — ALSA, PulseAudio, AudioToolbox on macOS, WASAPI on Windows, or a raw named pipe for custom routing.
 - 📊 **Loudness normalization** — Spotify-standard −14 LUFS (ITU-R BS.1770) with configurable pregain.
 - 🔀 **Crossfade** — configurable overlap between consecutive tracks.
 - 🎙️ **Podcast resume** — episodes pick up where you left off, and progress syncs back to your other devices.
@@ -271,7 +271,7 @@ log_disable_timestamp: false # Whether to disable timestamps in log output
 device_id: '' # Spotify device ID (auto-generated)
 device_name: '' # Spotify device name
 device_type: computer # Spotify device type (icon)
-audio_backend: alsa # Audio backend to use (alsa, pipe, pulseaudio, audio-toolbox, wasapi). Default is alsa, or wasapi on Windows.
+audio_backend: alsa # Default: audio-toolbox on macOS, wasapi on Windows, alsa elsewhere. Can also use pipe or pulseaudio.
 audio_backend_runtime_socket: '' # Audio backends' runtime socket to use, if backend is pulseaudio
 audio_device: default # ALSA audio device to use for playback
 mixer_device: '' # ALSA mixer device for volume synchronization 
