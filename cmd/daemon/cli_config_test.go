@@ -23,6 +23,39 @@ func TestDefaultAudioBackend(t *testing.T) {
 	}
 }
 
+func TestLoadCLIConfigAudioBackend(t *testing.T) {
+	defaultBackend := "alsa"
+	switch runtime.GOOS {
+	case "darwin":
+		defaultBackend = "audio-toolbox"
+	case "windows":
+		defaultBackend = "wasapi"
+	}
+	for _, tc := range []struct {
+		name, config, want string
+	}{
+		{"platform default", "initial_volume: 0\n", defaultBackend},
+		{"explicit override", "audio_backend: pipe\ninitial_volume: 0\n", "pipe"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "config.yml"), []byte(tc.config), 0o600))
+			oldArgs := os.Args
+			t.Cleanup(func() { os.Args = oldArgs })
+			os.Args = []string{"test", "--config_dir", dir}
+			cfg := new(cliConfig)
+			require.NoError(t, loadCLIConfig(cfg))
+			t.Cleanup(func() {
+				if cfg.configLock != nil {
+					require.NoError(t, cfg.configLock.Unlock())
+				}
+			})
+			require.Equal(t, tc.want, cfg.AudioBackend)
+			require.Zero(t, cfg.InitialVolume, "explicit mute must survive default config merging")
+		})
+	}
+}
+
 func TestParseSize(t *testing.T) {
 	cases := []struct {
 		in      string
