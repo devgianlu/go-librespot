@@ -88,7 +88,7 @@ type NewOutputOptions struct {
 
 	// InitialVolume specifies the initial output volume.
 	//
-	// This is supported on the alsa, pipe, and wasapi backends. The PulseAudio
+	// This is supported on the alsa, pipe, audio-toolbox, and wasapi backends. The PulseAudio
 	// backend uses the PulseAudio default volume.
 	InitialVolume float32
 
