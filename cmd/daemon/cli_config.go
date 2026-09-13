@@ -273,10 +273,14 @@ func loadCLIConfig(cfg *cliConfig) error {
 }
 
 func defaultAudioBackend() string {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		return "wasapi"
+	case "darwin":
+		return "audio-toolbox"
+	default:
+		return "alsa"
 	}
-	return "alsa"
 }
 
 // parseSize parses a human-readable size string such as "1GB", "500MB" or a

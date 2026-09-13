@@ -13,11 +13,14 @@ import (
 
 func TestDefaultAudioBackend(t *testing.T) {
 	got := defaultAudioBackend()
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		require.Equal(t, "wasapi", got)
-		return
+	case "darwin":
+		require.Equal(t, "audio-toolbox", got)
+	default:
+		require.Equal(t, "alsa", got)
 	}
-	require.Equal(t, "alsa", got)
 }
 
 func TestParseSize(t *testing.T) {
