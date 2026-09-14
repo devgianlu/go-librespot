@@ -287,7 +287,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			return
 		}
 
-		p.advanceNext(false, false, func(hasNextTrack bool, err error) {
+		p.advanceNext(false, false, 0, func(hasNextTrack bool, err error) {
 			if err != nil {
 				p.app.log.WithError(err).Error("failed advancing to next track")
 			}
@@ -527,14 +527,14 @@ func isUnplayableMedia(err error) bool {
 func (p *AppPlayer) loadCurrentTrackOrSkip(paused, drop, resume bool, then func(error)) {
 	uri := p.state.player.Track.GetUri()
 
-	p.loadCurrentTrack(paused, drop, resume, func(err error) {
+	p.loadCurrentTrack(paused, drop, resume, 0, func(err error) {
 		if err == nil || !isUnplayableMedia(err) {
 			then(err)
 			return
 		}
 
 		p.app.log.WithError(err).Warnf("current track unplayable, skipping forward: %s", uri)
-		p.advanceNext(true, drop, func(_ bool, err error) {
+		p.advanceNext(true, drop, 0, func(_ bool, err error) {
 			if err != nil {
 				then(fmt.Errorf("failed advancing past unplayable track: %w", err))
 				return
@@ -547,7 +547,12 @@ func (p *AppPlayer) loadCurrentTrackOrSkip(paused, drop, resume bool, then func(
 // loadCurrentTrack starts playing whatever the state points at. Only the
 // bookkeeping happens here: fetching the media runs on the loader lane, and then
 // is called back on the player loop once it has, with whatever went wrong.
-func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, then func(error)) {
+//
+// The fetch is held back by delay, during which a newer load drops it unstarted.
+// Once started it cannot be recalled: the audio key request goes out before the
+// fetch can be cancelled, and a burst of those is what gets the daemon rate
+// limited.
+func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, delay time.Duration, then func(error)) {
 	if p.primaryStream != nil {
 		unloadPosition := p.player.PositionMs()
 		p.sess.Events().OnPrimaryStreamUnload(p.primaryStream, unloadPosition)
@@ -583,6 +588,9 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, then func(error)
 	p.state.player.PlaybackSpeed = 0 // not progressing while buffering
 	p.updateState()
 
+	// Announced per load rather than per fetch: a burst of skips moves the
+	// pointer on every press, and every stop it settles on is reported even
+	// though only the last one is fetched.
 	p.app.server.Emit(&ApiEvent{
 		Type: ApiEventTypeWillPlay,
 		Data: ApiEventDataWillPlay{
@@ -625,10 +633,17 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, then func(error)
 	metadata := maps.Clone(p.state.player.Track.GetMetadata())
 	p.loadInFlight = true
 
+	var notBefore time.Time
+	if delay > 0 {
+		notBefore = time.Now().Add(delay)
+		p.app.log.WithField("uri", spotId.Uri()).Debugf("holding load for %s in case another skip follows", delay)
+	}
+
 	p.loader.submit(loaderJob{
-		name:  "load " + spotId.Uri(),
-		class: classLoad,
-		gen:   p.loadGen,
+		name:      "load " + spotId.Uri(),
+		class:     classLoad,
+		gen:       p.loadGen,
+		notBefore: notBefore,
 		run: func(ctx context.Context) loaderResult {
 			position, startsAtZero := trackPosition, fromStart
 			if resume {
@@ -1031,8 +1046,31 @@ func (p *AppPlayer) seek(position int64) error {
 	return nil
 }
 
+// skipDelay decides how long the load a skip ends in may wait: nothing for a
+// press on its own, the debounce window for one that follows another within
+// it. The first press of a burst loads at once, so a lone skip behaves as it
+// always has; each later one is held back long enough for the next press to
+// drop it.
+func skipDelay(debounce time.Duration, now, lastSkip time.Time) time.Duration {
+	if debounce > 0 && now.Sub(lastSkip) < debounce {
+		return debounce
+	}
+	return 0
+}
+
+// noteSkip records a next or prev press and reports how long the load it ends
+// in may wait.
+func (p *AppPlayer) noteSkip() time.Duration {
+	now := time.Now()
+	delay := skipDelay(p.app.cfg.SkipDebounce, now, p.lastSkipAt)
+	p.lastSkipAt = now
+	return delay
+}
+
 func (p *AppPlayer) skipPrev(allowSeeking bool) error {
-	if allowSeeking && p.player.PositionMs() > 3000 {
+	// The position read here belongs to the stream on its way out while a load
+	// is outstanding: a second press means the track before it, not a restart.
+	if allowSeeking && !p.loadInFlight && p.player.PositionMs() > 3000 {
 		return p.seek(0)
 	}
 
@@ -1043,9 +1081,10 @@ func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 	}
 
 	p.app.log.Debug("skip previous track")
+	delay := p.noteSkip()
 	p.loadGen++
 
-	p.listJob("skip previous", classLoad, nil,
+	p.listJob("skip previous", classNav, nil,
 		func(_ context.Context, list *tracks.List) error {
 			list.GoPrev()
 			return nil
@@ -1060,7 +1099,7 @@ func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 			p.state.player.Timestamp = time.Now().UnixMilli()
 			p.state.player.PositionAsOfTimestamp = 0
 
-			p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
+			p.loadCurrentTrack(p.state.player.IsPaused, true, true, delay, func(err error) {
 				if err != nil {
 					p.app.log.WithError(err).Warn("failed loading current track (skip prev)")
 				}
@@ -1073,8 +1112,10 @@ func (p *AppPlayer) skipPrev(allowSeeking bool) error {
 func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
 	p.sess.Events().OnPlayerSkipForward(p.primaryStream, p.player.PositionMs(), track != nil)
 
+	delay := p.noteSkip()
+
 	if track == nil {
-		p.advanceNext(true, true, func(hasNextTrack bool, err error) {
+		p.advanceNext(true, true, delay, func(hasNextTrack bool, err error) {
 			if err != nil {
 				p.app.log.WithError(err).Warn("failed skipping to next track")
 			}
@@ -1120,7 +1161,7 @@ func (p *AppPlayer) skipNext(track *connectpb.ContextTrack) error {
 			p.state.player.Timestamp = time.Now().UnixMilli()
 			p.state.player.PositionAsOfTimestamp = 0
 
-			p.loadCurrentTrack(p.state.player.IsPaused, true, true, func(err error) {
+			p.loadCurrentTrack(p.state.player.IsPaused, true, true, delay, func(err error) {
 				if err != nil {
 					p.app.log.WithError(err).Warn("failed loading current track (skip next)")
 				}
@@ -1137,9 +1178,10 @@ const maxConsecutiveUnplayableSkips = 50
 // advanceNext moves to the next track and starts it, reporting through then
 // whether there was one. A run of unplayable tracks is walked forward, bounded
 // by maxConsecutiveUnplayableSkips so a fully gated context cannot loop forever.
-func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack bool, err error)) {
+// delay holds back the load it ends in, see loadCurrentTrack.
+func (p *AppPlayer) advanceNext(forceNext, drop bool, delay time.Duration, then func(hasNextTrack bool, err error)) {
 	if p.state.tracks == nil {
-		p.advanceTo(false, nil, drop, then)
+		p.advanceTo(false, nil, drop, delay, then)
 		return
 	}
 
@@ -1147,7 +1189,7 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 	// navigate, and so no walk of the context either.
 	if !forceNext && p.state.player.Options.RepeatingTrack {
 		p.state.player.IsPaused = false
-		p.advanceTo(true, nil, drop, then)
+		p.advanceTo(true, nil, drop, delay, then)
 		return
 	}
 
@@ -1156,7 +1198,7 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 
 	var hasNextTrack bool
 	var seed []string
-	p.listJob("advance", classLoad, nil,
+	p.listJob("advance", classNav, nil,
 		func(ctx context.Context, list *tracks.List) error {
 			hasNextTrack = list.GoNext(ctx)
 
@@ -1185,13 +1227,13 @@ func (p *AppPlayer) advanceNext(forceNext, drop bool, then func(hasNextTrack boo
 
 			p.state.player.IsPaused = !hasNextTrack
 			p.publishSnapshot(snap)
-			p.advanceTo(hasNextTrack, seed, drop, then)
+			p.advanceTo(hasNextTrack, seed, drop, delay, then)
 		})
 }
 
 // advanceTo starts whatever advanceNext settled on, or hands over to autoplay
 // when the context has run out.
-func (p *AppPlayer) advanceTo(hasNextTrack bool, seed []string, drop bool, then func(hasNextTrack bool, err error)) {
+func (p *AppPlayer) advanceTo(hasNextTrack bool, seed []string, drop bool, delay time.Duration, then func(hasNextTrack bool, err error)) {
 	uri := p.state.player.Track.GetUri()
 
 	p.state.player.Timestamp = time.Now().UnixMilli()
@@ -1213,7 +1255,7 @@ func (p *AppPlayer) advanceTo(hasNextTrack bool, seed []string, drop bool, then 
 	// playlist playback — even though they play on official clients, which establish a licensed
 	// context. We cannot decrypt a refused track, so skip it instead of freezing the player.
 	// Remove once proper key licensing (PlayPlay) is implemented — tracked separately.
-	p.loadCurrentTrack(!hasNextTrack, drop, true, func(err error) {
+	p.loadCurrentTrack(!hasNextTrack, drop, true, delay, func(err error) {
 		if err == nil {
 			p.consecutiveUnplayableSkips = 0
 			then(hasNextTrack, nil)
@@ -1244,7 +1286,7 @@ func (p *AppPlayer) advanceTo(hasNextTrack bool, seed []string, drop bool, then 
 			return
 		}
 
-		p.advanceNext(true, drop, then)
+		p.advanceNext(true, drop, 0, then)
 	})
 }
 

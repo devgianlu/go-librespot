@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -48,6 +49,9 @@ func (r replyTo) done(data any, err error) {
 func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 	if res.class == classLoad && res.gen == p.loadGen {
 		p.loadInFlight = false
+		if res.err == nil {
+			p.forgetReplacedStreamEvents()
+		}
 		defer p.drainPendingPlayerEvents()
 	}
 
@@ -185,14 +189,32 @@ func (p *AppPlayer) drainPendingPlayerEvents() {
 	}
 }
 
+// forgetReplacedStreamEvents drops the held events that reported the outgoing
+// stream ending. It kept playing while its replacement loaded, and if it ran
+// out in the meantime its end is held here; handling that against the stream
+// that just landed would advance straight past it.
+func (p *AppPlayer) forgetReplacedStreamEvents() {
+	p.pendingPlayerEvents = slices.DeleteFunc(p.pendingPlayerEvents, func(ev player.Event) bool {
+		return ev.Type == player.EventTypeNotPlaying || ev.Type == player.EventTypeStop
+	})
+}
+
 type loaderClass uint8
 
 const (
-	// classLoad is user-visible track and context work. A new one cancels
-	// whatever is running and drops whatever is queued: only the newest
-	// destination matters, and running the others first is exactly the burst of
-	// skipping this lane exists to prevent.
+	// classLoad is user-visible track and context work with an absolute
+	// destination: a context, a chosen track, the track the pointer is on. A
+	// new one cancels whatever is running and drops whatever is queued: only
+	// the newest destination matters, and running the others first is exactly
+	// the burst of skipping this lane exists to prevent.
 	classLoad loaderClass = iota
+
+	// classNav is relative navigation: one step forward or back from wherever
+	// the pointer is. Dropping a step would change where a burst of them ends
+	// up, so it is queued like a mutation; but the track being loaded or
+	// prefetched is no longer the destination, so it cancels and drops those
+	// like a load. The load it ends in is a classLoad of its own.
+	classNav
 
 	// classMutate changes the track list without loading any media. It is never
 	// dropped and cancels nothing: losing a queued track would be visible.
@@ -230,6 +252,11 @@ type loaderJob struct {
 	gen   uint64
 	reply replyTo
 	run   func(ctx context.Context) loaderResult
+
+	// notBefore holds the job in the queue until then. A load that waits there
+	// can still be dropped by the next one without having cost anything, which
+	// is how a burst of skips is made to pay for one load rather than each.
+	notBefore time.Time
 }
 
 // loaderResult is what comes back to the player loop. commit performs the state
@@ -300,7 +327,7 @@ func (l *loaderLane) submit(job loaderJob) {
 	}
 
 	switch job.class {
-	case classLoad:
+	case classLoad, classNav:
 		dropped = l.dropLoadsLocked()
 	case classPrefetch:
 		if l.hasPendingLoad() {
@@ -337,17 +364,29 @@ func (l *loaderLane) submit(job loaderJob) {
 
 // dropLoadsLocked cancels the load or prefetch in flight and removes those
 // queued, returning them so the caller can answer them once the lock is
-// released. Mutations are left alone: they cancel nothing and are never
-// dropped. Called with the lock held.
+// released. Mutations and navigation are left alone: they cancel nothing and
+// are never dropped. Called with the lock held.
 func (l *loaderLane) dropLoadsLocked() []loaderJob {
 	var dropped []loaderJob
 	dropped, l.queue = partitionQueue(l.queue, func(q loaderJob) bool {
-		return q.class == classLoad || q.class == classPrefetch
+		return q.class.fetches()
 	})
-	if l.running != nil && l.running.class != classMutate {
+	if l.running != nil && l.running.class.fetches() {
 		l.running.cancel()
 	}
 	return dropped
+}
+
+// fetches reports whether a job of this class pulls media, which is the work
+// worth abandoning once its destination changes.
+func (c loaderClass) fetches() bool {
+	return c == classLoad || c == classPrefetch
+}
+
+// loads reports whether a job of this class decides what plays next, and so
+// makes fetching ahead of it pointless.
+func (c loaderClass) loads() bool {
+	return c == classLoad || c == classNav
 }
 
 // dropLoads abandons every load and prefetch, running or queued, for a caller
@@ -365,15 +404,15 @@ func (l *loaderLane) dropLoads() {
 	replyAll(dropped, ErrSuperseded)
 }
 
-// hasPendingLoad reports whether a load is queued or running. Called with the
-// lock held.
+// hasPendingLoad reports whether a load, or the navigation that ends in one, is
+// queued or running. Called with the lock held.
 func (l *loaderLane) hasPendingLoad() bool {
-	if l.running != nil && l.running.class == classLoad {
+	if l.running != nil && l.running.class.loads() {
 		return true
 	}
 
 	for _, q := range l.queue {
-		if q.class == classLoad {
+		if q.class.loads() {
 			return true
 		}
 	}
@@ -399,21 +438,27 @@ func partitionQueue(jobs []loaderJob, drop func(loaderJob) bool) (dropped, kept 
 	return dropped, kept
 }
 
-func (l *loaderLane) next() (loaderJob, context.Context, bool) {
+// next takes the job at the head of the queue, or reports how long until it may
+// be taken: a job whose time has not come stays queued, where a newer one can
+// still drop it.
+func (l *loaderLane) next() (loaderJob, context.Context, time.Duration, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.closed || len(l.queue) == 0 {
-		return loaderJob{}, nil, false
+		return loaderJob{}, nil, 0, false
 	}
 
 	job := l.queue[0]
+	if wait := time.Until(job.notBefore); wait > 0 {
+		return loaderJob{}, nil, wait, false
+	}
 	l.queue = l.queue[1:]
 
 	ctx, cancel := context.WithTimeout(l.ctx, job.class.timeout())
 	l.running = &runningJob{class: job.class, cancel: cancel}
 
-	return job, ctx, true
+	return job, ctx, 0, true
 }
 
 func (l *loaderLane) execute(job loaderJob, ctx context.Context) loaderResult {
@@ -438,10 +483,19 @@ func (l *loaderLane) run() {
 	defer close(l.done)
 
 	for {
-		job, ctx, ok := l.next()
+		job, ctx, wait, ok := l.next()
 		if !ok {
+			// A nil channel never fires, so with nothing held back this only
+			// wakes for a submit.
+			var ready <-chan time.Time
+			if wait > 0 {
+				ready = time.After(wait)
+			}
+
 			select {
 			case <-l.wake:
+				continue
+			case <-ready:
 				continue
 			case <-l.ctx.Done():
 				return
