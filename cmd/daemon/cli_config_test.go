@@ -57,19 +57,21 @@ func TestParseSize(t *testing.T) {
 
 func TestLoadCLIConfigWaitForReaderFlag(t *testing.T) {
 	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	stateDir := filepath.Join(dir, "state")
 
 	config := []byte("audio_backend: pipe\naudio_output_pipe: /tmp/fifo/go-spotify\naudio_output_pipe_wait_for_reader: true\n")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.yaml"), config, 0o600))
+	require.NoError(t, os.WriteFile(configPath, config, 0o600))
 
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
-	os.Args = []string{"test", "--config_dir", dir}
+	os.Args = []string{"test", "--config", configPath, "--state", stateDir}
 
 	cfg := &cliConfig{}
 	require.NoError(t, loadCLIConfig(cfg))
 	t.Cleanup(func() {
-		if cfg.configLock != nil {
-			_ = cfg.configLock.Unlock()
+		if cfg.stateLock != nil {
+			_ = cfg.stateLock.Unlock()
 		}
 	})
 	require.True(t, cfg.AudioOutputPipeWaitForReader, "audio_output_pipe_wait_for_reader was not parsed from the config file")

@@ -23,10 +23,11 @@ import (
 var errAlreadyRunning = errors.New("go-librespot is already running")
 
 type cliConfig struct {
-	ConfigDir string `koanf:"config_dir"`
+	StateDir   string `koanf:"state"`
+	ConfigPath string `koanf:"config"`
 
 	// Keep this around so the lockfile finalizer doesn't release it.
-	configLock *flock.Flock
+	stateLock *flock.Flock
 
 	LogLevel            log.Level `koanf:"log_level"`
 	LogDisableTimestamp bool      `koanf:"log_disable_timestamp"`
@@ -144,7 +145,7 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 		if cacheDir, err := os.UserCacheDir(); err == nil {
 			dc.Cache.Dir = filepath.Join(cacheDir, "go-librespot")
 		} else {
-			dc.Cache.Dir = filepath.Join(c.ConfigDir, "cache")
+			dc.Cache.Dir = filepath.Join(c.StateDir, "cache")
 		}
 	}
 	// The value is validated in loadCLIConfig, so the error is unreachable here.
@@ -157,8 +158,18 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 	return dc
 }
 
+// backwards compatibility for config_dir flag
+func aliasNormalizeFunc(f *flag.FlagSet, name string) flag.NormalizedName {
+	switch name {
+	case "config_dir":
+		name = "state"
+	}
+	return flag.NormalizedName(name)
+}
+
 func loadCLIConfig(cfg *cliConfig) error {
 	f := flag.NewFlagSet("config", flag.ContinueOnError)
+	f.SetNormalizeFunc(aliasNormalizeFunc)
 	f.Usage = func() {
 		fmt.Println(f.FlagUsages())
 		os.Exit(0)
@@ -167,8 +178,15 @@ func loadCLIConfig(cfg *cliConfig) error {
 	if err != nil {
 		return err
 	}
-	defaultConfigDir := filepath.Join(userConfigDir, "go-librespot")
-	f.StringVar(&cfg.ConfigDir, "config_dir", defaultConfigDir, "the configuration directory")
+	defaultConfigPath := filepath.Join(userConfigDir, "go-librespot", "config.yaml")
+	f.StringVar(&cfg.ConfigPath, "config", defaultConfigPath, "the configuration file")
+
+	userStateDir, err := UserStateDir()
+	if err != nil {
+		return err
+	}
+	defaultStatePath := filepath.Join(userStateDir, "go-librespot")
+	f.StringVar(&cfg.StateDir, "state", defaultStatePath, "the state directory")
 
 	var configOverrides []string
 	f.StringArrayVarP(&configOverrides, "conf", "c", nil, "override config values (format: field=value, use field1.field2=value for nested fields)")
@@ -177,14 +195,14 @@ func loadCLIConfig(cfg *cliConfig) error {
 		return err
 	}
 
-	if err := os.MkdirAll(cfg.ConfigDir, 0o700); err != nil {
-		return fmt.Errorf("failed creating config directory: %w", err)
+	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
+		return fmt.Errorf("failed creating state directory: %w", err)
 	}
 
-	lockFilePath := filepath.Join(cfg.ConfigDir, "lockfile")
-	cfg.configLock = flock.New(lockFilePath)
-	if locked, err := cfg.configLock.TryLock(); err != nil {
-		return fmt.Errorf("could not lock config directory: %w", err)
+	lockFilePath := filepath.Join(cfg.StateDir, "lockfile")
+	cfg.stateLock = flock.New(lockFilePath)
+	if locked, err := cfg.stateLock.TryLock(); err != nil {
+		return fmt.Errorf("could not lock state directory: %w", err)
 	} else if !locked {
 		return fmt.Errorf("%w (lockfile: %s)", errAlreadyRunning, lockFilePath)
 	}
@@ -217,10 +235,11 @@ func loadCLIConfig(cfg *cliConfig) error {
 	}, "."), nil)
 
 	var configPath string
-	if _, err := os.Stat(filepath.Join(cfg.ConfigDir, "config.yaml")); os.IsNotExist(err) {
-		configPath = filepath.Join(cfg.ConfigDir, "config.yml")
+	if _, err := os.Stat(cfg.ConfigPath); os.IsNotExist(err) {
+		// postel: allow .yml in place of .yaml
+		configPath = strings.TrimSuffix(cfg.ConfigPath, filepath.Ext(cfg.ConfigPath)) + ".yml"
 	} else {
-		configPath = filepath.Join(cfg.ConfigDir, "config.yaml")
+		configPath = cfg.ConfigPath
 	}
 
 	if err := k.Load(file.Provider(configPath), yaml.Parser()); err != nil {
