@@ -267,6 +267,22 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 	return nil
 }
 
+// singleTrackContext builds a context holding just the given track, or nil when
+// the track cannot be named. A track with only a gid is taken to be a track
+// rather than an episode.
+func singleTrackContext(track *connectpb.ContextTrack) *connectpb.Context {
+	switch {
+	case track == nil:
+		return nil
+	case track.Uri != "":
+		return &connectpb.Context{Uri: track.Uri}
+	case len(track.Gid) == 16:
+		return &connectpb.Context{Uri: librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri()}
+	default:
+		return nil
+	}
+}
+
 func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	p.state.lastCommand = &req
 
@@ -287,6 +303,17 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
 		}
 		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
+
+		// A queued or autoplayed track is handed over on its own, with no
+		// context to take it from. Play it as a context of one.
+		if transferState.CurrentSession.Context == nil {
+			p.app.log.Debugf("transfer command without a context, falling back to the current track")
+
+			transferState.CurrentSession.Context = singleTrackContext(transferState.Playback.CurrentTrack)
+			if transferState.CurrentSession.Context == nil {
+				return fmt.Errorf("transfer command carries neither a context nor a track")
+			}
+		}
 
 		if sessId := transferState.CurrentSession.OriginalSessionId; sessId != nil {
 			p.state.player.SessionId = *sessId
@@ -311,6 +338,9 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// current session
 		spotCtx := transferState.CurrentSession.Context
 		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
+		if p.state.player.PlayOrigin == nil {
+			p.state.player.PlayOrigin = &connectpb.PlayOrigin{}
+		}
 		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
 		p.state.player.ContextUri = spotCtx.Uri
 		p.state.player.ContextUrl = spotCtx.Url
