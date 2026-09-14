@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package spotify.prerelease.extension;
+
+import "google/protobuf/timestamp.proto";
+
+message Prerelease {
+  string uri = 1;
+  google.protobuf.Timestamp release_time = 2;
+  Entity entity = 3;
+}
+
+message Entity {
+  string uri = 1;
+  optional string type = 2;
+  string name = 3;
+  repeated Agent agents = 4;
+  repeated Image covers = 5;
+}
+
+message Image {
+  string uri = 1;
+  string size = 2;
+  optional sint32 width = 3;
+  optional sint32 height = 4;
+}
+
+message Agent {
+  optional string uri = 1;
+  string name = 2;
+}

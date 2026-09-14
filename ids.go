@@ -50,7 +50,7 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 	// spotify:user:someone:collection[:your-episodes].
 	case "album", "artist", "playlist", "track", "station", "dailymix",
 		"collection", "top", "trackset", "list", "local", "concept",
-		"running", "genre", "radio", "folder":
+		"running", "genre", "radio", "folder", "prerelease":
 		if strings.HasSuffix(uri, ":collection:your-episodes") {
 			return SpotifyIdTypeEpisode
 		}
@@ -58,9 +58,9 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 
 	case "ad", "app", "audio", "audiofile", "author", "clip", "conceptclass",
 		"concert", "image", "instance", "internal", "interruption", "licensor",
-		"localfileimage", "media", "meta", "mosaic", "partner", "prerelease",
-		"promotion", "room", "search", "socialsession", "suggest", "transition",
-		"user", "userimage", "zerotap":
+		"localfileimage", "media", "meta", "mosaic", "partner", "promotion",
+		"room", "search", "socialsession", "suggest", "transition", "user",
+		"userimage", "zerotap":
 		return SpotifyIdTypeUnknown
 
 	default:
