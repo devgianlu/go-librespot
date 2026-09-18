@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sync/atomic"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -74,6 +75,10 @@ type Player struct {
 	volumeSteps uint32
 
 	startedPlaying time.Time
+
+	// streamGen counts the primary streams set, so that events can say which
+	// one they came from. Written only by manageLoop, read from anywhere.
+	streamGen atomic.Uint64
 }
 
 type playerCmdType int
@@ -292,7 +297,10 @@ loop:
 					_ = out.Drop()
 				}
 
-				// set source
+				// Counted before the events below so they carry the stream they
+				// describe, and so that whoever set it can tell which that was.
+				p.streamGen.Add(1)
+
 				source.SetPrimary(data.source)
 				if data.paused {
 					if err := out.Pause(); err != nil {
@@ -311,9 +319,9 @@ loop:
 				cmd.resp <- nil
 
 				if data.paused {
-					p.ev <- Event{Type: EventTypePause}
+					p.ev <- Event{Type: EventTypePause, StreamGen: p.streamGen.Load()}
 				} else {
-					p.ev <- Event{Type: EventTypePlay}
+					p.ev <- Event{Type: EventTypePlay, StreamGen: p.streamGen.Load()}
 				}
 			case playerCmdPlay:
 				if out != nil {
@@ -322,7 +330,7 @@ loop:
 					} else {
 						paused = false
 						cmd.resp <- nil
-						p.ev <- Event{Type: EventTypeResume}
+						p.ev <- Event{Type: EventTypeResume, StreamGen: p.streamGen.Load()}
 					}
 				} else {
 					paused = false
@@ -335,7 +343,7 @@ loop:
 					} else {
 						paused = true
 						cmd.resp <- nil
-						p.ev <- Event{Type: EventTypePause}
+						p.ev <- Event{Type: EventTypePause, StreamGen: p.streamGen.Load()}
 					}
 				} else {
 					paused = true
@@ -351,7 +359,7 @@ loop:
 				}
 
 				cmd.resp <- struct{}{}
-				p.ev <- Event{Type: EventTypeStop}
+				p.ev <- Event{Type: EventTypeStop, StreamGen: p.streamGen.Load()}
 			case playerCmdSeek:
 				if out != nil {
 					if err := source.SetPositionMs(cmd.data.(int64)); err != nil {
@@ -454,9 +462,9 @@ loop:
 			p.log.Tracef("cleared closed output device")
 
 			// FIXME: this is called even if not needed, like when autoplay starts
-			p.ev <- Event{Type: EventTypeStop}
+			p.ev <- Event{Type: EventTypeStop, StreamGen: p.streamGen.Load()}
 		case <-source.Done():
-			p.ev <- Event{Type: EventTypeNotPlaying}
+			p.ev <- Event{Type: EventTypeNotPlaying, StreamGen: p.streamGen.Load()}
 		}
 	}
 
@@ -476,6 +484,13 @@ func (p *Player) HasBeenPlayingFor() time.Duration {
 	}
 
 	return time.Since(p.startedPlaying)
+}
+
+// StreamGen identifies the primary stream currently set, counting up each time
+// one is set. Read it after SetPrimaryStream to learn which generation the
+// stream just handed over is; events carry the same value.
+func (p *Player) StreamGen() uint64 {
+	return p.streamGen.Load()
 }
 
 func (p *Player) Receive() <-chan Event {

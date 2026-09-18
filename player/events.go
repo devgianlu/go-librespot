@@ -19,6 +19,12 @@ const (
 
 type Event struct {
 	Type EventType
+
+	// StreamGen identifies the primary stream this event came from, counting up
+	// each time one is set. Events carry no other identity, so a consumer that
+	// holds them while swapping streams needs this to tell an outgoing stream's
+	// end from the incoming one's.
+	StreamGen uint64
 }
 
 type EventManager interface {

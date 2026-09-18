@@ -49,9 +49,9 @@ func (r replyTo) done(data any, err error) {
 func (p *AppPlayer) applyLoaderResult(res loaderResult) {
 	if res.class == classLoad && res.gen == p.loadGen {
 		p.loadInFlight = false
-		if res.err == nil {
-			p.forgetReplacedStreamEvents()
-		}
+
+		// Held events are drained after the commit, which is where a load that
+		// landed forgets the ones belonging to the stream it replaced.
 		defer p.drainPendingPlayerEvents()
 	}
 
@@ -189,12 +189,20 @@ func (p *AppPlayer) drainPendingPlayerEvents() {
 	}
 }
 
-// forgetReplacedStreamEvents drops the held events that reported the outgoing
-// stream ending. It kept playing while its replacement loaded, and if it ran
-// out in the meantime its end is held here; handling that against the stream
-// that just landed would advance straight past it.
-func (p *AppPlayer) forgetReplacedStreamEvents() {
+// forgetReplacedStreamEvents drops the held events that reported a stream older
+// than gen ending. Such a stream kept playing while its replacement loaded, and
+// if it ran out in the meantime its end is held here; handling that against the
+// stream that just landed would advance straight past it.
+//
+// Only older ones: the new stream is live from the moment the loader lane hands
+// it over, which is before this runs, so it can have ended or had its output
+// fail already. Dropping that would leave the daemon believing it still plays.
+func (p *AppPlayer) forgetReplacedStreamEvents(gen uint64) {
 	p.pendingPlayerEvents = slices.DeleteFunc(p.pendingPlayerEvents, func(ev player.Event) bool {
+		if ev.StreamGen >= gen {
+			return false
+		}
+
 		return ev.Type == player.EventTypeNotPlaying || ev.Type == player.EventTypeStop
 	})
 }
