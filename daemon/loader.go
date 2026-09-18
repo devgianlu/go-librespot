@@ -501,24 +501,38 @@ func (l *loaderLane) execute(job loaderJob, ctx context.Context) loaderResult {
 func (l *loaderLane) run() {
 	defer close(l.done)
 
+	// Reused rather than a time.After per iteration: a burst re-arms this on
+	// every press, and each of those would otherwise leave a timer to expire.
+	held := time.NewTimer(0)
+	if !held.Stop() {
+		<-held.C
+	}
+	defer held.Stop()
+
 	for {
 		job, ctx, wait, ok := l.next()
 		if !ok {
-			// A nil channel never fires, so with nothing held back this only
+			// A stopped timer never fires, so with nothing held back this only
 			// wakes for a submit.
-			var ready <-chan time.Time
 			if wait > 0 {
-				ready = time.After(wait)
+				held.Reset(wait)
 			}
 
 			select {
 			case <-l.wake:
-				continue
-			case <-ready:
-				continue
+			case <-held.C:
 			case <-l.ctx.Done():
 				return
 			}
+
+			if wait > 0 && !held.Stop() {
+				select {
+				case <-held.C:
+				default:
+				}
+			}
+
+			continue
 		}
 
 		res := l.execute(job, ctx)
