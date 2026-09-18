@@ -431,6 +431,29 @@ func TestLoaderDropLoadsCancelsAndKeepsMutations(t *testing.T) {
 	require.ErrorIs(t, err, ErrSuperseded)
 }
 
+// A held load blocks the loads behind it, which is the point. A queue edit
+// neither fetches nor decides what plays, so it should not wait out a debounce
+// window it has nothing to do with.
+func TestLoaderHeldLoadDoesNotDelayAQueueEdit(t *testing.T) {
+	l := newTestLoaderLane()
+
+	held := idleJob("held load", classLoad, noReply)
+	held.notBefore = time.Now().Add(time.Hour)
+	l.submit(held)
+	l.submit(idleJob("queue a", classMutate, noReply))
+
+	job, _, wait, ok := l.next()
+	require.True(t, ok, "the queue edit should be runnable")
+	require.Zero(t, wait)
+	require.Equal(t, "queue a", job.name)
+
+	require.Equal(t, []string{"held load"}, queuedNames(l), "the load stays held")
+
+	_, _, wait, ok = l.next()
+	require.False(t, ok)
+	require.Positive(t, wait, "and still reports how long until its time")
+}
+
 // A superseded result must release whatever its job opened: a built stream owns
 // an open CDN reader or cache file that nothing else will close.
 func TestApplyLoaderResultDiscardsSupersededWork(t *testing.T) {
