@@ -457,11 +457,22 @@ func (l *loaderLane) next() (loaderJob, context.Context, time.Duration, bool) {
 		return loaderJob{}, nil, 0, false
 	}
 
+	// A held job blocks the queue behind it, which is the point for the loads
+	// it supersedes — but a mutation neither fetches anything nor decides what
+	// plays, so making a queue edit wait out a debounce window would delay it
+	// for no reason.
+	idx := 0
 	job := l.queue[0]
 	if wait := time.Until(job.notBefore); wait > 0 {
-		return loaderJob{}, nil, wait, false
+		idx = slices.IndexFunc(l.queue, func(q loaderJob) bool {
+			return q.class == classMutate && time.Until(q.notBefore) <= 0
+		})
+		if idx < 0 {
+			return loaderJob{}, nil, wait, false
+		}
+		job = l.queue[idx]
 	}
-	l.queue = l.queue[1:]
+	l.queue = slices.Delete(l.queue, idx, idx+1)
 
 	ctx, cancel := context.WithTimeout(l.ctx, job.class.timeout())
 	l.running = &runningJob{class: job.class, cancel: cancel}
