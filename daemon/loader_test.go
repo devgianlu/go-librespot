@@ -488,33 +488,60 @@ func TestApplyLoaderResultKeepsLoadAcrossPrefetchInvalidation(t *testing.T) {
 // need a session, so if either event were drained here the test would panic.
 func TestApplyLoaderResultForgetsTheReplacedStreamsEnd(t *testing.T) {
 	p := &AppPlayer{app: &App{log: &librespot.NullLogger{}}, loadGen: 1, loadInFlight: true}
-	p.pendingPlayerEvents = []player.Event{{Type: player.EventTypeNotPlaying}, {Type: player.EventTypeStop}}
+	p.pendingPlayerEvents = []player.Event{
+		{Type: player.EventTypeNotPlaying, StreamGen: 1},
+		{Type: player.EventTypeStop, StreamGen: 1},
+	}
 
 	var committed bool
 	p.applyLoaderResult(loaderResult{
-		class:  classLoad,
-		gen:    1,
-		commit: func(*AppPlayer, error) { committed = true },
+		class: classLoad,
+		gen:   1,
+		commit: func(p *AppPlayer, _ error) {
+			committed = true
+			p.forgetReplacedStreamEvents(2)
+		},
 	})
 
 	require.True(t, committed)
 	require.False(t, p.loadInFlight)
-	require.Empty(t, p.pendingPlayerEvents)
+	require.Empty(t, p.pendingPlayerEvents, "drained after the commit, which forgot them")
+}
+
+// The stream the load handed over is live from that moment, before this runs, so
+// it can have ended or had its output fail already. Forgetting that would leave
+// the daemon believing it still plays.
+func TestForgetReplacedStreamEventsKeepsTheNewStreamsEnd(t *testing.T) {
+	p := &AppPlayer{pendingPlayerEvents: []player.Event{
+		{Type: player.EventTypeNotPlaying, StreamGen: 1},
+		{Type: player.EventTypeStop, StreamGen: 2},
+		{Type: player.EventTypeNotPlaying, StreamGen: 2},
+	}}
+
+	p.forgetReplacedStreamEvents(2)
+
+	require.Equal(t, []player.Event{
+		{Type: player.EventTypeStop, StreamGen: 2},
+		{Type: player.EventTypeNotPlaying, StreamGen: 2},
+	}, p.pendingPlayerEvents)
 }
 
 // Only the end of the outgoing stream is forgotten: a play or pause that
 // arrived during the load describes what the listener asked for meanwhile.
 func TestForgetReplacedStreamEventsKeepsTheRest(t *testing.T) {
 	p := &AppPlayer{pendingPlayerEvents: []player.Event{
-		{Type: player.EventTypePlay},
-		{Type: player.EventTypeNotPlaying},
-		{Type: player.EventTypePause},
-		{Type: player.EventTypeStop},
+		{Type: player.EventTypePlay, StreamGen: 1},
+		{Type: player.EventTypeNotPlaying, StreamGen: 1},
+		{Type: player.EventTypePause, StreamGen: 1},
+		{Type: player.EventTypeStop, StreamGen: 1},
 	}}
 
-	p.forgetReplacedStreamEvents()
+	p.forgetReplacedStreamEvents(2)
 
-	require.Equal(t, []player.Event{{Type: player.EventTypePlay}, {Type: player.EventTypePause}}, p.pendingPlayerEvents)
+	require.Equal(t, []player.Event{
+		{Type: player.EventTypePlay, StreamGen: 1},
+		{Type: player.EventTypePause, StreamGen: 1},
+	}, p.pendingPlayerEvents)
 }
 
 // A job that failed still reaches its commit, so whoever asked for the load

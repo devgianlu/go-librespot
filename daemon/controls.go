@@ -655,7 +655,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, delay time.Durat
 				}
 			}
 
-			stream, err := p.fetchTrack(ctx, *spotId, fetchTrackOpts{
+			stream, streamGen, err := p.fetchTrack(ctx, *spotId, fetchTrackOpts{
 				position:         position,
 				fromStart:        startsAtZero,
 				paused:           paused,
@@ -685,6 +685,7 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, delay time.Durat
 					}
 				},
 				commit: func(p *AppPlayer, err error) {
+					p.forgetReplacedStreamEvents(streamGen)
 					p.commitLoad(stream, spotId.Uri(), paused, position, prefetchedStream != nil)
 					then(err)
 				},
@@ -706,14 +707,17 @@ type fetchTrackOpts struct {
 
 // fetchTrack builds the stream for a track and hands it to the player. Runs on
 // the loader lane, so it touches nothing the player loop owns.
-func (p *AppPlayer) fetchTrack(ctx context.Context, spotId librespot.SpotifyId, opts fetchTrackOpts) (*player.Stream, error) {
+// The stream generation it returns identifies the events the player will raise
+// for what it handed over, so that the ones held for the outgoing stream can be
+// told apart from them.
+func (p *AppPlayer) fetchTrack(ctx context.Context, spotId librespot.SpotifyId, opts fetchTrackOpts) (*player.Stream, uint64, error) {
 	log := p.app.log.WithField("uri", spotId.Uri())
 
 	stream := opts.prefetchedStream
 	if stream == nil {
 		var err error
 		if stream, err = p.player.NewStream(ctx, p.app.client, spotId, p.app.cfg.Bitrate, opts.position); err != nil {
-			return nil, fmt.Errorf("failed creating stream for %s: %w", spotId, err)
+			return nil, 0, fmt.Errorf("failed creating stream for %s: %w", spotId, err)
 		}
 	} else if !opts.fromStart {
 		// A prefetched stream was created at position zero, so a non-zero start
@@ -722,7 +726,7 @@ func (p *AppPlayer) fetchTrack(ctx context.Context, spotId librespot.SpotifyId, 
 		// milliseconds in rewinds a stream the output is already playing.
 		seekTo := max(0, min(opts.position, int64(stream.Media.Duration())))
 		if err := stream.Source.SetPositionMs(seekTo); err != nil {
-			return nil, fmt.Errorf("failed seeking prefetched stream for %s: %w", spotId, err)
+			return nil, 0, fmt.Errorf("failed seeking prefetched stream for %s: %w", spotId, err)
 		}
 	}
 
@@ -754,12 +758,13 @@ func (p *AppPlayer) fetchTrack(ctx context.Context, spotId librespot.SpotifyId, 
 	}
 
 	if err := p.player.SetPrimaryStream(source, opts.paused, opts.drop); err != nil {
-		return nil, fmt.Errorf("failed setting stream for %s: %w", spotId, err)
+		return nil, 0, fmt.Errorf("failed setting stream for %s: %w", spotId, err)
 	}
+	streamGen := p.player.StreamGen()
 
 	p.sess.Events().PostPrimaryStreamLoad(stream, opts.paused)
 
-	return stream, nil
+	return stream, streamGen, nil
 }
 
 // commitLoad reports the track the player is now on. Runs on the player loop.

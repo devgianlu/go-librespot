@@ -360,3 +360,45 @@ func TestCommandsAfterCloseDoNotPanic(t *testing.T) {
 		t.Fatal("commands issued after close blocked forever")
 	}
 }
+
+// Events carry no other identity, so a consumer holding them across a stream
+// swap needs the generation to tell an outgoing stream's end from the incoming
+// one's.
+func TestEventsCarryTheStreamTheyCameFrom(t *testing.T) {
+	out := &recordingOutput{}
+	p := newTestPlayer(t, out)
+
+	if gen := p.StreamGen(); gen != 0 {
+		t.Fatalf("nothing set yet, got generation %d", gen)
+	}
+
+	if err := p.SetPrimaryStream(rampSource(100, 0, 0), false, false); err != nil {
+		t.Fatalf("initial load failed: %v", err)
+	}
+	first := p.StreamGen()
+	if first != 1 {
+		t.Fatalf("first stream should be generation 1, got %d", first)
+	}
+
+	if ev := <-p.Receive(); ev.Type != EventTypePlay || ev.StreamGen != first {
+		t.Fatalf("expected play from generation %d, got %v from %d", first, ev.Type, ev.StreamGen)
+	}
+
+	if err := p.SetPrimaryStream(rampSource(100, 1000, 0), true, false); err != nil {
+		t.Fatalf("second load failed: %v", err)
+	}
+	second := p.StreamGen()
+	if second <= first {
+		t.Fatalf("each primary stream needs its own generation, got %d then %d", first, second)
+	}
+
+	if ev := <-p.Receive(); ev.Type != EventTypePause || ev.StreamGen != second {
+		t.Fatalf("expected pause from generation %d, got %v from %d", second, ev.Type, ev.StreamGen)
+	}
+
+	// The secondary is not a stream being played, so it does not advance it.
+	p.SetSecondaryStream(rampSource(100, 0, 0))
+	if gen := p.StreamGen(); gen != second {
+		t.Fatalf("secondary should not advance the generation, got %d", gen)
+	}
+}
