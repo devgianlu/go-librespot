@@ -425,9 +425,28 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 		class: classLoad,
 		gen:   p.loadGen,
 		run: func(ctx context.Context) loaderResult {
+			played := spotCtx
+			var refusal error
 			list, err := p.trackListFromContext(ctx, spotCtx)
 			if err != nil {
-				return failed(fmt.Errorf("failed creating track list: %w", err))
+				// A context the backend refuses still came with the track that
+				// was playing in it, so that much can be played. A Jam's list is
+				// the case seen in the field: it answers 403 to an account that
+				// is not in that Jam, which includes every account once the Jam
+				// has ended.
+				var resolveErr *spclient.ContextResolveError
+				if !errors.As(err, &resolveErr) || !resolveErr.IsAccessDenied() {
+					return failed(fmt.Errorf("failed creating track list: %w", err))
+				}
+
+				refusal = err
+				if played = trackOnlyContext(current); played == nil {
+					return failed(fmt.Errorf("failed creating track list, and no track to fall back on: %w", err))
+				}
+
+				if list, err = p.trackListFromContext(ctx, played); err != nil {
+					return failed(fmt.Errorf("failed creating track list for the transferred track: %w", err))
+				}
 			}
 
 			// Seek to the transferred track, playing it ahead of the context if
@@ -456,11 +475,22 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 						return
 					}
 
+					// The claim announced the context that was transferred. What
+					// plays is the track alone, and that is what is reported,
+					// the same as for a transfer that carried no context at all.
+					if played != spotCtx {
+						p.app.log.WithError(refusal).Warnf("context %s cannot be resolved, playing the transferred track only", spotCtx.Uri)
+
+						p.state.player.ContextUri = played.Uri
+						p.state.player.ContextUrl = ""
+						p.state.player.ContextRestrictions = nil
+					}
+
 					p.state.queueID = highestQueueID(queue.GetTracks())
 					p.state.tracks = list
-					p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, snap.Metadata)
+					p.state.player.ContextMetadata = contextMetadata(played.Metadata, snap.Metadata)
 					p.publishSnapshot(snap)
-					p.scheduleContextMetaPrefetch(spotCtx.Uri)
+					p.scheduleContextMetaPrefetch(played.Uri)
 
 					// skip forward if the transferred track is unplayable, so a
 					// cast onto a refused track does not freeze the player.
