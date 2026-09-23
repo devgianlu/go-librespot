@@ -761,6 +761,10 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, delay time.Durat
 				}
 			}
 
+			// Report where the stream actually starts, which is not what was
+			// asked for when that was past the end of the track.
+			position = player.StartPosition(position, int64(stream.Media.Duration()))
+
 			// fetchTrack has already handed the source to the player, so there
 			// is nothing here to close: the next load replaces it, and closing
 			// it now could close a stream still being read. If this result is
@@ -813,7 +817,7 @@ func (p *AppPlayer) fetchTrack(ctx context.Context, spotId librespot.SpotifyId, 
 		// position (an episode's resume point, or a transfer) has to be applied
 		// here unless the stream is declared to start from zero: seeking a few
 		// milliseconds in rewinds a stream the output is already playing.
-		seekTo := max(0, min(opts.position, int64(stream.Media.Duration())))
+		seekTo := player.StartPosition(opts.position, int64(stream.Media.Duration()))
 		if err := stream.Source.SetPositionMs(seekTo); err != nil {
 			return nil, 0, fmt.Errorf("failed seeking prefetched stream for %s: %w", spotId, err)
 		}
