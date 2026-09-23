@@ -5,6 +5,8 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/devgianlu/go-librespot/mpris"
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -103,6 +106,27 @@ func logoutRequested(p *AppPlayer) bool {
 // backend refusing the context, such as the network.
 func failResolve(context.Context, *connectpb.Context) (*tracks.List, error) {
 	return nil, errors.New("connection reset")
+}
+
+// resolveWith stands in for resolving a transferred context: refused names the
+// context uris the backend answers with the given status, and anything else
+// resolves to whatever tracks its pages already hold.
+func resolveWith(status int, refused ...string) func(context.Context, *connectpb.Context) (*tracks.List, error) {
+	return func(ctx context.Context, spotCtx *connectpb.Context) (*tracks.List, error) {
+		for _, uri := range refused {
+			if spotCtx.Uri == uri {
+				return nil, fmt.Errorf("failed initializing context resolver: %w",
+					&spclient.ContextResolveError{StatusCode: status})
+			}
+		}
+		if len(spotCtx.Pages) == 0 {
+			return nil, fmt.Errorf("test resolver cannot fetch %s", spotCtx.Uri)
+		}
+
+		// With its tracks already in hand the resolver never reaches for the
+		// spclient, so there is none.
+		return tracks.NewTrackListFromContext(ctx, &librespot.NullLogger{}, nil, spotCtx)
+	}
 }
 
 func transferCommand(t *testing.T, state *connectpb.TransferState) dealer.RequestPayload {
@@ -244,7 +268,40 @@ func TestTransferThatCannotResolveLeavesTheDeviceIdle(t *testing.T) {
 
 	runQueuedJob(t, p)
 
+	// A failure that is not the backend refusing the context says nothing
+	// about the track either, so there is no falling back to it.
 	requireIdle(t, p)
+}
+
+// The field case of #338: the backend refuses the Jam's list, but the transfer
+// still says which track was playing. That track plays, with what was queued
+// behind it.
+func TestTransferOfARefusedContextPlaysTheTransferredTrack(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusNotFound} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			p := newTestAppPlayer(t)
+			p.resolveTrackList = resolveWith(status, jamListUri)
+
+			require.NoError(t, p.handlePlayerCommand(jamTransfer(t, &connectpb.ContextTrack{Uri: jamTrackUri, Uid: "u0"})))
+			runQueuedJob(t, p)
+
+			// Reported as a context of that one track, the same as a transfer
+			// that carried no context at all.
+			require.Equal(t, jamTrackUri, p.state.player.ContextUri)
+			require.Empty(t, p.state.player.ContextUrl)
+			require.Equal(t, jamTrackUri, p.state.player.Track.GetUri())
+
+			require.NotNil(t, p.state.tracks)
+			require.Len(t, p.state.player.NextTracks, 1)
+			require.Equal(t, queuedUri, p.state.player.NextTracks[0].Uri)
+			require.Equal(t, "queue", p.state.player.NextTracks[0].Provider)
+
+			// And the track itself is being loaded.
+			require.Len(t, p.loader.queue, 1)
+			require.True(t, p.state.active)
+			require.False(t, logoutRequested(p))
+		})
+	}
 }
 
 // A context can arrive with no track in it. The claim must not dereference the
@@ -255,6 +312,19 @@ func TestTransferWithoutATrackThatCannotResolveLeavesTheDeviceIdle(t *testing.T)
 
 	require.NoError(t, p.handlePlayerCommand(jamTransfer(t, nil)))
 	require.Nil(t, p.state.player.Track)
+
+	runQueuedJob(t, p)
+
+	requireIdle(t, p)
+}
+
+// Refused, and with no track to fall back on, there is nothing to play.
+func TestTransferOfARefusedContextWithoutATrackLeavesTheDeviceIdle(t *testing.T) {
+	p := newTestAppPlayer(t)
+	p.resolveTrackList = resolveWith(http.StatusForbidden, jamListUri)
+
+	require.NoError(t, p.handlePlayerCommand(jamTransfer(t, nil)))
+	require.Nil(t, p.state.player.Track, "a context with no track in it is claimed without one")
 
 	runQueuedJob(t, p)
 

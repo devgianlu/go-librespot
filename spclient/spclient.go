@@ -477,6 +477,29 @@ func (c *Spclient) PlaylistSignals(ctx context.Context, playlist librespot.Spoti
 	return &protoResp, nil
 }
 
+// ContextResolveError reports that the backend answered a context resolve with
+// something other than 200. Transient statuses never get this far, they are
+// retried by the request itself, so what arrives here is the backend's final
+// word: 403 and 404 in particular mean this account may not have the context.
+type ContextResolveError struct {
+	StatusCode int
+
+	url string // the hm:// url resolved through, empty for /context-resolve/v1
+}
+
+func (e *ContextResolveError) Error() string {
+	if e.url != "" {
+		return fmt.Sprintf("invalid status code from context resolve at %s: %d", e.url, e.StatusCode)
+	}
+	return fmt.Sprintf("invalid status code from context resolve: %d", e.StatusCode)
+}
+
+// IsAccessDenied reports whether the backend refused the context to this
+// account rather than failing to produce it.
+func (e *ContextResolveError) IsAccessDenied() bool {
+	return e.StatusCode == http.StatusForbidden || e.StatusCode == http.StatusNotFound
+}
+
 func (c *Spclient) ContextResolve(ctx context.Context, uri string) (*connectpb.Context, error) {
 	if librespot.InferSpotifyIdTypeFromContextUri(uri) == librespot.SpotifyIdTypeUnknown {
 		return nil, fmt.Errorf("unsupported context type: %s", uri)
@@ -490,7 +513,7 @@ func (c *Spclient) ContextResolve(ctx context.Context, uri string) (*connectpb.C
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from context resolve: %d", resp.StatusCode)
+		return nil, &ContextResolveError{StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -517,7 +540,7 @@ func (c *Spclient) ContextResolveUrl(ctx context.Context, hmUrl string) (*connec
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from context resolve at %s: %d", hmUrl, resp.StatusCode)
+		return nil, &ContextResolveError{StatusCode: resp.StatusCode, url: hmUrl}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)

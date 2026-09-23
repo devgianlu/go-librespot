@@ -293,6 +293,20 @@ func singleTrackContext(track *connectpb.ContextTrack) *connectpb.Context {
 	}
 }
 
+// trackOnlyContext is singleTrackContext with the track already in its only
+// page, so that playing it needs nothing resolved: it is the fallback for a
+// context that could not be.
+func trackOnlyContext(track *connectpb.ContextTrack) *connectpb.Context {
+	spotCtx := singleTrackContext(track)
+	if spotCtx == nil {
+		return nil
+	}
+
+	track = proto.Clone(track).(*connectpb.ContextTrack)
+	spotCtx.Pages = []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{track}}}
+	return spotCtx
+}
+
 // trackListFromContext resolves a context into the track list that plays it.
 // Called from the loader lane.
 func (p *AppPlayer) trackListFromContext(ctx context.Context, spotCtx *connectpb.Context) (*tracks.List, error) {

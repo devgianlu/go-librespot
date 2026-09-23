@@ -4,6 +4,7 @@ package spclient_test
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -360,6 +361,52 @@ func (suite *RequestSuite) TestPutConnectStateRejectsUnparseableCluster() {
 	_, err := suite.spclient.PutConnectState(suite.T().Context(), "conn-id", &connectpb.PutStateRequest{})
 	suite.Require().Error(err)
 	suite.Contains(err.Error(), "failed unmarshalling Cluster")
+}
+
+// A context the backend will not resolve comes back typed, so a caller can tell
+// a refusal to this account from anything else without matching on the message.
+// Only final answers get this far: 5xx are retried by the request itself.
+func (suite *RequestSuite) TestContextResolveReportsTheStatus() {
+	const uri = "spotify:list:jam-list:163dc0978f246346e7f1d14a4dd2bb9d"
+
+	for _, tt := range []struct {
+		status int
+		denied bool
+	}{
+		{http.StatusForbidden, true},
+		{http.StatusNotFound, true},
+		{http.StatusBadRequest, false},
+	} {
+		suite.Run(http.StatusText(tt.status), func() {
+			suite.SetupTest()
+			defer suite.TearDownTest()
+
+			suite.handler = func(_ int, w http.ResponseWriter) { w.WriteHeader(tt.status) }
+
+			_, err := suite.spclient.ContextResolve(suite.T().Context(), uri)
+
+			var resolveErr *spclient.ContextResolveError
+			suite.Require().ErrorAs(fmt.Errorf("wrapped: %w", err), &resolveErr)
+			suite.Equal(tt.status, resolveErr.StatusCode)
+			suite.Equal(tt.denied, resolveErr.IsAccessDenied())
+			suite.Equal(fmt.Sprintf("invalid status code from context resolve: %d", tt.status), err.Error())
+			suite.Equal("/context-resolve/v1/"+uri, suite.requests()[0].path)
+		})
+	}
+}
+
+func (suite *RequestSuite) TestContextResolveUrlReportsTheStatus() {
+	const hm = "hm://lexicon-session-provider/context-resolve/v2/session?contextUri=spotify:playlist:37i9dQZF1EYkqdzj48dyYq"
+
+	suite.handler = func(_ int, w http.ResponseWriter) { w.WriteHeader(http.StatusForbidden) }
+
+	_, err := suite.spclient.ContextResolveUrl(suite.T().Context(), hm)
+
+	var resolveErr *spclient.ContextResolveError
+	suite.Require().ErrorAs(err, &resolveErr)
+	suite.Equal(http.StatusForbidden, resolveErr.StatusCode)
+	suite.True(resolveErr.IsAccessDenied())
+	suite.Equal("invalid status code from context resolve at "+hm+": 403", err.Error())
 }
 
 func TestRequestSuite(t *testing.T) {
