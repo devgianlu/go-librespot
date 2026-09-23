@@ -402,3 +402,36 @@ func TestEventsCarryTheStreamTheyCameFrom(t *testing.T) {
 		t.Fatalf("secondary should not advance the generation, got %d", gen)
 	}
 }
+
+// A start position past the end of the track, as a transfer from a client with
+// stale playback state carries, would end the track the moment it started and
+// skip to the next one. It starts over instead; anything inside the track is
+// kept as it is.
+func TestStartPosition(t *testing.T) {
+	const duration = 235545
+
+	for _, tt := range []struct {
+		name     string
+		position int64
+		want     int64
+	}{
+		{"from the start", 0, 0},
+		{"negative", -1, 0},
+		{"inside the track", 47480, 47480},
+		{"last millisecond", duration - 1, duration - 1},
+		{"at the end", duration, 0},
+		{"past the end, as seen in the field", 398237, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StartPosition(tt.position, duration); got != tt.want {
+				t.Fatalf("StartPosition(%d, %d) = %d, want %d", tt.position, duration, got, tt.want)
+			}
+		})
+	}
+
+	// With no duration known, nothing is inside the track: this is what the
+	// clamp it replaces did too.
+	if got := StartPosition(47480, 0); got != 0 {
+		t.Fatalf("StartPosition with no duration = %d, want 0", got)
+	}
+}
