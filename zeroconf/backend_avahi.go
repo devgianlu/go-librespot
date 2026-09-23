@@ -3,6 +3,7 @@ package zeroconf
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/godbus/dbus/v5"
@@ -32,6 +33,10 @@ const (
 	avahiEntryGroupCollision   = int32(3) // AVAHI_ENTRY_GROUP_COLLISION - service name collision
 	avahiEntryGroupFailure     = int32(4) // AVAHI_ENTRY_GROUP_FAILURE
 )
+
+// avahiReconnectRetry is how often the bus and avahi-daemon are tried again
+// after the connection to them is lost.
+const avahiReconnectRetry = 5 * time.Second
 
 // AvahiRegistrar implements ServiceRegistrar using avahi-daemon via D-Bus.
 // This allows go-librespot to share the mDNS responder with other services
@@ -101,34 +106,37 @@ func NewAvahiRegistrar(log librespot.Logger) (*AvahiRegistrar, error) {
 		done:    make(chan struct{}),
 	}
 
-	// Subscribe to Server and EntryGroup state changes so we can react to host
-	// name changes and service name collisions. The entry group path is only
-	// known after EntryGroupNew, so we match the interface/member and filter by
-	// path in the handler.
-	matchOk := true
-	if err := conn.AddMatchSignal(
-		dbus.WithMatchInterface(avahiServerIface),
-		dbus.WithMatchMember("StateChanged"),
-		dbus.WithMatchObjectPath(avahiServerPath),
-	); err != nil {
-		log.WithError(err).Warnf("failed subscribing to avahi server state changes, host name changes will not be handled")
-		matchOk = false
-	}
-	if err := conn.AddMatchSignal(
-		dbus.WithMatchInterface(avahiEntryGroupIface),
-		dbus.WithMatchMember("StateChanged"),
-	); err != nil {
-		log.WithError(err).Warnf("failed subscribing to avahi entry group state changes, service name collisions will not be handled")
-		matchOk = false
-	}
-
-	if matchOk {
-		conn.Signal(a.signals)
+	if err := subscribeAvahiSignals(conn, a.signals); err != nil {
+		log.WithError(err).Warnf("failed subscribing to avahi state changes, host name changes and service name collisions will not be handled")
+	} else {
 		a.wg.Add(1)
 		go a.watchSignals()
 	}
 
 	return a, nil
+}
+
+// subscribeAvahiSignals subscribes to Server and EntryGroup state changes so we
+// can react to host name changes and service name collisions. The entry group
+// path is only known after EntryGroupNew, so we match the interface/member and
+// filter by path in the handler.
+func subscribeAvahiSignals(conn *dbus.Conn, signals chan *dbus.Signal) error {
+	if err := conn.AddMatchSignal(
+		dbus.WithMatchInterface(avahiServerIface),
+		dbus.WithMatchMember("StateChanged"),
+		dbus.WithMatchObjectPath(avahiServerPath),
+	); err != nil {
+		return err
+	}
+	if err := conn.AddMatchSignal(
+		dbus.WithMatchInterface(avahiEntryGroupIface),
+		dbus.WithMatchMember("StateChanged"),
+	); err != nil {
+		return err
+	}
+
+	conn.Signal(signals)
+	return nil
 }
 
 // getAvahiVersion attempts to retrieve the avahi-daemon version.
@@ -262,10 +270,62 @@ func (a *AvahiRegistrar) watchSignals() {
 			return
 		case sig, ok := <-a.signals:
 			if !ok {
-				return
+				// The bus connection is gone, which closes every signal channel on
+				// it: dbus-daemon went away, and avahi-daemon with it.
+				if !a.reconnect() {
+					return
+				}
+				continue
 			}
 			a.handleSignal(sig)
 		}
+	}
+}
+
+// reconnect waits for the system bus and avahi-daemon to be back, then
+// subscribes again and re-publishes the service. It returns false if Shutdown
+// was called first.
+func (a *AvahiRegistrar) reconnect() bool {
+	a.log.Warnf("lost the system bus connection, waiting for avahi-daemon to come back")
+
+	for {
+		select {
+		case <-a.done:
+			return false
+		case <-time.After(avahiReconnectRetry):
+		}
+
+		conn, err := dbus.SystemBus()
+		if err != nil {
+			a.log.WithError(err).Debugf("system bus still unavailable")
+			continue
+		}
+		server := conn.Object(avahiService, avahiServerPath)
+		var hostname string
+		if err := server.Call(avahiServerIface+".GetHostName", 0).Store(&hostname); err != nil {
+			a.log.WithError(err).Debugf("avahi-daemon still unavailable")
+			continue
+		}
+
+		signals := make(chan *dbus.Signal, 16)
+		if err := subscribeAvahiSignals(conn, signals); err != nil {
+			a.log.WithError(err).Debugf("failed subscribing to avahi state changes")
+			continue
+		}
+
+		a.mu.Lock()
+		a.conn, a.server, a.signals = conn, server, signals
+		// The group went with the daemon that created it.
+		a.entryGroup = nil
+		if err := a.publishLocked(); err != nil {
+			// A daemon still registering its host name refuses it; its running
+			// signal publishes the service instead.
+			a.log.WithError(err).Debugf("failed re-publishing avahi service after reconnecting")
+		}
+		a.mu.Unlock()
+
+		a.log.Infof("reconnected to avahi-daemon")
+		return true
 	}
 }
 
@@ -368,13 +428,14 @@ func (a *AvahiRegistrar) Shutdown() {
 	}
 	a.mu.Unlock()
 
-	// Stop the signal goroutine before tearing down the connection.
+	// Stop the signal goroutine before tearing down the connection; until it
+	// stops, a reconnect may still be replacing it.
 	close(a.done)
-	if a.signals != nil {
-		a.conn.RemoveSignal(a.signals)
-	}
 	a.wg.Wait()
 
+	if a.signals != nil && a.conn != nil {
+		a.conn.RemoveSignal(a.signals)
+	}
 	if a.conn != nil {
 		_ = a.conn.Close()
 		a.conn = nil
