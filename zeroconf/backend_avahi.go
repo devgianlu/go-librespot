@@ -191,6 +191,18 @@ func (a *AvahiRegistrar) publishLocked() error {
 		return nil
 	}
 
+	if a.entryGroup != nil {
+		// Reset any previously committed entries so we can re-add the service.
+		// A committed group cannot be modified, so this is required both for
+		// name changes and when re-publishing after a host name change.
+		if err := a.entryGroup.Call(avahiEntryGroupIface+".Reset", 0).Err; err != nil {
+			// A group that cannot be reset belonged to an avahi-daemon that has
+			// since restarted, and went with it: start over with a fresh one.
+			a.log.WithError(err).Debugf("avahi entry group is gone, creating a new one")
+			a.entryGroup = nil
+		}
+	}
+
 	// Create a new entry group for our service if we don't have one yet.
 	if a.entryGroup == nil {
 		var groupPath dbus.ObjectPath
@@ -200,11 +212,6 @@ func (a *AvahiRegistrar) publishLocked() error {
 
 		a.entryGroup = a.conn.Object(avahiService, groupPath)
 		a.groupPath = groupPath
-	} else {
-		// Reset any previously committed entries so we can re-add the service.
-		// A committed group cannot be modified, so this is required both for
-		// name changes and when re-publishing after a host name change.
-		_ = a.entryGroup.Call(avahiEntryGroupIface+".Reset", 0).Err
 	}
 
 	// Convert TXT records to [][]byte format required by avahi
