@@ -24,6 +24,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
+	"github.com/devgianlu/go-librespot/tracks"
 )
 
 // AppPlayer owns the player's state and is the only thing that may touch it.
@@ -54,6 +55,11 @@ type AppPlayer struct {
 	volumeUpdate      chan float32
 
 	loader *loaderLane
+
+	// resolveTrackList builds the track list for a transferred context. Nil
+	// means the real one, over the session's spclient: tests stand in for the
+	// network here.
+	resolveTrackList func(ctx context.Context, spotCtx *connectpb.Context) (*tracks.List, error)
 
 	// loadGen stamps track and context work, prefetchGen what is fetched ahead
 	// for the transition after it. They are separate because a queue edit or
@@ -287,6 +293,16 @@ func singleTrackContext(track *connectpb.ContextTrack) *connectpb.Context {
 	}
 }
 
+// trackListFromContext resolves a context into the track list that plays it.
+// Called from the loader lane.
+func (p *AppPlayer) trackListFromContext(ctx context.Context, spotCtx *connectpb.Context) (*tracks.List, error) {
+	if p.resolveTrackList != nil {
+		return p.resolveTrackList(ctx, spotCtx)
+	}
+
+	return tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
+}
+
 func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	p.state.lastCommand = &req
 
@@ -356,8 +372,14 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// are cleared rather than left as they are: they still describe the
 		// context being transferred away from, and this claim already carries
 		// the new context's uri and track.
-		contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
-		p.state.player.Track = librespot.ContextTrackToProvidedTrack(contextSpotType, transferState.Playback.CurrentTrack)
+		//
+		// A context can arrive without a track in it, which would otherwise be
+		// dereferenced here; the loader then plays it from the top.
+		p.state.player.Track = nil
+		if current := transferState.Playback.CurrentTrack; singleTrackContext(current) != nil {
+			contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
+			p.state.player.Track = librespot.ContextTrackToProvidedTrack(contextSpotType, current)
+		}
 		p.state.player.PrevTracks = nil
 		p.state.player.NextTracks = nil
 		p.state.player.Index = nil

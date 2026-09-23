@@ -411,24 +411,36 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 
 	p.loadGen++
 
+	// Whatever stops the transfer short also undoes its claim, or the device
+	// goes on advertising a context it is not going to play.
+	failed := func(err error) loaderResult {
+		return loaderResult{
+			err:    err,
+			commit: func(p *AppPlayer, _ error) { p.abandonTransfer() },
+		}
+	}
+
 	p.loader.submit(loaderJob{
 		name:  "transfer " + spotCtx.Uri,
 		class: classLoad,
 		gen:   p.loadGen,
 		run: func(ctx context.Context) loaderResult {
-			list, err := tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
+			list, err := p.trackListFromContext(ctx, spotCtx)
 			if err != nil {
-				return loaderResult{err: fmt.Errorf("failed creating track list: %w", err)}
+				return failed(fmt.Errorf("failed creating track list: %w", err))
 			}
 
 			// Seek to the transferred track, playing it ahead of the context if
-			// it cannot be located.
-			if err := list.TrySeekTo(ctx, current); err != nil {
-				return loaderResult{err: fmt.Errorf("failed seeking to track: %w", err)}
+			// it cannot be located. Without one to name, the context plays from
+			// the top.
+			if singleTrackContext(current) != nil {
+				if err := list.TrySeekTo(ctx, current); err != nil {
+					return failed(fmt.Errorf("failed seeking to track: %w", err))
+				}
 			}
 
 			if err := list.ToggleShuffle(ctx, shuffle); err != nil {
-				return loaderResult{err: fmt.Errorf("failed shuffling context: %w", err)}
+				return failed(fmt.Errorf("failed shuffling context: %w", err))
 			}
 
 			for _, track := range queue.GetTracks() {
@@ -461,6 +473,53 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 			}
 		},
 	})
+}
+
+// abandonTransfer takes back the claim a transfer made, once it turns out there
+// is nothing in it that can be played. The device is left idle but active, and
+// keeps its session: it was handed to this account a moment ago, and whoever
+// cast onto it can start something else straight away. That is why this is not
+// stopPlayback, which hands a zeroconf session back.
+func (p *AppPlayer) abandonTransfer() {
+	// Anything still playing belongs to whatever came before the transfer, and
+	// is not what the state is about to describe. Stopping it announces itself
+	// through the player's stop event.
+	if p.primaryStream != nil {
+		p.prefetchGen++
+		p.prefetchTimer.Stop()
+
+		p.player.Stop()
+		p.primaryStream = nil
+		p.secondaryStream = nil
+	} else {
+		p.app.server.Emit(&ApiEvent{
+			Type: ApiEventTypeStopped,
+			Data: ApiEventDataStopped{
+				PlayOrigin: p.state.playOrigin(),
+			},
+		})
+		p.emitMprisUpdate(mpris.Stopped)
+	}
+
+	p.state.tracks = nil
+	p.state.queueID = 0
+
+	p.state.player.ContextUri = ""
+	p.state.player.ContextUrl = ""
+	p.state.player.ContextMetadata = nil
+	p.state.player.ContextRestrictions = nil
+	p.state.player.Track = nil
+	p.state.player.PrevTracks = nil
+	p.state.player.NextTracks = nil
+	p.state.player.Index = nil
+
+	p.state.player.IsPlaying = false
+	p.state.player.IsBuffering = false
+	p.state.setPaused(false)
+	p.state.player.Timestamp = time.Now().UnixMilli()
+	p.state.player.PositionAsOfTimestamp = 0
+
+	p.flushState()
 }
 
 // highestQueueID reports the largest "q<number>" uid in a transferred queue, so
