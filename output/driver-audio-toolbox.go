@@ -24,12 +24,21 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"runtime/cgo"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 
 	librespot "github.com/devgianlu/go-librespot"
 	log "github.com/sirupsen/logrus"
+)
+
+// Outputs the audio queue callback can reach, keyed by the id stored in their
+// AudioContext. This is a cgo.Handle whose lookup may miss: Close drops the
+// output from here even when the queue fails to dispose and may still call
+// back, and a callback that finds nothing just returns.
+var (
+	toolboxOutputs  sync.Map
+	toolboxOutputID atomic.Uintptr
 )
 
 type toolboxOutput struct {
@@ -56,7 +65,7 @@ func newAudioToolboxOutput(opts *NewOutputOptions) (*toolboxOutput, error) {
 	}
 
 	// AudioQueue retains this C allocation until disposal. Store an integer
-	// handle, never a Go pointer: the output contains Go-managed references.
+	// id, never a Go pointer: the output contains Go-managed references.
 	log.Tracef("allocating audio context")
 	ctx := C.allocateAudioContext()
 	if ctx == nil {
@@ -64,7 +73,9 @@ func newAudioToolboxOutput(opts *NewOutputOptions) (*toolboxOutput, error) {
 		out.err <- allocErr
 		return nil, allocErr
 	}
-	ctx.output = C.uintptr_t(cgo.NewHandle(out))
+	id := toolboxOutputID.Add(1)
+	toolboxOutputs.Store(id, out)
+	ctx.output = C.uintptr_t(id)
 	out.context = ctx
 	ready := false
 	defer func() {
@@ -95,6 +106,8 @@ func newAudioToolboxOutput(opts *NewOutputOptions) (*toolboxOutput, error) {
 		&out.audioQueue,
 	)
 	if err != 0 {
+		// Nothing was created, so Close must not try to dispose it.
+		out.audioQueue = nil
 		return nil, out.toolboxError("setupAudioQueue", err)
 	}
 
@@ -174,8 +187,11 @@ func (out *toolboxOutput) bufferSamples(buffer C.AudioQueueBufferRef) {
 //export audioCallback
 func audioCallback(inUserData unsafe.Pointer, inAQ C.AudioQueueRef, inBuffer C.AudioQueueBufferRef) {
 	ctx := (*C.AudioContext)(inUserData)
-	out := cgo.Handle(ctx.output).Value().(*toolboxOutput)
-	out.bufferSamples(inBuffer)
+	out, ok := toolboxOutputs.Load(uintptr(ctx.output))
+	if !ok {
+		return
+	}
+	out.(*toolboxOutput).bufferSamples(inBuffer)
 }
 
 func (out *toolboxOutput) Pause() error {
@@ -264,8 +280,17 @@ func (out *toolboxOutput) Error() <-chan error {
 
 func (out *toolboxOutput) Close() error {
 	out.closing.Store(true)
+	// Release the output first, whatever happens to the queue: callbacks
+	// from now on find nothing, and ones already running hold their own
+	// reference.
+	if out.context != nil {
+		toolboxOutputs.Delete(uintptr(out.context.output))
+	}
+
 	// Immediate disposal waits for callbacks to finish before their context
-	// and handle can be released. Also covers partially constructed outputs.
+	// can be freed. Also covers partially constructed outputs. If it fails the
+	// queue may still call back, so the context stays allocated and a later
+	// Close retries.
 	if out.audioQueue != nil {
 		if status := C.AudioQueueDispose(out.audioQueue, C.Boolean(1)); status != C.noErr {
 			return out.toolboxError("disposeAudioQueue", status)
@@ -274,7 +299,6 @@ func (out *toolboxOutput) Close() error {
 	}
 
 	if out.context != nil {
-		cgo.Handle(out.context.output).Delete()
 		C.freeAudioContext(out.context)
 		out.context = nil
 	}
