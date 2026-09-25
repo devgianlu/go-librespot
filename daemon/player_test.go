@@ -697,3 +697,44 @@ func TestJamEditWhileAQueuedTrackPlaysKeepsTheContextPosition(t *testing.T) {
 	require.Empty(t, p.loader.queue, "the playing track is not loaded again")
 	require.Equal(t, []string{"spotify:track:11hcBLPtbMp4aQI6zGQLub"}, trackUris(p.state.player.NextTracks))
 }
+
+// Starting a context keeps what is queued, as the official clients do. In a
+// Jam the queue is what the participants added, and the host starting a
+// playlist used to throw it away.
+func TestStartingAContextKeepsTheQueue(t *testing.T) {
+	spotCtx := &connectpb.Context{
+		Uri: "spotify:playlist:37i9dQZF1DX8vwRmUsEIMT",
+		Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{
+			{Uri: jamTrackUri, Uid: "u0"},
+			{Uri: "spotify:track:3CRDbSIZ4r5MsZ0YwxuEkn", Uid: "u1"},
+		}}},
+	}
+	queued := []*connectpb.ContextTrack{{Uri: queuedUri, Uid: "q0", Metadata: map[string]string{"is_queued": "true"}}}
+
+	_, snap, err := resolveContext(t.Context(), &librespot.NullLogger{}, nil, spotCtx, nil, false, queued)
+	require.NoError(t, err)
+
+	require.Equal(t, jamTrackUri, snap.Current.GetUri())
+	require.Equal(t, []string{queuedUri, "spotify:track:3CRDbSIZ4r5MsZ0YwxuEkn"}, trackUris(snap.Next))
+	require.Equal(t, "queue", snap.Next[0].GetProvider())
+}
+
+// What carries over is what is still to play: a queued track that is playing
+// has been jumped away from by starting something else.
+func TestUpcomingQueueLeavesOutThePlayingEntry(t *testing.T) {
+	list, err := tracks.NewTrackListFromContext(t.Context(), &librespot.NullLogger{}, nil, &connectpb.Context{
+		Uri:   "spotify:playlist:37i9dQZF1DX8vwRmUsEIMT",
+		Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{{Uri: jamTrackUri, Uid: "u0"}}}},
+	})
+	require.NoError(t, err)
+	require.True(t, list.GoStart(t.Context()))
+
+	list.AddToQueue(&connectpb.ContextTrack{Uri: queuedUri, Uid: "q0"})
+	list.AddToQueue(&connectpb.ContextTrack{Uri: "spotify:track:3CRDbSIZ4r5MsZ0YwxuEkn", Uid: "q1"})
+	require.Len(t, list.UpcomingQueue(), 2)
+
+	list.SetPlayingQueue(true)
+	upcoming := list.UpcomingQueue()
+	require.Len(t, upcoming, 1)
+	require.Equal(t, "q1", upcoming[0].GetUid())
+}

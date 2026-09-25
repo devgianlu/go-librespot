@@ -368,12 +368,21 @@ func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, p
 	shuffle := p.state.player.Options.ShufflingContext
 	p.loadGen++
 
+	// Starting a context leaves the queue alone, as the official clients do.
+	// In a Jam it holds what the participants added, and the host starting a
+	// playlist used to throw it away. A queued track that is playing has been
+	// jumped away from, so it goes.
+	var queued []*connectpb.ContextTrack
+	if p.state.tracks != nil {
+		queued = p.state.tracks.UpcomingQueue()
+	}
+
 	p.loader.submit(loaderJob{
 		name:  "resolve " + spotCtx.Uri,
 		class: classLoad,
 		gen:   p.loadGen,
 		run: func(ctx context.Context) loaderResult {
-			list, snap, err := resolveContext(ctx, p.app.log, p.sess.Spclient(), spotCtx, skipTo, shuffle)
+			list, snap, err := resolveContext(ctx, p.app.log, p.sess.Spclient(), spotCtx, skipTo, shuffle, queued)
 			if err != nil {
 				return loaderResult{
 					err:    err,
@@ -697,7 +706,7 @@ func highestQueueID(queued []*connectpb.ContextTrack) uint64 {
 // resolveContext resolves a context and walks it to the track playback should
 // start from. Runs on the loader lane: the list it builds is not the daemon's
 // until the result is applied.
-func resolveContext(ctx context.Context, log librespot.Logger, sp *spclient.Spclient, spotCtx *connectpb.Context, skipTo skipToFunc, shuffle bool) (*tracks.List, *tracks.Snapshot, error) {
+func resolveContext(ctx context.Context, log librespot.Logger, sp *spclient.Spclient, spotCtx *connectpb.Context, skipTo skipToFunc, shuffle bool, queued []*connectpb.ContextTrack) (*tracks.List, *tracks.Snapshot, error) {
 	list, err := tracks.NewTrackListFromContext(ctx, log, sp, spotCtx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed creating track list: %w", err)
@@ -718,6 +727,10 @@ func resolveContext(ctx context.Context, log librespot.Logger, sp *spclient.Spcl
 
 	if err := list.ToggleShuffle(ctx, shuffle); err != nil {
 		return nil, nil, fmt.Errorf("failed shuffling context: %w", err)
+	}
+
+	for _, track := range queued {
+		list.AddToQueue(track)
 	}
 
 	return list, list.Snapshot(ctx, nil), nil
