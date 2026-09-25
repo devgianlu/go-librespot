@@ -424,6 +424,15 @@ func (tl *List) SetQueue(_ []*connectpb.ContextTrack, next []*connectpb.ContextT
 	}
 }
 
+// UpcomingQueue returns the queued tracks still to play: the whole queue, less
+// the entry playing right now.
+func (tl *List) UpcomingQueue() []*connectpb.ContextTrack {
+	if tl.playingQueue {
+		return slices.Clone(tl.queue[1:])
+	}
+	return slices.Clone(tl.queue)
+}
+
 func (tl *List) SetPlayingQueue(val bool) {
 	tl.playingQueue = len(tl.queue) > 0 && val
 }
