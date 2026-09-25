@@ -463,7 +463,19 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, sent
 			// Seek to the transferred track, playing it ahead of the context if
 			// it cannot be located. Without one to name, the context plays from
 			// the top.
-			if singleTrackContext(current) != nil {
+			//
+			// A queued track is not in the context at all, and seeking to it
+			// used to send the context back to its top once the queue was done,
+			// replaying what had been played before it. While the queue plays,
+			// the session's current uid names the context track that comes after
+			// it, so the list is left on the one before that, and the queue added
+			// below carries the track. With nothing before it, the queued track
+			// is played ahead of the context, which comes to the same thing.
+			if uid := transferState.CurrentSession.GetCurrentUid(); refusal == nil && uid != "" && playingQueuedTrack(queue, current) &&
+				list.Seek(ctx, tracks.ContextTrackComparator(librespot.SpotifyIdTypeTrack, &connectpb.ContextTrack{Uid: uid})) == nil &&
+				list.GoPrev() {
+				p.app.log.Debugf("transfer plays a queued track, context resumes at %s", uid)
+			} else if singleTrackContext(current) != nil {
 				if err := list.TrySeekTo(ctx, current); err != nil {
 					return failed(fmt.Errorf("failed seeking to track: %w", err))
 				}
@@ -645,6 +657,20 @@ func (p *AppPlayer) abandonTransfer() {
 	p.state.player.PositionAsOfTimestamp = 0
 
 	p.flushState()
+}
+
+// playingQueuedTrack reports whether a transfer hands over a queued track as
+// the one playing: the queue says it is playing, and its head is that track.
+func playingQueuedTrack(queue *connectpb.Queue, current *connectpb.ContextTrack) bool {
+	if !queue.GetIsPlayingQueue() || len(queue.GetTracks()) == 0 || current == nil {
+		return false
+	}
+
+	head := queue.GetTracks()[0]
+	if head.GetUid() != "" && current.GetUid() != "" {
+		return head.GetUid() == current.GetUid()
+	}
+	return tracks.ContextTrackComparator(librespot.SpotifyIdTypeTrack, current)(head)
 }
 
 // highestQueueID reports the largest "q<number>" uid in a transferred queue, so

@@ -615,3 +615,85 @@ func TestTransferOfAContextWithoutATrackPlaysItFromTheTop(t *testing.T) {
 	require.Len(t, p.loader.queue, 1)
 	require.Equal(t, "load "+jamTrackUri, p.loader.queue[0].name)
 }
+
+// playingQueueTransfer hands over a queued song as the one playing. The
+// session's current uid then names the context track that comes after the
+// queue, as social-connect and the desktop client send it. That is the usual
+// state of a Jam, whose participants queue songs.
+func playingQueueTransfer(t *testing.T, retain, resumeUid string) dealer.RequestPayload {
+	t.Helper()
+
+	queued := &connectpb.ContextTrack{Uri: queuedUri, Uid: "q1", Metadata: map[string]string{"is_queued": "true"}}
+	req := transferCommand(t, &connectpb.TransferState{
+		Options: &connectpb.ContextPlayerOptions{},
+		CurrentSession: &connectpb.Session{
+			Context: &connectpb.Context{
+				Uri: "spotify:playlist:37i9dQZF1DX8vwRmUsEIMT",
+				Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{
+					{Uri: "spotify:track:3j7BhP71ROCpc9R3w9P9UE", Uid: "u0"},
+					{Uri: "spotify:track:2infXICqVSUM3bbGSOgFOY", Uid: "u1"},
+					{Uri: "spotify:track:11hcBLPtbMp4aQI6zGQLub", Uid: "u2"},
+				}}},
+			},
+			CurrentUid: resumeUid,
+		},
+		Playback: &connectpb.Playback{
+			Timestamp:             time.Now().UnixMilli(),
+			PositionAsOfTimestamp: 1000,
+			CurrentTrack:          queued,
+		},
+		Queue: &connectpb.Queue{IsPlayingQueue: true, Tracks: []*connectpb.ContextTrack{proto.Clone(queued).(*connectpb.ContextTrack)}},
+	})
+	req.Command.Options.RetainSession = retain
+	return req
+}
+
+func trackUris(tracks []*connectpb.ProvidedTrack) []string {
+	uris := make([]string, 0, len(tracks))
+	for _, track := range tracks {
+		uris = append(uris, track.GetUri())
+	}
+	return uris
+}
+
+// A queued song is not in the context, so seeking the context to it fails.
+// That used to play it ahead of the context and then the context from its
+// top, replaying what had been played before the queue took over.
+func TestTransferOfAPlayingQueuedTrackKeepsTheContextPosition(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		resumeUid string
+		next      []string
+	}{
+		{name: "mid context", resumeUid: "u1", next: []string{"spotify:track:2infXICqVSUM3bbGSOgFOY", "spotify:track:11hcBLPtbMp4aQI6zGQLub"}},
+		{name: "before the first track", resumeUid: "u0", next: []string{"spotify:track:3j7BhP71ROCpc9R3w9P9UE", "spotify:track:2infXICqVSUM3bbGSOgFOY", "spotify:track:11hcBLPtbMp4aQI6zGQLub"}},
+		{name: "unknown uid", resumeUid: "u9", next: []string{"spotify:track:3j7BhP71ROCpc9R3w9P9UE", "spotify:track:2infXICqVSUM3bbGSOgFOY", "spotify:track:11hcBLPtbMp4aQI6zGQLub"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p := newTestAppPlayer(t)
+			p.resolveTrackList = resolveWith(0)
+
+			require.NoError(t, p.handlePlayerCommand(playingQueueTransfer(t, "do_not_retain", tt.resumeUid)))
+			runQueuedJob(t, p)
+
+			require.Equal(t, queuedUri, p.state.tracks.CurrentTrack().GetUri())
+			require.Equal(t, "queue", p.state.tracks.CurrentTrack().GetProvider())
+			require.Equal(t, tt.next, trackUris(p.state.tracks.NextTracks(t.Context(), nil)))
+		})
+	}
+}
+
+// The same inside a Jam, where an edit arrives as a transfer of the song that
+// is playing: the stream is kept and so is the context's position.
+func TestJamEditWhileAQueuedTrackPlaysKeepsTheContextPosition(t *testing.T) {
+	p := newTestAppPlayer(t)
+	p.resolveTrackList = resolveWith(0)
+	stream := playingTrack(t, p, queuedUri, "q1")
+
+	require.NoError(t, p.handlePlayerCommand(playingQueueTransfer(t, "retain_original", "u2")))
+	runQueuedJob(t, p)
+
+	require.Same(t, stream, p.primaryStream)
+	require.Empty(t, p.loader.queue, "the playing track is not loaded again")
+	require.Equal(t, []string{"spotify:track:11hcBLPtbMp4aQI6zGQLub"}, trackUris(p.state.player.NextTracks))
+}
