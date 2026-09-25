@@ -582,3 +582,36 @@ func TestEmptyTransferAskingForSomethingIsTakenOverIdle(t *testing.T) {
 	requireIdle(t, p)
 	require.Contains(t, apiEvents(p), ApiEventTypeActive)
 }
+
+// A Jam's end sends the speaker the Jam's list and nothing else: no track, no
+// position, no queue. The list was left unpositioned, and reading it panicked,
+// taking the daemon down. It plays from the top instead.
+func TestTransferOfAContextWithoutATrackPlaysItFromTheTop(t *testing.T) {
+	p := newTestAppPlayer(t)
+	p.resolveTrackList = resolveWith(0)
+	playingTrack(t, p, jamTrackUri, "u0")
+
+	req := transferCommand(t, &connectpb.TransferState{
+		Options: &connectpb.ContextPlayerOptions{},
+		CurrentSession: &connectpb.Session{Context: &connectpb.Context{
+			Uri: jamListUri,
+			Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{
+				{Uri: jamTrackUri, Uid: "u0"},
+				{Uri: "spotify:track:3CRDbSIZ4r5MsZ0YwxuEkn", Uid: "u1"},
+			}}},
+		}},
+		Playback: &connectpb.Playback{},
+		Queue:    &connectpb.Queue{},
+	})
+	req.SentByDeviceId = "social-connect-1ce14fef83e5a794b92abe1681e910d9"
+	req.Command.Options.RetainSession = "retain_original"
+	req.Command.Options.RestoreTrack = "always_play_something"
+
+	require.NoError(t, p.handlePlayerCommand(req))
+	dropStreamForLoad(p)
+	runQueuedJob(t, p)
+
+	require.Equal(t, jamTrackUri, p.state.tracks.CurrentTrack().GetUri())
+	require.Len(t, p.loader.queue, 1)
+	require.Equal(t, "load "+jamTrackUri, p.loader.queue[0].name)
+}
