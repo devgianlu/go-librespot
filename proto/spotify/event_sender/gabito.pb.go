@@ -13076,6 +13076,7 @@ type RawCoreStream struct {
 	MsNominalTrimmed            *int32                 `protobuf:"varint,51,opt,name=ms_nominal_trimmed,json=msNominalTrimmed,proto3,oneof" json:"ms_nominal_trimmed,omitempty"`
 	FeatureUuid                 *string                `protobuf:"bytes,52,opt,name=feature_uuid,json=featureUuid,proto3,oneof" json:"feature_uuid,omitempty"`
 	StreamId                    []byte                 `protobuf:"bytes,53,opt,name=stream_id,json=streamId,proto3,oneof" json:"stream_id,omitempty"`
+	JamSessionId                *string                `protobuf:"bytes,64,opt,name=jam_session_id,json=jamSessionId,proto3,oneof" json:"jam_session_id,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -13479,6 +13480,13 @@ func (x *RawCoreStream) GetStreamId() []byte {
 		return x.StreamId
 	}
 	return nil
+}
+
+func (x *RawCoreStream) GetJamSessionId() string {
+	if x != nil && x.JamSessionId != nil {
+		return *x.JamSessionId
+	}
+	return ""
 }
 
 type RawCoreStreamStart struct {
@@ -17604,7 +17612,7 @@ const file_spotify_event_sender_gabito_proto_rawDesc = "" +
 	"\b_is_lastB\v\n" +
 	"\t_providerB\x11\n" +
 	"\x0f_playback_stackB\x0f\n" +
-	"\r_feature_uuid\"\xd1\x1b\n" +
+	"\r_feature_uuid\"\x8f\x1c\n" +
 	"\rRawCoreStream\x12$\n" +
 	"\vplayback_id\x18\x01 \x01(\fH\x00R\n" +
 	"playbackId\x88\x01\x01\x121\n" +
@@ -17668,7 +17676,8 @@ const file_spotify_event_sender_gabito_proto_rawDesc = "" +
 	"ms_trimmed\x182 \x01(\x05H1R\tmsTrimmed\x88\x01\x01\x121\n" +
 	"\x12ms_nominal_trimmed\x183 \x01(\x05H2R\x10msNominalTrimmed\x88\x01\x01\x12&\n" +
 	"\ffeature_uuid\x184 \x01(\tH3R\vfeatureUuid\x88\x01\x01\x12 \n" +
-	"\tstream_id\x185 \x01(\fH4R\bstreamId\x88\x01\x01B\x0e\n" +
+	"\tstream_id\x185 \x01(\fH4R\bstreamId\x88\x01\x01\x12)\n" +
+	"\x0ejam_session_id\x18@ \x01(\tH5R\fjamSessionId\x88\x01\x01B\x0e\n" +
 	"\f_playback_idB\x15\n" +
 	"\x13_parent_playback_idB\x13\n" +
 	"\x11_video_session_idB\v\n" +
@@ -17724,7 +17733,8 @@ const file_spotify_event_sender_gabito_proto_rawDesc = "" +
 	"\x13_ms_nominal_trimmedB\x0f\n" +
 	"\r_feature_uuidB\f\n" +
 	"\n" +
-	"_stream_id\"\xa5\x02\n" +
+	"_stream_idB\x11\n" +
+	"\x0f_jam_session_id\"\xa5\x02\n" +
 	"\x12RawCoreStreamStart\x12$\n" +
 	"\vplayback_id\x18\x01 \x01(\fH\x00R\n" +
 	"playbackId\x88\x01\x01\x12$\n" +

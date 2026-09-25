@@ -1495,6 +1495,7 @@ message RawCoreStream {
   optional int32 ms_nominal_trimmed = 51;
   optional string feature_uuid = 52;
   optional bytes stream_id = 53;
+  optional string jam_session_id = 64;
 }
 
 message RawCoreStreamStart {
