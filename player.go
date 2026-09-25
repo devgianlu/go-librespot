@@ -2,6 +2,7 @@ package go_librespot
 
 import (
 	"errors"
+	"fmt"
 
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 )
@@ -10,6 +11,18 @@ var (
 	ErrMediaRestricted    = errors.New("media is restricted")
 	ErrNoSupportedFormats = errors.New("no supported formats")
 )
+
+// HTTPStatusError reports that an endpoint answered with a status other than the
+// one expected, so that callers can tell a refusal from a server failure without
+// matching error text.
+type HTTPStatusError struct {
+	Endpoint   string
+	StatusCode int
+}
+
+func (e *HTTPStatusError) Error() string {
+	return fmt.Sprintf("invalid status code from %s: %d", e.Endpoint, e.StatusCode)
+}
 
 type Media struct {
 	track   *metadatapb.Track

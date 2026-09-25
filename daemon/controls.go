@@ -305,6 +305,7 @@ func (p *AppPlayer) handlePlayerEvent(ev *player.Event) {
 			}
 		})
 	case player.EventTypeStop:
+		p.emitPlaybackError(playbackErrorStagePlayback, p.state.player.Track.GetUri(), ev.Err)
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeStopped,
 			Data: ApiEventDataStopped{
@@ -756,8 +757,11 @@ func (p *AppPlayer) loadCurrentTrack(paused, drop, resume bool, delay time.Durat
 			})
 			if err != nil {
 				return loaderResult{
-					err:    err,
-					commit: func(_ *AppPlayer, err error) { then(err) },
+					err: err,
+					commit: func(p *AppPlayer, err error) {
+						p.emitPlaybackError(playbackErrorStageLoad, spotId.Uri(), err)
+						then(err)
+					},
 				}
 			}
 

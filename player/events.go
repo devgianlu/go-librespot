@@ -25,6 +25,9 @@ type Event struct {
 	// holds them while swapping streams needs this to tell an outgoing stream's
 	// end from the incoming one's.
 	StreamGen uint64
+
+	// Err is why playback stopped, for a stop the output device failed into.
+	Err error
 }
 
 type EventManager interface {

@@ -462,7 +462,7 @@ loop:
 			p.log.Tracef("cleared closed output device")
 
 			// FIXME: this is called even if not needed, like when autoplay starts
-			p.ev <- Event{Type: EventTypeStop, StreamGen: p.streamGen.Load()}
+			p.ev <- Event{Type: EventTypeStop, StreamGen: p.streamGen.Load(), Err: err}
 		case <-source.Done():
 			p.ev <- Event{Type: EventTypeNotPlaying, StreamGen: p.streamGen.Load()}
 		}

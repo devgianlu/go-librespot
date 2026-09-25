@@ -56,14 +56,16 @@ func closedPlayer(t *testing.T) *player.Player {
 	return pl
 }
 
-// recordingApiServer keeps the type of every event emitted to API clients.
+// recordingApiServer keeps every event emitted to API clients.
 type recordingApiServer struct {
 	ApiServer
-	events []ApiEventType
+	events  []ApiEventType
+	emitted []*ApiEvent
 }
 
 func (s *recordingApiServer) Emit(ev *ApiEvent) {
 	s.events = append(s.events, ev.Type)
+	s.emitted = append(s.emitted, ev)
 }
 
 func apiEvents(p *AppPlayer) []ApiEventType {

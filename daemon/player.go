@@ -935,6 +935,7 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 		sessionLost = true
 
 		p.app.log.Warn("lost session, tearing down player to start a new one")
+		p.emitPlaybackError(playbackErrorStageSession, p.state.player.Track.GetUri(), errSessionLost)
 
 		select {
 		case p.logout <- p:
