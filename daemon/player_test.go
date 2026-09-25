@@ -531,3 +531,35 @@ func TestFailedJamEditTransferKeepsPlaying(t *testing.T) {
 	require.Empty(t, p.loader.queue)
 	require.NotContains(t, apiEvents(p), ApiEventTypeStopped)
 }
+
+// A Jam is switched on and off by a set_options that carries only modes. They
+// have to reach the reported options: otherwise the device keeps the modes of
+// the last transfer, and goes on reporting a Jam that has ended.
+func TestSetOptionsAppliesModes(t *testing.T) {
+	p := newTestAppPlayer(t)
+	p.state.player.Options = &connectpb.ContextPlayerOptions{
+		RepeatingContext: true,
+		Modes:            map[string]string{"jam": "on", "context_enhancement": "NONE"},
+	}
+
+	var req dealer.RequestPayload
+	req.Command.Endpoint = "set_options"
+	req.Command.Modes = map[string]string{"jam": "off"}
+	require.NoError(t, p.handlePlayerCommand(req))
+
+	require.Equal(t, map[string]string{"jam": "off", "context_enhancement": "NONE"}, p.state.player.Options.Modes)
+	require.True(t, p.state.player.Options.RepeatingContext, "a command with only modes leaves the rest alone")
+	require.Equal(t, "off", lastPushedState(t, p).GetOptions().GetModes()["jam"])
+}
+
+// A device that has never been in a Jam has no modes at all to merge into.
+func TestSetOptionsAppliesModesWithoutAny(t *testing.T) {
+	p := newTestAppPlayer(t)
+
+	var req dealer.RequestPayload
+	req.Command.Endpoint = "set_options"
+	req.Command.Modes = map[string]string{"jam": "on"}
+	require.NoError(t, p.handlePlayerCommand(req))
+
+	require.Equal(t, "on", p.state.player.Options.GetModes()["jam"])
+}

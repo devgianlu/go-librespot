@@ -61,6 +61,7 @@ type RequestPayload struct {
 		RepeatingTrack   *bool                     `json:"repeating_track"`
 		RepeatingContext *bool                     `json:"repeating_context"`
 		ShufflingContext *bool                     `json:"shuffling_context"`
+		Modes            map[string]string         `json:"modes"`
 		LoggingParams    struct {
 			CommandInitiatedTime int64    `json:"command_initiated_time"`
 			PageInstanceIds      []string `json:"page_instance_ids"`
