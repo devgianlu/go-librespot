@@ -563,3 +563,22 @@ func TestSetOptionsAppliesModesWithoutAny(t *testing.T) {
 
 	require.Equal(t, "on", p.state.player.Options.GetModes()["jam"])
 }
+
+// An account with no playback at all casting onto the device hands over nothing
+// but still asks for something to play. The device is taken over, with nothing
+// on it: refused, the client just sends the transfer again.
+func TestEmptyTransferAskingForSomethingIsTakenOverIdle(t *testing.T) {
+	p := newTestAppPlayer(t)
+
+	req := transferCommand(t, &connectpb.TransferState{
+		Options:        &connectpb.ContextPlayerOptions{},
+		CurrentSession: &connectpb.Session{},
+		Playback:       &connectpb.Playback{Timestamp: 1790340000000},
+	})
+	req.Command.Options.RestoreTrack = "always_play_something"
+
+	require.NoError(t, p.handlePlayerCommand(req))
+
+	requireIdle(t, p)
+	require.Contains(t, apiEvents(p), ApiEventTypeActive)
+}

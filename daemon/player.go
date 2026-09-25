@@ -396,6 +396,22 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 			transferState.CurrentSession.Context = singleTrackContext(transferState.Playback.CurrentTrack)
 			if transferState.CurrentSession.Context == nil {
+				// An account with no playback at all casting onto the device
+				// hands over nothing, but asks for something to be played. There
+				// is nothing to play, yet refusing only has the client send it
+				// again: take the device over with nothing on it instead, and let
+				// whatever is started next play here.
+				if req.Command.Options.RestoreTrack == "always_play_something" {
+					p.app.log.Debugf("transfer command carries nothing to play, taking over idle")
+
+					p.state.setActive(true)
+					p.abandonTransfer()
+					p.app.server.Emit(&ApiEvent{
+						Type: ApiEventTypeActive,
+					})
+					return nil
+				}
+
 				return fmt.Errorf("transfer command carries neither a context nor a track")
 			}
 		}
