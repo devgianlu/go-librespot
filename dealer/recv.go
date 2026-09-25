@@ -71,6 +71,7 @@ type RequestPayload struct {
 			RestorePaused       string `json:"restore_paused"`
 			RestorePosition     string `json:"restore_position"`
 			RestoreTrack        string `json:"restore_track"`
+			RetainSession       string `json:"retain_session"`
 			AlwaysPlaySomething bool   `json:"always_play_something"`
 			AllowSeeking        bool   `json:"allow_seeking"`
 			SkipTo              struct {
