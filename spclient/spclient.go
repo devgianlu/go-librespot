@@ -357,7 +357,7 @@ func (c *Spclient) ResolveStorageInteractive(ctx context.Context, fileId []byte,
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from storage resolve: %d", resp.StatusCode)
+		return nil, &librespot.HTTPStatusError{Endpoint: "storage resolve", StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -387,7 +387,7 @@ func (c *Spclient) ExtendedMetadata(ctx context.Context, req *extmetadatapb.Batc
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from extended metadata: %d", resp.StatusCode)
+		return nil, &librespot.HTTPStatusError{Endpoint: "extended metadata", StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -661,7 +661,7 @@ func (c *Spclient) PlayPlayRequest(ctx context.Context, fileId []byte, reqProto 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("invalid status code from playplay license request: %d", resp.StatusCode)
+		return nil, &librespot.HTTPStatusError{Endpoint: "playplay license request", StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)

@@ -176,7 +176,8 @@ func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
 
 		if resp.StatusCode != http.StatusPartialContent {
 			_ = resp.Body.Close()
-			return nil, fmt.Errorf("unexpected chunk response status: got %s, expected %d", resp.Status, http.StatusPartialContent)
+			return nil, fmt.Errorf("unexpected chunk response status: %w",
+				&librespot.HTTPStatusError{Endpoint: "audio file", StatusCode: resp.StatusCode})
 		}
 
 		return resp, nil

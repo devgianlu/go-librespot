@@ -153,6 +153,7 @@ const (
 	ApiEventTypeRepeatContext  ApiEventType = "repeat_context"
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 	ApiEventTypePlaybackReady  ApiEventType = "playback_ready"
+	ApiEventTypePlaybackError  ApiEventType = "playback_error"
 )
 
 type ApiRequest struct {
@@ -342,6 +343,16 @@ type ApiEventDataPaused struct {
 
 type ApiEventDataStopped struct {
 	PlayOrigin string `json:"play_origin"`
+}
+
+type ApiEventDataPlaybackError struct {
+	ContextUri string `json:"context_uri"`
+	Uri        string `json:"uri"`
+	PlayOrigin string `json:"play_origin"`
+	Stage      string `json:"stage"`
+	Kind       string `json:"kind"`
+	Unplayable bool   `json:"unplayable"`
+	Message    string `json:"message"`
 }
 
 type ApiEventDataSeek struct {
