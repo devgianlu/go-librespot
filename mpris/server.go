@@ -144,6 +144,10 @@ func makeMetadata(uri *string, media *librespot.Media) map[string]any {
 	return m
 }
 
+// playerMethodNames maps Go method names on the player interface to the D-Bus
+// names MPRIS gives them, where the two differ.
+var playerMethodNames = map[string]string{"SeekBy": "Seek"}
+
 func (s *ConcreteServer) EmitStateUpdate(state MediaState) {
 	offer(s.done, s.stateChannel, state)
 }
@@ -281,7 +285,7 @@ func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
 	if err != nil {
 		return nil, err
 	}
-	err = conn.Export(s.playerInterface, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player")
+	err = conn.ExportWithMap(s.playerInterface, playerMethodNames, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player")
 	if err != nil {
 		return nil, err
 	}
