@@ -467,6 +467,10 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, sent
 				if err := list.TrySeekTo(ctx, current); err != nil {
 					return failed(fmt.Errorf("failed seeking to track: %w", err))
 				}
+			} else if !list.GoStart(ctx) {
+				// Left unpositioned, the list panics as soon as it is read. A
+				// Jam's end sends exactly this: its list, and no track.
+				return failed(fmt.Errorf("transferred context %s has no track to start from", spotCtx.Uri))
 			}
 
 			if err := list.ToggleShuffle(ctx, shuffle); err != nil {
