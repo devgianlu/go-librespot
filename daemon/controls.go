@@ -1001,6 +1001,36 @@ func (p *AppPlayer) commitLoad(stream *player.Stream, uri string, paused bool, t
 	})
 }
 
+// setModes merges modes into the player options. A Jam is switched on and off
+// this way: social-connect sends set_options carrying nothing but
+// {"modes":{"jam":"on"}} when one starts on this device, and "off" when it
+// ends. Without this the options kept whatever the last transfer said, and the
+// device went on reporting the Jam after it had ended.
+func (p *AppPlayer) setModes(modes map[string]string) {
+	if len(modes) == 0 {
+		return
+	}
+
+	if p.state.player.Options == nil {
+		p.state.player.Options = &connectpb.ContextPlayerOptions{}
+	}
+	if p.state.player.Options.Modes == nil {
+		p.state.player.Options.Modes = make(map[string]string, len(modes))
+	}
+
+	var changed bool
+	for mode, value := range modes {
+		if p.state.player.Options.Modes[mode] != value {
+			p.state.player.Options.Modes[mode] = value
+			changed = true
+		}
+	}
+
+	if changed {
+		p.updateState()
+	}
+}
+
 func (p *AppPlayer) setOptions(repeatingContext *bool, repeatingTrack *bool, shufflingContext *bool) {
 	var requiresUpdate bool
 	if repeatingContext != nil && *repeatingContext != p.state.player.Options.RepeatingContext {

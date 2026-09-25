@@ -550,6 +550,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		return nil
 	case "set_options":
 		p.setOptions(req.Command.RepeatingContext, req.Command.RepeatingTrack, req.Command.ShufflingContext)
+		p.setModes(req.Command.Modes)
 		return nil
 	case "set_queue":
 		p.setQueue(req.Command.PrevTracks, req.Command.NextTracks)
