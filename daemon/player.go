@@ -317,6 +317,57 @@ func (p *AppPlayer) trackListFromContext(ctx context.Context, spotCtx *connectpb
 	return tracks.NewTrackListFromContext(ctx, p.app.log, p.sess.Spclient(), spotCtx)
 }
 
+// applyTransferSession takes over what a transfer says about the session it
+// hands over: its id, options, origin and context. The tracks and the playback
+// are the caller's.
+func (p *AppPlayer) applyTransferSession(transferState *connectpb.TransferState, sentBy string) {
+	if sessId := transferState.CurrentSession.OriginalSessionId; sessId != nil {
+		p.state.player.SessionId = *sessId
+	} else {
+		sessionId := make([]byte, 16)
+		_, _ = rand.Read(sessionId)
+		p.state.player.SessionId = base64.StdEncoding.EncodeToString(sessionId)
+	}
+
+	p.state.player.Options = transferState.Options
+
+	spotCtx := transferState.CurrentSession.Context
+	p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
+	if p.state.player.PlayOrigin == nil {
+		p.state.player.PlayOrigin = &connectpb.PlayOrigin{}
+	}
+	p.state.player.PlayOrigin.DeviceIdentifier = sentBy
+	p.state.player.ContextUri = spotCtx.Uri
+	p.state.player.ContextUrl = spotCtx.Url
+	p.state.player.ContextRestrictions = spotCtx.Restrictions
+	p.state.player.Suppressions = transferState.CurrentSession.Suppressions
+	p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, nil)
+}
+
+// transferContinues reports whether a transfer carries on the track this device
+// is playing, so that taking it over needs no new stream. That is what a
+// transfer retaining the original session is when it names the playing track:
+// social-connect sends one for every change a Jam's participant makes. The uid
+// is compared as well where both have one, because a song listed twice is two
+// entries, and moving to the other one is a skip.
+func (p *AppPlayer) transferContinues(req dealer.RequestPayload, transferState *connectpb.TransferState) bool {
+	if req.Command.Options.RetainSession != "retain_original" || !p.state.active || p.primaryStream == nil {
+		return false
+	}
+
+	current := transferState.Playback.CurrentTrack
+	named := singleTrackContext(current)
+	if named == nil || named.Uri != p.primaryStream.RequestedId.Uri() {
+		return false
+	}
+
+	if uid, playing := current.GetUid(), p.state.player.Track.GetUid(); uid != "" && playing != "" && uid != playing {
+		return false
+	}
+
+	return true
+}
+
 func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 	p.state.lastCommand = &req
 
@@ -349,38 +400,26 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			}
 		}
 
-		if sessId := transferState.CurrentSession.OriginalSessionId; sessId != nil {
-			p.state.player.SessionId = *sessId
-		} else {
-			sessionId := make([]byte, 16)
-			_, _ = rand.Read(sessionId)
-			p.state.player.SessionId = base64.StdEncoding.EncodeToString(sessionId)
+		pause := transferState.Playback.IsPaused && req.Command.Options.RestorePaused != "resume"
+
+		// A Jam's changes arrive as transfers of the whole Jam, one for every
+		// song a participant adds, while the track they name goes on playing.
+		// Taking those over must not restart it.
+		if p.transferContinues(req, &transferState) {
+			p.app.log.Debugf("transfer carries on %s, keeping its stream", p.primaryStream.RequestedId.Uri())
+			p.transferContext(&transferState, req.SentByDeviceId, pause, true)
+			return nil
 		}
 
 		p.state.setActive(true)
+		p.applyTransferSession(&transferState, req.SentByDeviceId)
 
-		// options
-		p.state.player.Options = transferState.Options
-		pause := transferState.Playback.IsPaused && req.Command.Options.RestorePaused != "resume"
 		// playback
 		// Note: this sets playback speed to 0 or 1 because that's all we're
 		// capable of, depending on whether the playback is paused or not.
 		p.state.player.Timestamp = transferState.Playback.Timestamp
 		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
 		p.state.setPaused(pause)
-
-		// current session
-		spotCtx := transferState.CurrentSession.Context
-		p.state.player.PlayOrigin = transferState.CurrentSession.PlayOrigin
-		if p.state.player.PlayOrigin == nil {
-			p.state.player.PlayOrigin = &connectpb.PlayOrigin{}
-		}
-		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
-		p.state.player.ContextUri = spotCtx.Uri
-		p.state.player.ContextUrl = spotCtx.Url
-		p.state.player.ContextRestrictions = spotCtx.Restrictions
-		p.state.player.Suppressions = transferState.CurrentSession.Suppressions
-		p.state.player.ContextMetadata = contextMetadata(spotCtx.Metadata, nil)
 
 		// Claim the transfer before doing anything slow. The surrounding tracks
 		// are cleared rather than left as they are: they still describe the
@@ -406,7 +445,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 			Type: ApiEventTypeActive,
 		})
 
-		p.transferContext(&transferState, pause)
+		p.transferContext(&transferState, req.SentByDeviceId, pause, false)
 
 		return nil
 	case "play":

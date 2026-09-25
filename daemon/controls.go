@@ -404,17 +404,27 @@ func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, p
 // transferContext takes over playback from another device. The transfer itself
 // is claimed by the caller before this is reached; resolving the context and
 // finding the track being handed over runs on the loader lane.
-func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paused bool) {
+//
+// A continuation is a transfer of the track already playing (see
+// transferContinues). It is not claimed up front: the session and the tracks
+// around the stream are replaced once the context has resolved, and the stream
+// itself is left alone.
+func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, sentBy string, paused, continuation bool) {
 	spotCtx := transferState.CurrentSession.Context
 	shuffle := transferState.Options.GetShufflingContext()
 	current := transferState.Playback.CurrentTrack
 	queue := transferState.Queue
+	stream := p.primaryStream
 
 	p.loadGen++
 
 	// Whatever stops the transfer short also undoes its claim, or the device
-	// goes on advertising a context it is not going to play.
+	// goes on advertising a context it is not going to play. A continuation
+	// claimed nothing, and what it failed to update is still playing.
 	failed := func(err error) loaderResult {
+		if continuation {
+			return loaderResult{err: err}
+		}
 		return loaderResult{
 			err:    err,
 			commit: func(p *AppPlayer, _ error) { p.abandonTransfer() },
@@ -476,6 +486,21 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 						return
 					}
 
+					// The stream can only have been replaced by a load, which would
+					// have superseded this result, but check rather than keep
+					// something that is no longer the transferred track.
+					keep := continuation && p.primaryStream != nil && p.primaryStream == stream
+					if continuation && !keep {
+						// Loaded like any other transfer, so from where it says.
+						p.app.log.Debugf("stream changed while resolving the transfer, loading it instead")
+						p.state.player.Timestamp = transferState.Playback.GetTimestamp()
+						p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.GetPositionAsOfTimestamp())
+						p.state.setPaused(paused)
+					}
+					if continuation {
+						p.applyTransferSession(transferState, sentBy)
+					}
+
 					// The claim announced the context that was transferred. What
 					// plays is the track alone, and that is what is reported,
 					// the same as for a transfer that carried no context at all.
@@ -493,6 +518,11 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 					p.publishSnapshot(snap)
 					p.scheduleContextMetaPrefetch(played.Uri)
 
+					if keep {
+						p.continuePlayback(transferState.Playback, paused)
+						return
+					}
+
 					// skip forward if the transferred track is unplayable, so a
 					// cast onto a refused track does not freeze the player.
 					p.loadCurrentTrackOrSkip(paused, true, false, func(err error) {
@@ -504,6 +534,66 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, paus
 			}
 		},
 	})
+}
+
+// transferSeekTolerance is how far a continuation's position may be from the
+// one this device reports before it is taken as a seek. Positions are
+// extrapolated from the sending side's clock, so they are never exact.
+const transferSeekTolerance = 3 * time.Second
+
+// continuePlayback applies the playback of a transfer that carries on the
+// playing track, to the stream already playing it. The tracks around it have
+// just been replaced, so whatever was prefetched as the next one may not be any
+// more. Only a real move is seeked to, and only a change of pause state is
+// applied: either would otherwise interrupt the stream.
+func (p *AppPlayer) continuePlayback(playback *connectpb.Playback, paused bool) {
+	// publishSnapshot put a fresh track from the list in place of the playing
+	// one, without what the media adds to it.
+	enrichTrackMetadata(p.state.player.Track, p.primaryStream.Media)
+
+	p.invalidateUpcoming()
+
+	want := int64(playback.GetPositionAsOfTimestamp())
+	if !playback.GetIsPaused() {
+		if elapsed := time.Now().UnixMilli() - playback.GetTimestamp(); elapsed > 0 && elapsed < int64(10*time.Minute/time.Millisecond) {
+			want += elapsed
+		}
+	}
+
+	// Compared with the position this device last reported, extrapolated,
+	// which is what the sender extrapolated from too. The decoder runs ahead of
+	// what has been heard by however much the output buffers, so comparing with
+	// it would take that lead for a seek.
+	if abs(want-p.state.trackPosition()) > transferSeekTolerance.Milliseconds() {
+		if err := p.seek(want); err != nil {
+			p.app.log.WithError(err).Warn("failed seeking to the transferred position")
+		}
+	}
+
+	p.state.player.IsPlaying = true
+	p.state.player.IsBuffering = false
+
+	var err error
+	switch {
+	case paused && !p.state.player.IsPaused:
+		err = p.pause()
+	case !paused && p.state.player.IsPaused:
+		err = p.play()
+	default:
+		p.state.setPaused(paused)
+		p.updateState()
+		p.schedulePrefetchNext()
+	}
+	if err != nil {
+		p.app.log.WithError(err).Warn("failed applying the transferred pause state")
+	}
+}
+
+func abs(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // abandonTransfer takes back the claim a transfer made, once it turns out there
