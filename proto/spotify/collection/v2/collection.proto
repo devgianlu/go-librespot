@@ -16,3 +16,16 @@ message WriteRequest {
   string set = 2;
   repeated CollectionItem items = 3;
 }
+
+message PageRequest {
+  string username = 1;
+  string set = 2;
+  string pagination_token = 3;
+  int32 limit = 4;
+}
+
+message PageResponse {
+  repeated CollectionItem items = 1;
+  string next_page_token = 2;
+  string sync_token = 3;
+}
