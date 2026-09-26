@@ -66,6 +66,47 @@ type ApiDeviceAuth struct {
 	Url string `json:"url"`
 }
 
+// ApiLibraryPlaylist A playlist in the user's library
+type ApiLibraryPlaylist struct {
+	// Collaborative Whether the playlist is collaborative
+	Collaborative bool `json:"collaborative"`
+
+	// Description Playlist description, empty when it has none
+	Description string `json:"description"`
+
+	// Folder Names of the folders containing the playlist, outermost first; empty for a playlist at the top level of the library
+	Folder []string `json:"folder"`
+
+	// ImageUrl Cover image URL, null when the playlist has no explicit picture (the Spotify apps then render a mosaic of its first album covers)
+	ImageUrl *string `json:"image_url"`
+
+	// Length Number of items in the playlist
+	Length int32 `json:"length"`
+
+	// Name Playlist name
+	Name string `json:"name"`
+
+	// OwnerUsername Username of the playlist owner, "spotify" for editorial playlists
+	OwnerUsername string `json:"owner_username"`
+
+	// Uri Playlist URI
+	Uri string `json:"uri"`
+}
+
+// ApiLibraryPlaylists A page of the user's library playlists
+type ApiLibraryPlaylists struct {
+	Items []ApiLibraryPlaylist `json:"items"`
+
+	// Limit Maximum number of playlists requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned playlist
+	Offset int `json:"offset"`
+
+	// Total Number of playlists in the library
+	Total int `json:"total"`
+}
+
 // ApiNext A skip to next payload
 type ApiNext struct {
 	// Uri The track URI to skip to. When omitted the next track in the context is played.
@@ -274,6 +315,15 @@ type GetContextTracksParams struct {
 	Uri string `form:"uri" json:"uri"`
 }
 
+// GetLibraryPlaylistsParams defines parameters for GetLibraryPlaylists.
+type GetLibraryPlaylistsParams struct {
+	// Offset Index of the first playlist to return
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of playlists to return, from 1 to 500
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // PlayerAddToQueueJSONRequestBody defines body for PlayerAddToQueue for application/json ContentType.
 type PlayerAddToQueueJSONRequestBody = ApiAddToQueue
 
@@ -318,6 +368,9 @@ type ServerInterface interface {
 
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /library/playlists)
+	GetLibraryPlaylists(w http.ResponseWriter, r *http.Request, params GetLibraryPlaylistsParams)
 
 	// (POST /player/add_to_queue)
 	PlayerAddToQueue(w http.ResponseWriter, r *http.Request)
@@ -450,6 +503,41 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLibraryPlaylists operation middleware
+func (siw *ServerInterfaceWrapper) GetLibraryPlaylists(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLibraryPlaylistsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLibraryPlaylists(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -835,6 +923,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/auth/code", wrapper.GetAuthCode)
 	m.HandleFunc("GET "+options.BaseURL+"/context/tracks", wrapper.GetContextTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/library/playlists", wrapper.GetLibraryPlaylists)
 	m.HandleFunc("POST "+options.BaseURL+"/player/add_to_queue", wrapper.PlayerAddToQueue)
 	m.HandleFunc("POST "+options.BaseURL+"/player/next", wrapper.PlayerNext)
 	m.HandleFunc("POST "+options.BaseURL+"/player/output", wrapper.PlayerOutput)
