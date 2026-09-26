@@ -17,6 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/stretchr/testify/require"
 )
 
@@ -131,27 +132,29 @@ func body(t *testing.T, resp *http.Response) string {
 // Every endpoint and the methods it accepts. Anything else must be refused
 // before the daemon is involved.
 var endpointMethods = map[string][]string{
-	"/":                       {http.MethodGet},
-	"/status":                 {http.MethodGet},
-	"/auth/code":              {http.MethodGet},
-	"/token":                  {http.MethodPost},
-	"/set_device_name":        {http.MethodPost},
-	"/player/play":            {http.MethodPost},
-	"/player/resume":          {http.MethodPost},
-	"/player/pause":           {http.MethodPost},
-	"/player/playpause":       {http.MethodPost},
-	"/player/stop":            {http.MethodPost},
-	"/player/next":            {http.MethodPost},
-	"/player/prev":            {http.MethodPost},
-	"/player/seek":            {http.MethodPost},
-	"/player/volume":          {http.MethodGet, http.MethodPost},
-	"/player/repeat_context":  {http.MethodPost},
-	"/player/repeat_track":    {http.MethodPost},
-	"/player/shuffle_context": {http.MethodPost},
-	"/player/add_to_queue":    {http.MethodPost},
-	"/player/output":          {http.MethodPost},
-	"/context/tracks":         {http.MethodGet},
-	"/library/playlists":      {http.MethodGet},
+	"/":                             {http.MethodGet},
+	"/status":                       {http.MethodGet},
+	"/auth/code":                    {http.MethodGet},
+	"/token":                        {http.MethodPost},
+	"/set_device_name":              {http.MethodPost},
+	"/player/play":                  {http.MethodPost},
+	"/player/resume":                {http.MethodPost},
+	"/player/pause":                 {http.MethodPost},
+	"/player/playpause":             {http.MethodPost},
+	"/player/stop":                  {http.MethodPost},
+	"/player/next":                  {http.MethodPost},
+	"/player/prev":                  {http.MethodPost},
+	"/player/seek":                  {http.MethodPost},
+	"/player/volume":                {http.MethodGet, http.MethodPost},
+	"/player/repeat_context":        {http.MethodPost},
+	"/player/repeat_track":          {http.MethodPost},
+	"/player/shuffle_context":       {http.MethodPost},
+	"/player/add_to_queue":          {http.MethodPost},
+	"/player/output":                {http.MethodPost},
+	"/context/tracks":               {http.MethodGet},
+	"/library/playlists":            {http.MethodGet},
+	"/library/liked":                {http.MethodPost},
+	"/library/playlists/add_tracks": {http.MethodPost},
 }
 
 func TestApiRejectsWrongMethod(t *testing.T) {
@@ -612,7 +615,81 @@ func TestApiLibraryPlaylists(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.JSONEq(t, `{"total":1,"offset":0,"limit":50,"items":[{
 			"uri":"spotify:playlist:xxx","name":"Mix","description":"","owner_username":"",
-			"length":0,"image_url":null,"collaborative":false,"folder":[]}]}`, body(t, resp))
+			"length":0,"image_url":null,"collaborative":false,"can_edit":false,"folder":[]}]}`, body(t, resp))
+	})
+}
+
+func TestApiSetLiked(t *testing.T) {
+	t.Run("forwards the payload", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/library/liked", map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}, "liked": true})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypeSetLiked, req.Type)
+		require.Equal(t, ApiSetLiked{Uris: []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}, Liked: true}, req.Data)
+	})
+
+	tooMany := make([]string, 51)
+	for i := range tooMany {
+		tooMany[i] = "spotify:track:4uLU6hMCjMI75M1A2tKUQC"
+	}
+	for name, payload := range map[string]any{
+		"no uris":   map[string]any{"uris": []string{}, "liked": true},
+		"too many":  map[string]any{"uris": tooMany, "liked": true},
+		"not track": map[string]any{"uris": []string{"spotify:album:4uLU6hMCjMI75M1A2tKUQC"}, "liked": true},
+		"garbage":   map[string]any{"uris": []string{"nope"}, "liked": true},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/library/liked", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+}
+
+func TestApiPlaylistAddTracks(t *testing.T) {
+	t.Run("forwards the payload", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/library/playlists/add_tracks", map[string]any{
+			"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+			"uris":         []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:4uLU6hMCjMI75M1A2tKUQC"},
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypePlaylistAddTracks, req.Type)
+		require.Equal(t, "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", req.Data.(ApiPlaylistAddTracks).PlaylistUri)
+	})
+
+	for name, payload := range map[string]any{
+		"album as playlist": map[string]any{"playlist_uri": "spotify:album:37i9dQZF1DXcBWIGoYBM5M", "uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}},
+		"no uris":           map[string]any{"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uris": []string{}},
+		"artist item":       map[string]any{"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uris": []string{"spotify:artist:4uLU6hMCjMI75M1A2tKUQC"}},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/library/playlists/add_tracks", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+
+	t.Run("maps a lasting conflict to 409", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return nil, fmt.Errorf("failed appending to playlist: %w", spclient.ErrPlaylistConflict)
+		})
+
+		resp := ts.do(http.MethodPost, "/library/playlists/add_tracks", map[string]any{
+			"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M",
+			"uris":         []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"},
+		})
+		require.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 }
 

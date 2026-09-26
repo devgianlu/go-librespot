@@ -24,6 +24,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	"github.com/devgianlu/go-librespot/session"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/devgianlu/go-librespot/tracks"
 )
 
@@ -898,6 +899,34 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			}
 
 			reply.done(pageLibraryPlaylists(playlists, data.Offset, data.Limit), nil)
+		})
+
+		return nil, errReplyDeferred
+	case ApiRequestTypeSetLiked:
+		data := req.Data.(ApiSetLiked)
+		reply := apiReply(req)
+		spc, username := p.sess.Spclient(), p.sess.Username()
+		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
+			if err := spc.CollectionWrite(ctx, username, spclient.CollectionSetLikedSongs, data.Uris, !data.Liked); err != nil {
+				reply.done(nil, fmt.Errorf("failed writing liked songs: %w", err))
+				return
+			}
+
+			reply.done(nil, nil)
+		})
+
+		return nil, errReplyDeferred
+	case ApiRequestTypePlaylistAddTracks:
+		data := req.Data.(ApiPlaylistAddTracks)
+		reply := apiReply(req)
+		spc, username := p.sess.Spclient(), p.sess.Username()
+		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
+			if err := appendToPlaylist(ctx, spc, username, data.PlaylistUri, data.Uris); err != nil {
+				reply.done(nil, fmt.Errorf("failed appending to playlist: %w", err))
+				return
+			}
+
+			reply.done(nil, nil)
 		})
 
 		return nil, errReplyDeferred

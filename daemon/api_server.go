@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,7 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/player"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/rs/cors"
 )
 
@@ -133,6 +135,8 @@ const (
 	ApiRequestTypeReopenOutput        ApiRequestType = "reopen_output"
 	ApiRequestTypeContextTracks       ApiRequestType = "context_tracks"
 	ApiRequestTypeLibraryPlaylists    ApiRequestType = "library_playlists"
+	ApiRequestTypeSetLiked            ApiRequestType = "set_liked"
+	ApiRequestTypePlaylistAddTracks   ApiRequestType = "playlist_add_tracks"
 )
 
 // ApiRequestDataContextTracks carries the uri query parameter of the context
@@ -478,7 +482,7 @@ func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter)
 		case errors.Is(resp.err, ErrTooManyRequests):
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
-		case errors.Is(resp.err, ErrSuperseded), errors.Is(resp.err, ErrLoaderBusy):
+		case errors.Is(resp.err, ErrSuperseded), errors.Is(resp.err, ErrLoaderBusy), errors.Is(resp.err, spclient.ErrPlaylistConflict):
 			w.WriteHeader(http.StatusConflict)
 			return
 		case errors.Is(resp.err, ErrBadRequest):
@@ -566,6 +570,51 @@ func (s *ConcreteApiServer) GetLibraryPlaylists(w http.ResponseWriter, r *http.R
 	}
 
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeLibraryPlaylists, Data: ApiRequestDataLibraryPlaylists{Offset: params.Offset, Limit: params.Limit}}, w)
+}
+
+// maxLibraryWriteUris caps how many items one library write may carry.
+const maxLibraryWriteUris = 50
+
+// validItemUris reports whether uris holds 1 to maxLibraryWriteUris URIs, all
+// of one of the given types.
+func validItemUris(uris []string, types ...librespot.SpotifyIdType) bool {
+	if len(uris) == 0 || len(uris) > maxLibraryWriteUris {
+		return false
+	}
+
+	for _, uri := range uris {
+		id, err := librespot.SpotifyIdFromUri(uri)
+		if err != nil || !slices.Contains(types, id.Type()) {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (s *ConcreteApiServer) SetLiked(w http.ResponseWriter, r *http.Request) {
+	var data ApiSetLiked
+	if err := jsonDecode(r, &data); err != nil || !validItemUris(data.Uris, librespot.SpotifyIdTypeTrack) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetLiked, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlaylistAddTracks(w http.ResponseWriter, r *http.Request) {
+	var data ApiPlaylistAddTracks
+	if err := jsonDecode(r, &data); err != nil || !validItemUris(data.Uris, librespot.SpotifyIdTypeTrack, librespot.SpotifyIdTypeEpisode) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if id, err := librespot.SpotifyIdFromUri(data.PlaylistUri); err != nil || id.Type() != librespot.SpotifyIdTypePlaylist {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistAddTracks, Data: data}, w)
 }
 
 func (s *ConcreteApiServer) PlayerResume(w http.ResponseWriter, _ *http.Request) {

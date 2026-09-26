@@ -68,6 +68,9 @@ type ApiDeviceAuth struct {
 
 // ApiLibraryPlaylist A playlist in the user's library
 type ApiLibraryPlaylist struct {
+	// CanEdit Whether the user may add items to the playlist, true for their own and for collaborative playlists
+	CanEdit bool `json:"can_edit"`
+
 	// Collaborative Whether the playlist is collaborative
 	Collaborative bool `json:"collaborative"`
 
@@ -134,6 +137,15 @@ type ApiPlay struct {
 	Uri string `json:"uri"`
 }
 
+// ApiPlaylistAddTracks An append to playlist payload
+type ApiPlaylistAddTracks struct {
+	// PlaylistUri URI of the playlist to append to
+	PlaylistUri string `json:"playlist_uri"`
+
+	// Uris Track or episode URIs to append, 1 to 50
+	Uris []string `json:"uris"`
+}
+
 // ApiRepeatContext A toggle repeating context payload
 type ApiRepeatContext struct {
 	// RepeatContext Whether repeating context should be enabled
@@ -165,6 +177,15 @@ type ApiSeek struct {
 type ApiSetDeviceName struct {
 	// Name The new device name
 	Name string `json:"name"`
+}
+
+// ApiSetLiked A save to or remove from Liked Songs payload
+type ApiSetLiked struct {
+	// Liked True to add the tracks to Liked Songs, false to remove them
+	Liked bool `json:"liked"`
+
+	// Uris Track URIs, 1 to 50
+	Uris []string `json:"uris"`
 }
 
 // ApiSetVolume A set volume payload
@@ -324,6 +345,12 @@ type GetLibraryPlaylistsParams struct {
 	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// SetLikedJSONRequestBody defines body for SetLiked for application/json ContentType.
+type SetLikedJSONRequestBody = ApiSetLiked
+
+// PlaylistAddTracksJSONRequestBody defines body for PlaylistAddTracks for application/json ContentType.
+type PlaylistAddTracksJSONRequestBody = ApiPlaylistAddTracks
+
 // PlayerAddToQueueJSONRequestBody defines body for PlayerAddToQueue for application/json ContentType.
 type PlayerAddToQueueJSONRequestBody = ApiAddToQueue
 
@@ -369,8 +396,14 @@ type ServerInterface interface {
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
 
+	// (POST /library/liked)
+	SetLiked(w http.ResponseWriter, r *http.Request)
+
 	// (GET /library/playlists)
 	GetLibraryPlaylists(w http.ResponseWriter, r *http.Request, params GetLibraryPlaylistsParams)
+
+	// (POST /library/playlists/add_tracks)
+	PlaylistAddTracks(w http.ResponseWriter, r *http.Request)
 
 	// (POST /player/add_to_queue)
 	PlayerAddToQueue(w http.ResponseWriter, r *http.Request)
@@ -512,6 +545,20 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// SetLiked operation middleware
+func (siw *ServerInterfaceWrapper) SetLiked(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetLiked(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetLibraryPlaylists operation middleware
 func (siw *ServerInterfaceWrapper) GetLibraryPlaylists(w http.ResponseWriter, r *http.Request) {
 
@@ -538,6 +585,20 @@ func (siw *ServerInterfaceWrapper) GetLibraryPlaylists(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetLibraryPlaylists(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PlaylistAddTracks operation middleware
+func (siw *ServerInterfaceWrapper) PlaylistAddTracks(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PlaylistAddTracks(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -923,7 +984,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/auth/code", wrapper.GetAuthCode)
 	m.HandleFunc("GET "+options.BaseURL+"/context/tracks", wrapper.GetContextTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
+	m.HandleFunc("POST "+options.BaseURL+"/library/liked", wrapper.SetLiked)
 	m.HandleFunc("GET "+options.BaseURL+"/library/playlists", wrapper.GetLibraryPlaylists)
+	m.HandleFunc("POST "+options.BaseURL+"/library/playlists/add_tracks", wrapper.PlaylistAddTracks)
 	m.HandleFunc("POST "+options.BaseURL+"/player/add_to_queue", wrapper.PlayerAddToQueue)
 	m.HandleFunc("POST "+options.BaseURL+"/player/next", wrapper.PlayerNext)
 	m.HandleFunc("POST "+options.BaseURL+"/player/output", wrapper.PlayerOutput)
