@@ -136,6 +136,7 @@ const (
 	ApiRequestTypeContextTracks       ApiRequestType = "context_tracks"
 	ApiRequestTypeLibraryPlaylists    ApiRequestType = "library_playlists"
 	ApiRequestTypeSetLiked            ApiRequestType = "set_liked"
+	ApiRequestTypeGetLiked            ApiRequestType = "get_liked"
 	ApiRequestTypePlaylistAddTracks   ApiRequestType = "playlist_add_tracks"
 )
 
@@ -590,6 +591,15 @@ func validItemUris(uris []string, types ...librespot.SpotifyIdType) bool {
 	}
 
 	return true
+}
+
+func (s *ConcreteApiServer) GetLiked(w http.ResponseWriter, _ *http.Request, params GetLikedParams) {
+	if !validItemUris(params.Uris, librespot.SpotifyIdTypeTrack) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeGetLiked, Data: params.Uris}, w)
 }
 
 func (s *ConcreteApiServer) SetLiked(w http.ResponseWriter, r *http.Request) {
