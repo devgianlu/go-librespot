@@ -270,6 +270,7 @@ components:
         - length
         - image_url
         - collaborative
+        - can_edit
         - folder
       properties:
         uri:
@@ -297,6 +298,11 @@ components:
         collaborative:
           description: Whether the playlist is collaborative
           type: boolean
+        can_edit:
+          description: >-
+            Whether the user may add items to the playlist, true for their own
+            and for collaborative playlists
+          type: boolean
         folder:
           description: >-
             Names of the folders containing the playlist, outermost first;
@@ -323,6 +329,34 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/libraryPlaylist'
+    setLiked:
+      x-go-name: ApiSetLiked
+      description: A save to or remove from Liked Songs payload
+      type: object
+      required: [ uris, liked ]
+      properties:
+        uris:
+          description: Track URIs, 1 to 50
+          type: array
+          items:
+            type: string
+        liked:
+          description: True to add the tracks to Liked Songs, false to remove them
+          type: boolean
+    playlistAddTracks:
+      x-go-name: ApiPlaylistAddTracks
+      description: An append to playlist payload
+      type: object
+      required: [ playlist_uri, uris ]
+      properties:
+        playlist_uri:
+          description: URI of the playlist to append to
+          type: string
+        uris:
+          description: Track or episode URIs to append, 1 to 50
+          type: array
+          items:
+            type: string
     root:
       x-go-name: ApiRoot
       description: API reachability and playback readiness
@@ -660,6 +694,50 @@ paths:
           description: No active session
         400:
           description: The offset or limit is out of range
+  /library/liked:
+    post:
+      operationId: setLiked
+      description: >-
+        Save tracks to, or remove them from, the user's Liked Songs through the
+        internal collection service.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/setLiked'
+      responses:
+        200:
+          description: Successful response
+        204:
+          description: No active session
+        400:
+          description: The uris are missing, too many, or not track URIs
+  /library/playlists/add_tracks:
+    post:
+      operationId: playlistAddTracks
+      description: >-
+        Append tracks or episodes to the end of a playlist the user may edit
+        (see can_edit in /library/playlists). The change is based on the
+        playlist's current revision and retried once if the playlist changed
+        in between.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/playlistAddTracks'
+      responses:
+        200:
+          description: Successful response
+        204:
+          description: No active session
+        400:
+          description: >-
+            The playlist_uri is not a playlist URI, or the uris are missing,
+            too many, or not track or episode URIs
+        409:
+          description: The playlist kept changing while appending
   /player/play:
     post:
       operationId: playerPlay

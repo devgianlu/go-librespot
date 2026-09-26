@@ -3,17 +3,22 @@ package daemon
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
+	librespot "github.com/devgianlu/go-librespot"
 	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	"github.com/devgianlu/go-librespot/spclient"
 )
 
 // libraryPlaylistsTimeout bounds fetching the rootlist for an API caller.
 const libraryPlaylistsTimeout = 30 * time.Second
+
+// libraryWriteTimeout bounds a write to Liked Songs or a playlist.
+const libraryWriteTimeout = 30 * time.Second
 
 // rootlistPageSize is how many rootlist entries are asked for per request.
 // Folder markers count as entries, so a library needs a few more requests
@@ -102,6 +107,7 @@ func libraryPlaylist(uri string, meta *playlist4pb.MetaItem, folders []string) A
 		Length:        meta.GetLength(),
 		ImageUrl:      playlistImageUrl(attrs),
 		Collaborative: attrs.GetCollaborative(),
+		CanEdit:       meta.GetCapabilities().GetCanEditItems(),
 		Folder:        append([]string{}, folders...),
 	}
 }
@@ -143,5 +149,27 @@ func pageLibraryPlaylists(playlists []ApiLibraryPlaylist, offset, limit int) *Ap
 		Offset: offset,
 		Limit:  limit,
 		Items:  playlists[start:end],
+	}
+}
+
+// appendToPlaylist appends uris to a playlist. The change has to name the
+// revision it is based on; if the playlist moves on in between, it is read
+// again and the append retried once.
+func appendToPlaylist(ctx context.Context, spc *spclient.Spclient, username, playlistUri string, uris []string) error {
+	id, err := librespot.SpotifyIdFromUri(playlistUri)
+	if err != nil {
+		return err
+	}
+
+	for attempt := 0; ; attempt++ {
+		revision, err := spc.PlaylistRevision(ctx, *id)
+		if err != nil {
+			return err
+		}
+
+		err = spc.PlaylistAppend(ctx, *id, username, revision, uris)
+		if !errors.Is(err, spclient.ErrPlaylistConflict) || attempt > 0 {
+			return err
+		}
 	}
 }

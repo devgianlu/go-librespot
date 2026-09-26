@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
+	playlist_permissionpb "github.com/devgianlu/go-librespot/proto/spotify/playlist_permission"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
@@ -55,6 +56,14 @@ func TestFlattenRootlist(t *testing.T) {
 	require.Equal(t, []string{"Party & Fun"}, playlists[1].Folder)
 	require.Equal(t, []string{"Party & Fun", "Old: 80s"}, playlists[2].Folder)
 	require.Empty(t, playlists[3].Folder)
+}
+
+func TestLibraryPlaylistCanEdit(t *testing.T) {
+	editable := namedMeta("Mine", 1)
+	editable.Capabilities = &playlist_permissionpb.Capabilities{CanEditItems: proto.Bool(true)}
+
+	require.True(t, libraryPlaylist("spotify:playlist:mine", editable, nil).CanEdit)
+	require.False(t, libraryPlaylist("spotify:playlist:theirs", namedMeta("Theirs", 1), nil).CanEdit)
 }
 
 func TestFlattenRootlistToleratesUnbalancedGroups(t *testing.T) {
