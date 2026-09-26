@@ -153,7 +153,7 @@ func New(opts *Options) (*App, error) {
 	}
 
 	if app.cfg.Metadata.Enabled {
-		app.metaCache = newTrackMetaCache()
+		app.metaCache = newTrackMetaCache(trackMetaCacheCapacity(effectiveMetaMaxTracks(app.cfg.Metadata.MaxTracks)))
 		app.contextLists = newContextListCache()
 	}
 

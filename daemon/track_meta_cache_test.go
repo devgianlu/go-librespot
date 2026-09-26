@@ -107,7 +107,7 @@ func newMetaTestPlayer(t *testing.T, fetch fetchFunc, resolve func(context.Conte
 	app := &App{
 		log:          &librespot.NullLogger{},
 		cfg:          &Config{Metadata: MetadataConfig{Enabled: true}},
-		metaCache:    newTrackMetaCache(),
+		metaCache:    newTrackMetaCache(trackMetaCacheLimit),
 		contextLists: newContextListCache(),
 	}
 
@@ -130,7 +130,7 @@ func provided(uri string) *connectpb.ProvidedTrack {
 }
 
 func TestTrackMetaCachePutGet(t *testing.T) {
-	c := newTrackMetaCache()
+	c := newTrackMetaCache(trackMetaCacheLimit)
 
 	require.Nil(t, c.get("spotify:track:a"), "miss on an empty cache")
 
@@ -148,7 +148,7 @@ func TestTrackMetaCachePutGet(t *testing.T) {
 // what came back: the state window names it by the former, the media by the
 // latter, and either may be looked up.
 func TestTrackMetaCachePutStreamRelinked(t *testing.T) {
-	c := newTrackMetaCache()
+	c := newTrackMetaCache(trackMetaCacheLimit)
 
 	m := mediaFixture("A")
 	c.putStream(trackUri(0x02), m)
@@ -158,7 +158,7 @@ func TestTrackMetaCachePutStreamRelinked(t *testing.T) {
 }
 
 func TestTrackMetaCacheMissing(t *testing.T) {
-	c := newTrackMetaCache()
+	c := newTrackMetaCache(trackMetaCacheLimit)
 	c.put("spotify:track:a", mediaFixture("A"))
 
 	missing := c.missing([]string{"spotify:track:a", "spotify:track:b", "spotify:track:b", "", "spotify:track:c"})
@@ -166,7 +166,7 @@ func TestTrackMetaCacheMissing(t *testing.T) {
 }
 
 func TestTrackMetaCacheEviction(t *testing.T) {
-	c := newTrackMetaCache()
+	c := newTrackMetaCache(trackMetaCacheLimit)
 
 	for i := 0; i <= trackMetaCacheLimit; i++ {
 		c.put(fmt.Sprintf("spotify:track:%d", i), mediaFixture("x"))
@@ -175,6 +175,24 @@ func TestTrackMetaCacheEviction(t *testing.T) {
 	require.Nil(t, c.get("spotify:track:0"), "the oldest entry is evicted")
 	require.NotNil(t, c.get(fmt.Sprintf("spotify:track:%d", trackMetaCacheLimit)), "the newest entry is kept")
 	require.Equal(t, trackMetaCacheLimit, c.lru.Len())
+}
+
+func TestTrackMetaCacheCapacityFitsMaxTracks(t *testing.T) {
+	require.Equal(t, trackMetaCacheLimit, trackMetaCacheCapacity(effectiveMetaMaxTracks(0)), "the default cap fits the least capacity")
+	require.Equal(t, 4096+trackMetaCacheHeadroom, trackMetaCacheCapacity(4096))
+
+	// A context as long as max_tracks must survive its own sweep, or cached
+	// never reaches length and polling clients restart the sweep forever.
+	const maxTracks = 1095
+	c := newTrackMetaCache(trackMetaCacheCapacity(maxTracks))
+	for i := 0; i < maxTracks; i++ {
+		c.put(fmt.Sprintf("spotify:track:%d", i), mediaFixture("x"))
+	}
+	uris := make([]string, maxTracks)
+	for i := range uris {
+		uris[i] = fmt.Sprintf("spotify:track:%d", i)
+	}
+	require.Empty(t, c.missing(uris), "the whole context stays cached")
 }
 
 // A client polling a filling sweep asks for the same context every second or
@@ -340,7 +358,7 @@ func TestIsListableContextUri(t *testing.T) {
 // A batched response is unpacked under each entity's own kind, and entries the
 // backend refused are left out rather than cached as nothing.
 func TestMetaFetcherFetchBatch(t *testing.T) {
-	cache := newTrackMetaCache()
+	cache := newTrackMetaCache(trackMetaCacheLimit)
 	f := &metaFetcher{log: &librespot.NullLogger{}, cache: cache, fetch: func(ctx context.Context, req *extmetadatapb.BatchedEntityRequest) (*extmetadatapb.BatchedExtensionResponse, error) {
 		require.Len(t, req.EntityRequest, 2, "a local file has no metadata to ask for")
 		require.Equal(t, extmetadatapb.ExtensionKind_TRACK_V4, req.EntityRequest[0].Query[0].ExtensionKind)
@@ -376,7 +394,7 @@ func TestMetaFetcherSweepAbortsOnErrorAndCancel(t *testing.T) {
 	}
 
 	var calls int
-	f := &metaFetcher{log: &librespot.NullLogger{}, cache: newTrackMetaCache(), fetch: func(context.Context, *extmetadatapb.BatchedEntityRequest) (*extmetadatapb.BatchedExtensionResponse, error) {
+	f := &metaFetcher{log: &librespot.NullLogger{}, cache: newTrackMetaCache(trackMetaCacheLimit), fetch: func(context.Context, *extmetadatapb.BatchedEntityRequest) (*extmetadatapb.BatchedExtensionResponse, error) {
 		calls++
 		return nil, errors.New("boom")
 	}}
