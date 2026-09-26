@@ -241,7 +241,7 @@ no use for metadata beyond the playing track and should not pay network requests
 metadata:
   enabled: false # Cache + fetch metadata around the playback position; enables next_track and /context/tracks
   context_sweep: false # Also resolve metadata for the whole context when one starts playing (requires enabled)
-  max_tracks: 800 # Maximum number of tracks of a context to enumerate and sweep
+  max_tracks: 800 # Maximum number of tracks of a context to enumerate and sweep; the metadata cache grows to fit it
 ```
 
 ### Volume synchronization

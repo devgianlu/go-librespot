@@ -19,9 +19,22 @@ import (
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
-// trackMetaCacheLimit bounds the in-memory metadata cache. Entries are a few
-// KB each (a metadata proto), so the cap keeps the cache under ~10MB.
+// trackMetaCacheLimit is the least capacity of the in-memory metadata cache.
+// Entries are a few KB each (a metadata proto), so it keeps the cache under
+// ~10MB unless metadata.max_tracks asks for more.
 const trackMetaCacheLimit = 1000
+
+// trackMetaCacheHeadroom is kept on top of metadata.max_tracks for the moving
+// playback window of other contexts.
+const trackMetaCacheHeadroom = 200
+
+// trackMetaCacheCapacity sizes the cache so that a fully swept context of
+// maxTracks tracks fits. A smaller cache evicts the start of a context while
+// sweeping its end, so cached never reaches length, and a client polling for
+// that restarts the sweep over and over.
+func trackMetaCacheCapacity(maxTracks int) int {
+	return max(trackMetaCacheLimit, maxTracks+trackMetaCacheHeadroom)
+}
 
 // trackMetaCache is a bounded in-memory cache of track metadata keyed by URI.
 // It is fed by loaded and prefetched streams and by background batch fetches
@@ -34,8 +47,8 @@ type trackMetaCache struct {
 	lru *lru.Cache[string, *librespot.Media]
 }
 
-func newTrackMetaCache() *trackMetaCache {
-	l, _ := lru.New[string, *librespot.Media](trackMetaCacheLimit)
+func newTrackMetaCache(capacity int) *trackMetaCache {
+	l, _ := lru.New[string, *librespot.Media](capacity)
 	return &trackMetaCache{lru: l}
 }
 
@@ -560,8 +573,13 @@ const defaultMetaMaxTracks = 800
 
 // metaMaxTracks returns the configured enumeration/sweep cap.
 func (p *AppPlayer) metaMaxTracks() int {
-	if n := p.app.cfg.Metadata.MaxTracks; n > 0 {
-		return n
+	return effectiveMetaMaxTracks(p.app.cfg.Metadata.MaxTracks)
+}
+
+// effectiveMetaMaxTracks applies the default to a configured metadata.max_tracks.
+func effectiveMetaMaxTracks(configured int) int {
+	if configured > 0 {
+		return configured
 	}
 	return defaultMetaMaxTracks
 }
