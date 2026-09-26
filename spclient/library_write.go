@@ -60,6 +60,46 @@ func (c *Spclient) CollectionWrite(ctx context.Context, username, set string, ur
 	return nil
 }
 
+// CollectionPage reads one page of a collection set; an empty token asks for
+// the first page. The response names the next page, empty on the last one.
+func (c *Spclient) CollectionPage(ctx context.Context, username, set, token string, limit int) (*collectionpb.PageResponse, error) {
+	body, err := proto.Marshal(&collectionpb.PageRequest{
+		Username:        username,
+		Set:             set,
+		PaginationToken: token,
+		Limit:           int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling PageRequest: %w", err)
+	}
+
+	resp, err := c.Request(ctx, "POST", "/collection/v2/paging", nil, http.Header{
+		"Content-Type": {collectionContentType},
+		"Accept":       {collectionContentType},
+	}, body)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("invalid status code from collection paging: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var page collectionpb.PageResponse
+	if err := proto.Unmarshal(respBytes, &page); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling PageResponse: %w", err)
+	}
+
+	return &page, nil
+}
+
 // PlaylistRevision returns the current revision of a playlist, which a change
 // has to be based on.
 func (c *Spclient) PlaylistRevision(ctx context.Context, playlist librespot.SpotifyId) ([]byte, error) {
