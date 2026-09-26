@@ -329,6 +329,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/libraryPlaylist'
+    likedState:
+      x-go-name: ApiLikedState
+      description: Whether a track is in the user's Liked Songs
+      type: object
+      required: [ uri, liked ]
+      properties:
+        uri:
+          description: Track URI
+          type: string
+        liked:
+          description: Whether the track is in Liked Songs
+          type: boolean
+    likedStates:
+      x-go-name: ApiLikedStates
+      description: Liked Songs membership of the requested tracks
+      type: object
+      required: [ items ]
+      properties:
+        items:
+          description: One entry per requested URI, in request order
+          type: array
+          items:
+            $ref: '#/components/schemas/likedState'
     setLiked:
       x-go-name: ApiSetLiked
       description: A save to or remove from Liked Songs payload
@@ -695,6 +718,35 @@ paths:
         400:
           description: The offset or limit is out of range
   /library/liked:
+    get:
+      operationId: getLiked
+      description: >-
+        Tell whether tracks are in the user's Liked Songs. The daemon reads
+        the whole set through the internal collection service and reuses it
+        for a minute, so changes made on other devices show up within that
+        time; changes made through POST /library/liked show up at once.
+      parameters:
+        - name: uris
+          in: query
+          required: true
+          description: Comma-separated track URIs, 1 to 50
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/likedStates'
+        204:
+          description: No active session
+        400:
+          description: The uris are missing, too many, or not track URIs
     post:
       operationId: setLiked
       description: >-

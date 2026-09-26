@@ -153,7 +153,7 @@ var endpointMethods = map[string][]string{
 	"/player/output":                {http.MethodPost},
 	"/context/tracks":               {http.MethodGet},
 	"/library/playlists":            {http.MethodGet},
-	"/library/liked":                {http.MethodPost},
+	"/library/liked":                {http.MethodGet, http.MethodPost},
 	"/library/playlists/add_tracks": {http.MethodPost},
 }
 
@@ -617,6 +617,32 @@ func TestApiLibraryPlaylists(t *testing.T) {
 			"uri":"spotify:playlist:xxx","name":"Mix","description":"","owner_username":"",
 			"length":0,"image_url":null,"collaborative":false,"can_edit":false,"folder":[]}]}`, body(t, resp))
 	})
+}
+
+func TestApiGetLiked(t *testing.T) {
+	t.Run("forwards comma-separated uris", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return &ApiLikedStates{Items: []ApiLikedState{{Uri: "spotify:track:4uLU6hMCjMI75M1A2tKUQC", Liked: true}}}, nil
+		})
+
+		resp := ts.do(http.MethodGet, "/library/liked?uris=spotify:track:4uLU6hMCjMI75M1A2tKUQC,spotify:track:37i9dQZF1DXcBWIGoYBM5M", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.JSONEq(t, `{"items":[{"uri":"spotify:track:4uLU6hMCjMI75M1A2tKUQC","liked":true}]}`, body(t, resp))
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypeGetLiked, req.Type)
+		require.Equal(t, []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:track:37i9dQZF1DXcBWIGoYBM5M"}, req.Data)
+	})
+
+	for _, query := range []string{"", "?uris=", "?uris=spotify:album:4uLU6hMCjMI75M1A2tKUQC", "?uris=nope"} {
+		t.Run("rejects "+query, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodGet, "/library/liked"+query, nil)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
 }
 
 func TestApiSetLiked(t *testing.T) {

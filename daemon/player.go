@@ -912,7 +912,23 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 				return
 			}
 
+			p.app.liked.apply(username, data.Uris, data.Liked)
 			reply.done(nil, nil)
+		})
+
+		return nil, errReplyDeferred
+	case ApiRequestTypeGetLiked:
+		uris := req.Data.([]string)
+		reply := apiReply(req)
+		spc, username := p.sess.Spclient(), p.sess.Username()
+		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
+			states, err := p.app.liked.contains(ctx, username, uris, fetchLikedTracks(spc))
+			if err != nil {
+				reply.done(nil, fmt.Errorf("failed reading liked songs: %w", err))
+				return
+			}
+
+			reply.done(&ApiLikedStates{Items: states}, nil)
 		})
 
 		return nil, errReplyDeferred

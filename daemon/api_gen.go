@@ -110,6 +110,21 @@ type ApiLibraryPlaylists struct {
 	Total int `json:"total"`
 }
 
+// ApiLikedState Whether a track is in the user's Liked Songs
+type ApiLikedState struct {
+	// Liked Whether the track is in Liked Songs
+	Liked bool `json:"liked"`
+
+	// Uri Track URI
+	Uri string `json:"uri"`
+}
+
+// ApiLikedStates Liked Songs membership of the requested tracks
+type ApiLikedStates struct {
+	// Items One entry per requested URI, in request order
+	Items []ApiLikedState `json:"items"`
+}
+
 // ApiNext A skip to next payload
 type ApiNext struct {
 	// Uri The track URI to skip to. When omitted the next track in the context is played.
@@ -336,6 +351,12 @@ type GetContextTracksParams struct {
 	Uri string `form:"uri" json:"uri"`
 }
 
+// GetLikedParams defines parameters for GetLiked.
+type GetLikedParams struct {
+	// Uris Comma-separated track URIs, 1 to 50
+	Uris []string `form:"uris" json:"uris"`
+}
+
 // GetLibraryPlaylistsParams defines parameters for GetLibraryPlaylists.
 type GetLibraryPlaylistsParams struct {
 	// Offset Index of the first playlist to return
@@ -395,6 +416,9 @@ type ServerInterface interface {
 
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /library/liked)
+	GetLiked(w http.ResponseWriter, r *http.Request, params GetLikedParams)
 
 	// (POST /library/liked)
 	SetLiked(w http.ResponseWriter, r *http.Request)
@@ -536,6 +560,40 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLiked operation middleware
+func (siw *ServerInterfaceWrapper) GetLiked(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLikedParams
+
+	// ------------- Required query parameter "uris" -------------
+
+	if paramValue := r.URL.Query().Get("uris"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "uris"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", false, true, "uris", r.URL.Query(), &params.Uris)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "uris", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLiked(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -984,6 +1042,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/auth/code", wrapper.GetAuthCode)
 	m.HandleFunc("GET "+options.BaseURL+"/context/tracks", wrapper.GetContextTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/library/liked", wrapper.GetLiked)
 	m.HandleFunc("POST "+options.BaseURL+"/library/liked", wrapper.SetLiked)
 	m.HandleFunc("GET "+options.BaseURL+"/library/playlists", wrapper.GetLibraryPlaylists)
 	m.HandleFunc("POST "+options.BaseURL+"/library/playlists/add_tracks", wrapper.PlaylistAddTracks)
