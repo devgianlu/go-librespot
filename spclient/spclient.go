@@ -101,7 +101,11 @@ func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, me
 	}
 
 	if body != nil {
-		req.Header.Set("Content-Type", "application/x-protobuf")
+		// Most endpoints take plain protobuf, some (the collection service)
+		// a vendor type of their own, which the caller then sets.
+		if req.Header.Get("Content-Type") == "" {
+			req.Header.Set("Content-Type", "application/x-protobuf")
+		}
 
 		req.GetBody = func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(body)), nil

@@ -142,6 +142,15 @@ func (suite *RequestSuite) TestSetsProtobufContentTypeForBodies() {
 	suite.Equal([]byte("payload"), got[0].body)
 }
 
+func (suite *RequestSuite) TestKeepsCallerContentType() {
+	header := http.Header{"Content-Type": []string{"application/vnd.collection-v2.spotify.proto"}}
+	resp, err := suite.spclient.Request(suite.T().Context(), "POST", "/x", nil, header, []byte("payload"))
+	suite.Require().NoError(err)
+	defer func() { _ = resp.Body.Close() }()
+
+	suite.Equal("application/vnd.collection-v2.spotify.proto", suite.requests()[0].header.Get("Content-Type"))
+}
+
 func (suite *RequestSuite) TestNoContentTypeWithoutBody() {
 	resp, err := suite.spclient.Request(suite.T().Context(), "GET", "/x", nil, nil, nil)
 	suite.Require().NoError(err)
