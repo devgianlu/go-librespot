@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package spotify.collection.v2;
+
+// Messages of the collection service (/collection/v2), which stores the
+// user's saved items such as Liked Songs (the "collection" set).
+
+message CollectionItem {
+  string uri = 1;
+  int64 added_at = 2;
+  bool is_removed = 3;
+}
+
+message WriteRequest {
+  string username = 1;
+  string set = 2;
+  repeated CollectionItem items = 3;
+}
