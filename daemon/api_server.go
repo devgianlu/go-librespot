@@ -128,12 +128,20 @@ const (
 	ApiRequestSetDeviceName           ApiRequestType = "set_device_name"
 	ApiRequestTypeReopenOutput        ApiRequestType = "reopen_output"
 	ApiRequestTypeContextTracks       ApiRequestType = "context_tracks"
+	ApiRequestTypeLibraryPlaylists    ApiRequestType = "library_playlists"
 )
 
 // ApiRequestDataContextTracks carries the uri query parameter of the context
 // listing request; the spec generates payloads only for request bodies.
 type ApiRequestDataContextTracks struct {
 	Uri string
+}
+
+// ApiRequestDataLibraryPlaylists carries the paging query parameters of the
+// library playlists request.
+type ApiRequestDataLibraryPlaylists struct {
+	Offset int
+	Limit  int
 }
 
 type ApiEventType string
@@ -502,6 +510,26 @@ func (s *ConcreteApiServer) GetToken(w http.ResponseWriter, _ *http.Request) {
 
 func (s *ConcreteApiServer) GetContextTracks(w http.ResponseWriter, _ *http.Request, params GetContextTracksParams) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeContextTracks, Data: ApiRequestDataContextTracks{Uri: params.Uri}}, w)
+}
+
+// Paging bounds of /library/playlists, matching the spec.
+const (
+	libraryPlaylistsDefaultLimit = 50
+	libraryPlaylistsMaxLimit     = 500
+)
+
+func (s *ConcreteApiServer) GetLibraryPlaylists(w http.ResponseWriter, r *http.Request, params GetLibraryPlaylistsParams) {
+	// The generated params cannot tell an absent limit from limit=0.
+	if !r.URL.Query().Has("limit") {
+		params.Limit = libraryPlaylistsDefaultLimit
+	}
+
+	if params.Offset < 0 || params.Limit < 1 || params.Limit > libraryPlaylistsMaxLimit {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeLibraryPlaylists, Data: ApiRequestDataLibraryPlaylists{Offset: params.Offset, Limit: params.Limit}}, w)
 }
 
 func (s *ConcreteApiServer) PlayerResume(w http.ResponseWriter, _ *http.Request) {

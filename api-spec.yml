@@ -244,6 +244,71 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/contextTrackItem'
+    libraryPlaylist:
+      x-go-name: ApiLibraryPlaylist
+      description: A playlist in the user's library
+      type: object
+      required:
+        - uri
+        - name
+        - description
+        - owner_username
+        - length
+        - image_url
+        - collaborative
+        - folder
+      properties:
+        uri:
+          description: Playlist URI
+          type: string
+        name:
+          description: Playlist name
+          type: string
+        description:
+          description: Playlist description, empty when it has none
+          type: string
+        owner_username:
+          description: Username of the playlist owner, "spotify" for editorial playlists
+          type: string
+        length:
+          description: Number of items in the playlist
+          type: integer
+          format: int32
+        image_url:
+          description: >-
+            Cover image URL, null when the playlist has no explicit picture
+            (the Spotify apps then render a mosaic of its first album covers)
+          type: string
+          nullable: true
+        collaborative:
+          description: Whether the playlist is collaborative
+          type: boolean
+        folder:
+          description: >-
+            Names of the folders containing the playlist, outermost first;
+            empty for a playlist at the top level of the library
+          type: array
+          items:
+            type: string
+    libraryPlaylists:
+      x-go-name: ApiLibraryPlaylists
+      description: A page of the user's library playlists
+      type: object
+      required: [ total, offset, limit, items ]
+      properties:
+        total:
+          description: Number of playlists in the library
+          type: integer
+        offset:
+          description: Index of the first returned playlist
+          type: integer
+        limit:
+          description: Maximum number of playlists requested
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/libraryPlaylist'
     root:
       x-go-name: ApiRoot
       description: API reachability and playback readiness
@@ -539,6 +604,48 @@ paths:
           description: The uri does not name a listable context
         404:
           description: The metadata cache is disabled
+  /library/playlists:
+    get:
+      operationId: getLibraryPlaylists
+      description: >-
+        List the playlists in the user's library (the rootlist), in the order
+        the user arranged them, including followed and Spotify-owned
+        playlists. Folders are flattened: each playlist carries the names of
+        the folders it sits in. The listing is fetched through the internal
+        playlist service, not the rate-limited public Web API, and is fetched
+        fresh on every call. Liked Songs is not part of the rootlist; list it
+        through /context/tracks with the spotify:collection:tracks URI.
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          description: Index of the first playlist to return
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of playlists to return, from 1 to 500
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/libraryPlaylists'
+        204:
+          description: No active session
+        400:
+          description: The offset or limit is out of range
   /player/play:
     post:
       operationId: playerPlay

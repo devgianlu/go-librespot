@@ -858,6 +858,23 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		})
 
 		return nil, errReplyDeferred
+	case ApiRequestTypeLibraryPlaylists:
+		// Like the token, the rootlist touches no player state, so the loop
+		// does not wait on the playlist service for it.
+		data := req.Data.(ApiRequestDataLibraryPlaylists)
+		reply := apiReply(req)
+		spc, username := p.sess.Spclient(), p.sess.Username()
+		p.goDetached(libraryPlaylistsTimeout, func(ctx context.Context) {
+			playlists, err := fetchLibraryPlaylists(ctx, spc, username)
+			if err != nil {
+				reply.done(nil, fmt.Errorf("failed fetching rootlist: %w", err))
+				return
+			}
+
+			reply.done(pageLibraryPlaylists(playlists, data.Offset, data.Limit), nil)
+		})
+
+		return nil, errReplyDeferred
 	case ApiRequestSetDeviceName:
 		p.setDeviceName(req.Data.(string))
 		return nil, nil

@@ -146,6 +146,7 @@ var endpointMethods = map[string][]string{
 	"/player/add_to_queue":    {http.MethodPost},
 	"/player/output":          {http.MethodPost},
 	"/context/tracks":         {http.MethodGet},
+	"/library/playlists":      {http.MethodGet},
 }
 
 func TestApiRejectsWrongMethod(t *testing.T) {
@@ -556,6 +557,53 @@ func TestApiAddToQueue(t *testing.T) {
 		resp := ts.do(http.MethodPost, "/player/add_to_queue", map[string]any{"uri": ""})
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		ts.requireNoRequest()
+	})
+}
+
+func TestApiLibraryPlaylists(t *testing.T) {
+	t.Run("defaults the paging", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodGet, "/library/playlists", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypeLibraryPlaylists, req.Type)
+		require.Equal(t, ApiRequestDataLibraryPlaylists{Offset: 0, Limit: 50}, req.Data)
+	})
+
+	t.Run("forwards the paging", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodGet, "/library/playlists?offset=20&limit=500", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, ApiRequestDataLibraryPlaylists{Offset: 20, Limit: 500}, ts.request().Data)
+	})
+
+	for _, query := range []string{"limit=0", "limit=501", "offset=-1", "limit=abc"} {
+		t.Run("rejects "+query, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodGet, "/library/playlists?"+query, nil)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+
+	t.Run("serialises the page", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return pageLibraryPlaylists([]ApiLibraryPlaylist{{
+				Uri:    "spotify:playlist:xxx",
+				Name:   "Mix",
+				Folder: []string{},
+			}}, 0, 50), nil
+		})
+
+		resp := ts.do(http.MethodGet, "/library/playlists", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.JSONEq(t, `{"total":1,"offset":0,"limit":50,"items":[{
+			"uri":"spotify:playlist:xxx","name":"Mix","description":"","owner_username":"",
+			"length":0,"image_url":null,"collaborative":false,"folder":[]}]}`, body(t, resp))
 	})
 }
 
