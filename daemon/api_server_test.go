@@ -691,6 +691,18 @@ func TestApiWrappedErrorsMapToStatusCodes(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
+// A request nothing takes must be answered rather than park its handler.
+func TestApiUnreadRequestIsUnavailable(t *testing.T) {
+	old := requestPickupTimeout
+	requestPickupTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { requestPickupTimeout = old })
+
+	ts := newTestServer(t, nil)
+
+	resp := ts.do(http.MethodGet, "/status", nil)
+	require.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+}
+
 // Without zeroconf nothing reads the requests until the login is done, so they
 // are answered as the zeroconf branch answers them without a session.
 func TestAnswerWithoutSession(t *testing.T) {

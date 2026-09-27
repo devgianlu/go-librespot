@@ -23,6 +23,10 @@ import (
 
 const timeout = 10 * time.Second
 
+// requestPickupTimeout bounds how long a request waits for the daemon to take
+// it. A variable so tests need not wait it out.
+var requestPickupTimeout = timeout
+
 type ApiServer interface {
 	Emit(ev *ApiEvent)
 	Receive() <-chan ApiRequest
@@ -440,7 +444,21 @@ func (s *StubApiServer) Close() error {
 
 func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter) {
 	req.resp = make(chan apiResponse, 1)
-	s.requests <- req
+
+	// Only the hand-off is bounded: once taken, a request is answered, if
+	// perhaps later (see errReplyDeferred). One nobody takes is owed nothing,
+	// and waiting on it would park this handler for good.
+	pickup := time.NewTimer(requestPickupTimeout)
+	defer pickup.Stop()
+
+	select {
+	case s.requests <- req:
+	case <-pickup.C:
+		s.log.Warnf("nothing picked up request %s", req.Type)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+
 	resp := <-req.resp
 
 	if resp.err != nil {
