@@ -3,7 +3,6 @@
 package mpris
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -88,10 +87,6 @@ func offer[T any](done <-chan struct{}, ch chan T, val T) bool {
 
 func last[T any](a []T) T {
 	return a[len(a)-1]
-}
-
-func coverArtUrl(fileId []uint8) string {
-	return "https://i.scdn.co/image/" + hex.EncodeToString(fileId)
 }
 
 func artistsNames(artists []*metadata.Artist) []*string {
