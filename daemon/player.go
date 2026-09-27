@@ -877,7 +877,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeLibraryPlaylists:
 		// Like the token, the rootlist touches no player state, so the loop
 		// does not wait on the playlist service for it.
-		data := req.Data.(ApiRequestDataLibraryPlaylists)
+		data := req.Data.(ApiRequestDataLibraryPage)
 		reply := apiReply(req)
 		spc, username := p.sess.Spclient(), p.sess.Username()
 		p.goDetached(libraryPlaylistsTimeout, func(ctx context.Context) {
@@ -888,6 +888,30 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			}
 
 			reply.done(pageLibraryPlaylists(playlists, data.Offset, data.Limit), nil)
+		})
+
+		return nil, errReplyDeferred
+	case ApiRequestTypeLibraryAlbums, ApiRequestTypeLibraryArtists:
+		data := req.Data.(ApiRequestDataLibraryPage)
+		reply := apiReply(req)
+		spc, username, imageUrl := p.sess.Spclient(), p.sess.Username(), p.imageUrlFunc()
+		p.goDetached(libraryPlaylistsTimeout, func(ctx context.Context) {
+			if req.Type == ApiRequestTypeLibraryAlbums {
+				albums, err := fetchLibraryAlbums(ctx, spc, username, imageUrl, data.Offset, data.Limit)
+				if err != nil {
+					reply.done(nil, fmt.Errorf("failed listing saved albums: %w", err))
+					return
+				}
+				reply.done(albums, nil)
+				return
+			}
+
+			artists, err := fetchLibraryArtists(ctx, spc, username, imageUrl, data.Offset, data.Limit)
+			if err != nil {
+				reply.done(nil, fmt.Errorf("failed listing followed artists: %w", err))
+				return
+			}
+			reply.done(artists, nil)
 		})
 
 		return nil, errReplyDeferred
