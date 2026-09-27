@@ -22,7 +22,8 @@ import (
 
 // testServer is a ConcreteApiServer on a random port with a stand-in for the
 // daemon: reply decides what every request resolves to, and the requests it
-// saw are readable afterwards. Built by hand rather than through NewApiServer
+// saw are readable afterwards. A nil reply leaves the requests unread, as
+// nothing reads them while the daemon is still logging in. Built by hand rather than through NewApiServer
 // because only the struct exposes the listener address.
 type testServer struct {
 	t      *testing.T
@@ -51,6 +52,10 @@ func newTestServer(t *testing.T, reply func(req ApiRequest) (any, error)) *testS
 		url:      "http://" + listener.Addr().String(),
 		server:   s,
 		received: make(chan ApiRequest, 16),
+	}
+
+	if reply == nil {
+		return ts
 	}
 
 	// Stand in for AppPlayer.Run, which is what normally drains this channel.
@@ -684,6 +689,45 @@ func TestApiWrappedErrorsMapToStatusCodes(t *testing.T) {
 
 	resp := ts.do(http.MethodGet, "/status", nil)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+// Without zeroconf nothing reads the requests until the login is done, so they
+// are answered as the zeroconf branch answers them without a session.
+func TestAnswerWithoutSession(t *testing.T) {
+	ts := newTestServer(t, nil)
+	app := &App{server: ts.server}
+
+	stop := app.answerWithoutSession(context.Background())
+
+	resp := ts.do(http.MethodGet, "/", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = ts.do(http.MethodGet, "/status", nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	resp = ts.do(http.MethodPost, "/set_device_name", ApiSetDeviceName{Name: "renamed"})
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("stop did not return")
+	}
+
+	// Once stopped, requests reach whoever reads next: the player, normally.
+	go func() {
+		req := <-ts.server.Receive()
+		req.Reply(&ApiStatus{Username: "someone"}, nil)
+	}()
+
+	resp = ts.do(http.MethodGet, "/status", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Contains(t, body(t, resp), "someone")
 }
 
 func TestApiUnknownPathIsNotFound(t *testing.T) {
