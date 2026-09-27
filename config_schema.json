@@ -339,7 +339,7 @@
         },
         "mpris_enabled": {
           "type": "boolean",
-          "description": "Enables MPRIS communication with D-Bus",
+          "description": "Enables MPRIS communication with D-Bus on Linux, and the Now Playing widget and media keys on macOS",
           "default": false
         },
         "flac_enabled": {

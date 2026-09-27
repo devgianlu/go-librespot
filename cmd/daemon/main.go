@@ -78,7 +78,9 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		logger.WithError(err).Fatal("daemon exited with error")
-	}
+	runDaemon(mediaPlayer, func() {
+		if err := app.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			logger.WithError(err).Fatal("daemon exited with error")
+		}
+	})
 }

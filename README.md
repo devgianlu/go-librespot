@@ -34,6 +34,7 @@
 - 📡 **Selectable mDNS backend** — the built-in responder or the system Avahi daemon.
 - 🌐 **REST API + WebSocket events** — control and monitor playback programmatically.
 - 🖥️ **MPRIS integration** — control playback over D-Bus / standard Linux media keys.
+- 🍎 **macOS Now Playing** — media keys, headphone buttons and the Now Playing widget, with the track and its cover (`mpris_enabled: true`).
 - 🪶 **Lightweight & portable** — a single Go binary, ideal for Raspberry Pi and other embedded devices.
 
 ## Getting Started
