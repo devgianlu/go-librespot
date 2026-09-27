@@ -210,8 +210,14 @@ type ApiTrack struct {
 	// AlbumName Album name
 	AlbumName string `json:"album_name"`
 
+	// AlbumUri Album URI, or the show URI for episodes (mirroring album_name); empty when unknown
+	AlbumUri string `json:"album_uri"`
+
 	// ArtistNames Artists name
 	ArtistNames []string `json:"artist_names"`
+
+	// ArtistUris Artist URIs, in the order of artist_names; empty for episodes
+	ArtistUris []string `json:"artist_uris"`
 
 	// BitDepth Bits per sample of the source audio, null for lossy formats which have no meaningful source bit depth
 	BitDepth *int `json:"bit_depth"`

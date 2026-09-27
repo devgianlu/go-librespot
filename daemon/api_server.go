@@ -275,11 +275,18 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.ImageSize)
 		}
 
+		artistUris := make([]string, 0, len(track.Artist))
+		for _, a := range track.Artist {
+			artistUris = append(artistUris, gidUri(librespot.SpotifyIdTypeArtist, a.GetGid()))
+		}
+
 		return &ApiTrack{
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
 			Name:          *track.Name,
 			ArtistNames:   artists,
+			ArtistUris:    artistUris,
 			AlbumName:     *track.Album.Name,
+			AlbumUri:      gidUri(librespot.SpotifyIdTypeAlbum, track.Album.GetGid()),
 			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
 			Duration:      int(*track.Duration),
@@ -296,7 +303,9 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
 			Name:          *episode.Name,
 			ArtistNames:   []string{*episode.Show.Name},
+			ArtistUris:    []string{},
 			AlbumName:     *episode.Show.Name,
+			AlbumUri:      gidUri(librespot.SpotifyIdTypeShow, episode.Show.GetGid()),
 			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
 			Duration:      int(*episode.Duration),
@@ -305,6 +314,15 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 			DiscNumber:    0,
 		}
 	}
+}
+
+// gidUri turns a metadata gid into a URI of the given type, or "" when the
+// gid is missing or malformed.
+func gidUri(typ librespot.SpotifyIdType, gid []byte) string {
+	if len(gid) != 16 {
+		return ""
+	}
+	return librespot.SpotifyIdFromGid(typ, gid).Uri()
 }
 
 type ApiEvent struct {

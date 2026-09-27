@@ -23,7 +23,9 @@ components:
         - uri
         - name
         - artist_names
+        - artist_uris
         - album_name
+        - album_uri
         - album_cover_url
         - position
         - duration
@@ -48,8 +50,20 @@ components:
           items:
             description: Artist name
             type: string
+        artist_uris:
+          description: >-
+            Artist URIs, in the order of artist_names; empty for episodes
+          type: array
+          items:
+            description: Artist URI
+            type: string
         album_name:
           description: Album name
+          type: string
+        album_uri:
+          description: >-
+            Album URI, or the show URI for episodes (mirroring album_name);
+            empty when unknown
           type: string
         album_cover_url:
           description: Album cover URL
