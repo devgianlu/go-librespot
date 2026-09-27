@@ -148,3 +148,29 @@ func (suite *RequestSuite) TestPlaylistAppendIsSentOnce() {
 	suite.Error(err)
 	suite.Len(suite.requests(), 1)
 }
+
+func (suite *RequestSuite) TestCollectionPageReadsPage() {
+	suite.handler = func(_ int, w http.ResponseWriter) {
+		body, _ := proto.Marshal(&collectionpb.PageResponse{
+			Items:         []*collectionpb.CollectionItem{{Uri: "spotify:track:a", AddedAt: 1}},
+			NextPageToken: "next",
+		})
+		_, _ = w.Write(body)
+	}
+
+	page, err := suite.spclient.CollectionPage(suite.T().Context(), "user", spclient.CollectionSetLikedSongs, "tok", 300)
+	suite.Require().NoError(err)
+	suite.Equal("next", page.GetNextPageToken())
+	suite.Require().Len(page.GetItems(), 1)
+
+	got := suite.requests()[0]
+	suite.Equal("/collection/v2/paging", got.path)
+	suite.Equal("application/vnd.collection-v2.spotify.proto", got.header.Get("Content-Type"))
+
+	var req collectionpb.PageRequest
+	suite.Require().NoError(proto.Unmarshal(got.body, &req))
+	suite.Equal("user", req.GetUsername())
+	suite.Equal("collection", req.GetSet())
+	suite.Equal("tok", req.GetPaginationToken())
+	suite.Equal(int32(300), req.GetLimit())
+}

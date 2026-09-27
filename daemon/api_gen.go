@@ -66,6 +66,64 @@ type ApiDeviceAuth struct {
 	Url string `json:"url"`
 }
 
+// ApiLibraryAlbum An album saved in the user's library
+type ApiLibraryAlbum struct {
+	// ArtistNames Names of the album artists
+	ArtistNames []string `json:"artist_names"`
+
+	// ImageUrl Cover image URL, null when unknown
+	ImageUrl *string `json:"image_url"`
+
+	// Name Album name, empty when its metadata could not be read
+	Name string `json:"name"`
+
+	// Uri Album URI
+	Uri string `json:"uri"`
+
+	// Year Release year, zero when unknown
+	Year int `json:"year"`
+}
+
+// ApiLibraryAlbums A page of the user's saved albums
+type ApiLibraryAlbums struct {
+	Items []ApiLibraryAlbum `json:"items"`
+
+	// Limit Maximum number of albums requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned album
+	Offset int `json:"offset"`
+
+	// Total Number of saved albums
+	Total int `json:"total"`
+}
+
+// ApiLibraryArtist An artist the user follows
+type ApiLibraryArtist struct {
+	// ImageUrl Portrait image URL, null when unknown
+	ImageUrl *string `json:"image_url"`
+
+	// Name Artist name, empty when its metadata could not be read
+	Name string `json:"name"`
+
+	// Uri Artist URI
+	Uri string `json:"uri"`
+}
+
+// ApiLibraryArtists A page of the artists the user follows
+type ApiLibraryArtists struct {
+	Items []ApiLibraryArtist `json:"items"`
+
+	// Limit Maximum number of artists requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned artist
+	Offset int `json:"offset"`
+
+	// Total Number of followed artists
+	Total int `json:"total"`
+}
+
 // ApiLibraryPlaylist A playlist in the user's library
 type ApiLibraryPlaylist struct {
 	// CanEdit Whether the user may add items to the playlist, true for their own and for collaborative playlists
@@ -351,6 +409,24 @@ type GetContextTracksParams struct {
 	Uri string `form:"uri" json:"uri"`
 }
 
+// GetLibraryAlbumsParams defines parameters for GetLibraryAlbums.
+type GetLibraryAlbumsParams struct {
+	// Offset Index of the first item to return
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of items to return, from 1 to 500
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetLibraryArtistsParams defines parameters for GetLibraryArtists.
+type GetLibraryArtistsParams struct {
+	// Offset Index of the first item to return
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of items to return, from 1 to 500
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetLikedParams defines parameters for GetLiked.
 type GetLikedParams struct {
 	// Uris Comma-separated track URIs, 1 to 50
@@ -416,6 +492,12 @@ type ServerInterface interface {
 
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
+
+	// (GET /library/albums)
+	GetLibraryAlbums(w http.ResponseWriter, r *http.Request, params GetLibraryAlbumsParams)
+
+	// (GET /library/artists)
+	GetLibraryArtists(w http.ResponseWriter, r *http.Request, params GetLibraryArtistsParams)
 
 	// (GET /library/liked)
 	GetLiked(w http.ResponseWriter, r *http.Request, params GetLikedParams)
@@ -560,6 +642,76 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLibraryAlbums operation middleware
+func (siw *ServerInterfaceWrapper) GetLibraryAlbums(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLibraryAlbumsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLibraryAlbums(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetLibraryArtists operation middleware
+func (siw *ServerInterfaceWrapper) GetLibraryArtists(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetLibraryArtistsParams
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetLibraryArtists(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1042,6 +1194,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/auth/code", wrapper.GetAuthCode)
 	m.HandleFunc("GET "+options.BaseURL+"/context/tracks", wrapper.GetContextTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
+	m.HandleFunc("GET "+options.BaseURL+"/library/albums", wrapper.GetLibraryAlbums)
+	m.HandleFunc("GET "+options.BaseURL+"/library/artists", wrapper.GetLibraryArtists)
 	m.HandleFunc("GET "+options.BaseURL+"/library/liked", wrapper.GetLiked)
 	m.HandleFunc("POST "+options.BaseURL+"/library/liked", wrapper.SetLiked)
 	m.HandleFunc("GET "+options.BaseURL+"/library/playlists", wrapper.GetLibraryPlaylists)
