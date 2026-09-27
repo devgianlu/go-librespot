@@ -458,9 +458,51 @@ func (s *activeSession) forward(ctx context.Context, req ApiRequest) bool {
 	}
 }
 
+// answerWithoutSession replies to API requests while there is no player to
+// hand them to, the way the zeroconf branch does when it has no session, until
+// the returned function is called. That function waits for the replier to
+// stop, so every later request reaches whoever reads app.server.Receive() next.
+func (app *App) answerWithoutSession(ctx context.Context) (stop func()) {
+	quit := make(chan struct{})
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-quit:
+				return
+			case req := <-app.server.Receive():
+				switch req.Type {
+				case ApiRequestTypeRoot:
+					req.Reply(&ApiRoot{}, nil)
+				default:
+					// Renames included, unlike the zeroconf branch: the login
+					// running meanwhile reads the device name.
+					req.Reply(nil, ErrNoSession)
+				}
+			}
+		}
+	}()
+
+	return func() {
+		close(quit)
+		<-done
+	}
+}
+
 func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Context) (*AppPlayer, error)) (err error) {
 	if !app.cfg.ZeroconfEnabled {
+		// Nothing reads the API's requests until Run below, and logging in lasts
+		// as long as the user takes to approve a pairing code or open the
+		// authorization link. Answer them meanwhile rather than leaving each
+		// one parked on the server's unbuffered channel.
+		stopAnswering := app.answerWithoutSession(ctx)
 		appPlayer, err := appPlayerFunc(ctx)
+		stopAnswering()
 		if err != nil {
 			return err
 		} else if appPlayer == nil {
