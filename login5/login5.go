@@ -3,13 +3,16 @@ package login5
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
 	pb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3"
 	credentialspb "github.com/devgianlu/go-librespot/proto/spotify/login5/v3/credentials"
@@ -24,10 +27,41 @@ func (e *LoginError) Error() string {
 	return fmt.Sprintf("failed authenticating with login5: %v", e.Code)
 }
 
+// HTTPError reports a login5 response that is not a LoginResponse: an error
+// page from Spotify's edge, such as the 503 of an outage.
+type HTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPError) Error() string {
+	if e.Body == "" {
+		return fmt.Sprintf("login5 returned HTTP %d", e.StatusCode)
+	}
+	return fmt.Sprintf("login5 returned HTTP %d: %s", e.StatusCode, e.Body)
+}
+
+// Retryable reports whether the request may succeed when repeated: server
+// errors and rate limiting are transient, other statuses are not.
+func (e *HTTPError) Retryable() bool {
+	return e.StatusCode >= 500 || e.StatusCode == http.StatusTooManyRequests
+}
+
+// maxErrorBodyLen caps how much of an error body goes into an HTTPError.
+const maxErrorBodyLen = 200
+
+// retryMaxInterval caps the pause between two attempts at a transient
+// failure. Attempts continue until the request's context ends, so a daemon
+// starting during an outage waits it out instead of exiting.
+const retryMaxInterval = time.Minute
+
 type Login5 struct {
 	log     librespot.Logger
 	baseUrl *url.URL
 	client  *http.Client
+
+	// newBackOff paces the attempts at a transient failure; replaced by tests.
+	newBackOff func() backoff.BackOff
 
 	deviceId    string
 	clientToken string
@@ -49,15 +83,49 @@ func NewLogin5(log librespot.Logger, client *http.Client, deviceId, clientToken 
 		client:      client,
 		deviceId:    deviceId,
 		clientToken: clientToken,
+		newBackOff: func() backoff.BackOff {
+			b := backoff.NewExponentialBackOff()
+			b.MaxInterval = retryMaxInterval
+			b.MaxElapsedTime = 0 // bounded by the context instead
+			return b
+		},
 	}
 }
 
+// request sends req, repeating it while login5 fails transiently: network
+// errors, server errors and rate limiting.
 func (c *Login5) request(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
 	body, err := proto.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed marhsalling LoginRequest: %w", err)
+		return nil, fmt.Errorf("failed marshalling LoginRequest: %w", err)
 	}
 
+	// lastErr is the last failure that was not the context ending, so an
+	// attempt cut short by the deadline does not hide what came before.
+	var lastErr error
+	resp, err := backoff.RetryNotifyWithData(func() (*pb.LoginResponse, error) {
+		resp, err := c.requestOnce(ctx, body)
+		if err != nil && ctx.Err() == nil {
+			lastErr = err
+		}
+		var httpErr *HTTPError
+		if errors.As(err, &httpErr) && !httpErr.Retryable() {
+			return nil, backoff.Permanent(err)
+		}
+		return resp, err
+	}, backoff.WithContext(c.newBackOff(), ctx), func(err error, wait time.Duration) {
+		c.log.WithError(err).Warnf("login5 request failed, retrying in %s", wait.Round(100*time.Millisecond))
+	})
+
+	// When the context ends between attempts, the retry reports only that;
+	// keep what login5 actually answered.
+	if err != nil && lastErr != nil && ctx.Err() != nil && !errors.Is(err, lastErr) {
+		return nil, fmt.Errorf("%w (last attempt: %w)", err, lastErr)
+	}
+	return resp, err
+}
+
+func (c *Login5) requestOnce(ctx context.Context, body []byte) (*pb.LoginResponse, error) {
 	httpReq := &http.Request{
 		Method: "POST",
 		URL:    c.baseUrl.JoinPath("/v3/login"),
@@ -81,9 +149,19 @@ func (c *Login5) request(ctx context.Context, req *pb.LoginRequest) (*pb.LoginRe
 		return nil, fmt.Errorf("failed reading login5 response: %w", err)
 	}
 
+	// An error page is not a LoginResponse; parsing it would only report
+	// invalid wire-format data and hide the status.
+	if resp.StatusCode != http.StatusOK {
+		msg := strings.TrimSpace(string(respBody))
+		if len(msg) > maxErrorBodyLen {
+			msg = msg[:maxErrorBodyLen] + "…"
+		}
+		return nil, &HTTPError{StatusCode: resp.StatusCode, Body: msg}
+	}
+
 	var protoResp pb.LoginResponse
 	if err := proto.Unmarshal(respBody, &protoResp); err != nil {
-		return nil, fmt.Errorf("faield unmarshalling LoginResponse: %w", err)
+		return nil, fmt.Errorf("failed unmarshalling LoginResponse: %w", err)
 	}
 
 	return &protoResp, nil
