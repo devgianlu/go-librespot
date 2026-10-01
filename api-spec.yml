@@ -654,9 +654,10 @@ paths:
 
         Tracks and episodes are both listed, so shows enumerate to their
         episodes. Long contexts are truncated to metadata.max_tracks. Listings
-        are reused for five minutes, so an edit made to a playlist within that
-        window is not reflected. Requires metadata.enabled; responds 404
-        otherwise.
+        are reused for five minutes, so an edit made elsewhere within that
+        window is not reflected; edits made through /library/liked and
+        /library/playlists/add_tracks are. Requires metadata.enabled; responds
+        404 otherwise.
       parameters:
         - name: uri
           in: query

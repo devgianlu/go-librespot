@@ -131,11 +131,14 @@ type contextListCache struct {
 	// polling every second does not spawn an enumeration per poll.
 	mu       sync.Mutex
 	inFlight map[string]bool
+	// stale marks in-flight enumerations that began before an invalidation;
+	// their result may predate the change, so it is not cached.
+	stale map[string]bool
 }
 
 func newContextListCache() *contextListCache {
 	l, _ := lru.New[string, contextListEntry](contextListCacheLimit)
-	return &contextListCache{lru: l, now: time.Now, inFlight: map[string]bool{}}
+	return &contextListCache{lru: l, now: time.Now, inFlight: map[string]bool{}, stale: map[string]bool{}}
 }
 
 func (c *contextListCache) get(uri string) ([]string, bool) {
@@ -151,7 +154,30 @@ func (c *contextListCache) get(uri string) ([]string, bool) {
 }
 
 func (c *contextListCache) put(uri string, uris []string) {
-	c.lru.Add(uri, contextListEntry{uris: uris, fetched: c.now()})
+	c.mu.Lock()
+	stale := c.stale[uri]
+	delete(c.stale, uri)
+	c.mu.Unlock()
+
+	if !stale {
+		c.lru.Add(uri, contextListEntry{uris: uris, fetched: c.now()})
+	}
+}
+
+// invalidate drops the listing of uri after it was changed through the
+// daemon, so the next request enumerates it again instead of serving the
+// old listing for the rest of contextListTTL.
+func (c *contextListCache) invalidate(uri string) {
+	if c == nil {
+		return
+	}
+	c.lru.Remove(uri)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.inFlight[uri] {
+		c.stale[uri] = true
+	}
 }
 
 // beginFetch claims the right to enumerate uri, reporting false when the
