@@ -913,6 +913,9 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			}
 
 			p.app.liked.apply(username, data.Uris, data.Liked)
+			for _, uri := range likedSongsContextUris(username) {
+				p.app.contextLists.invalidate(uri)
+			}
 			reply.done(nil, nil)
 		})
 
@@ -942,6 +945,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 				return
 			}
 
+			p.app.contextLists.invalidate(data.PlaylistUri)
 			reply.done(nil, nil)
 		})
 

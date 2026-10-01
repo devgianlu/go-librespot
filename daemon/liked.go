@@ -81,6 +81,11 @@ func (l *likedTracks) apply(username string, uris []string, liked bool) {
 	}
 }
 
+// likedSongsContextUris are the context URIs Liked Songs is listed under.
+func likedSongsContextUris(username string) []string {
+	return []string{"spotify:user:" + username + ":collection", "spotify:collection:tracks"}
+}
+
 // fetchLikedTracks pages through the user's Liked Songs collection set, which
 // also holds saved albums; only tracks are kept.
 func fetchLikedTracks(spc *spclient.Spclient) likedFetcher {

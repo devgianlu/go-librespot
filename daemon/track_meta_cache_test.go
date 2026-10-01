@@ -211,6 +211,42 @@ func TestContextListCacheServesRepeatLookups(t *testing.T) {
 	require.Len(t, uris, 2)
 }
 
+// A write through the daemon changes the context, so its listing must not be
+// served from the cache afterwards.
+func TestContextListCacheInvalidate(t *testing.T) {
+	c := newContextListCache()
+	c.put("spotify:playlist:a", []string{"spotify:track:1"})
+
+	c.invalidate("spotify:playlist:a")
+	_, ok := c.get("spotify:playlist:a")
+	require.False(t, ok, "an invalidated listing is a miss")
+	require.True(t, c.beginFetch("spotify:playlist:a"), "and is enumerated again")
+
+	var nilCache *contextListCache
+	nilCache.invalidate("spotify:playlist:a") // metadata disabled: no-op
+}
+
+// An enumeration that was already running when the context changed may have
+// read it before the change; its result must not land in the cache.
+func TestContextListCacheInvalidateDuringEnumeration(t *testing.T) {
+	c := newContextListCache()
+	require.True(t, c.beginFetch("spotify:playlist:a"))
+
+	c.invalidate("spotify:playlist:a")
+	c.put("spotify:playlist:a", []string{"spotify:track:old"})
+	c.endFetch("spotify:playlist:a")
+
+	_, ok := c.get("spotify:playlist:a")
+	require.False(t, ok, "the possibly stale result was dropped")
+
+	require.True(t, c.beginFetch("spotify:playlist:a"))
+	c.put("spotify:playlist:a", []string{"spotify:track:new"})
+	c.endFetch("spotify:playlist:a")
+	uris, ok := c.get("spotify:playlist:a")
+	require.True(t, ok, "the next enumeration is cached again")
+	require.Equal(t, []string{"spotify:track:new"}, uris)
+}
+
 // The listing carries no revision, so a stale entry is the only way a client
 // could miss an edit; the TTL bounds how long that can last.
 func TestContextListCacheExpires(t *testing.T) {
