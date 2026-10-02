@@ -1,12 +1,14 @@
 package spclient
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -123,6 +125,53 @@ func (c *Spclient) PlaylistRevision(ctx context.Context, playlist librespot.Spot
 	query.Set("from", "0")
 	query.Set("length", "1")
 
+	content, err := c.getPlaylist(ctx, playlist, query)
+	if err != nil {
+		return nil, err
+	}
+	return content.GetRevision(), nil
+}
+
+// playlistContentsPageSize is how many items PlaylistContents reads per page.
+const playlistContentsPageSize = 1000
+
+// playlistMaxPages caps the pages read for one playlist.
+const playlistMaxPages = 50
+
+// PlaylistContents returns a playlist's revision and its item URIs in order,
+// so items can be found by position. It reports ErrPlaylistConflict when the
+// playlist changes between two pages.
+func (c *Spclient) PlaylistContents(ctx context.Context, playlist librespot.SpotifyId) ([]byte, []string, error) {
+	var revision []byte
+	var uris []string
+	for page := 0; page < playlistMaxPages; page++ {
+		query := url.Values{}
+		query.Set("decorate", "revision")
+		query.Set("from", strconv.Itoa(len(uris)))
+		query.Set("length", strconv.Itoa(playlistContentsPageSize))
+
+		content, err := c.getPlaylist(ctx, playlist, query)
+		if err != nil {
+			return nil, nil, err
+		}
+		if page == 0 {
+			revision = content.GetRevision()
+		} else if !bytes.Equal(revision, content.GetRevision()) {
+			return nil, nil, ErrPlaylistConflict
+		}
+
+		items := content.GetContents().GetItems()
+		for _, item := range items {
+			uris = append(uris, item.GetUri())
+		}
+		if !content.GetContents().GetTruncated() || len(items) == 0 {
+			return revision, uris, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("playlist still truncated after %d pages", playlistMaxPages)
+}
+
+func (c *Spclient) getPlaylist(ctx context.Context, playlist librespot.SpotifyId, query url.Values) (*playlist4pb.SelectedListContent, error) {
 	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/playlist/v2/playlist/%s", playlist.Base62()), query, nil, nil)
 	if err != nil {
 		return nil, err
@@ -143,8 +192,24 @@ func (c *Spclient) PlaylistRevision(ctx context.Context, playlist librespot.Spot
 	if err := proto.Unmarshal(respBytes, &content); err != nil {
 		return nil, fmt.Errorf("failed unmarshalling SelectedListContent: %w", err)
 	}
+	return &content, nil
+}
 
-	return content.GetRevision(), nil
+// PlaylistRemove removes the one item at position, which must be uri, as a
+// change based on revision. It returns ErrPlaylistConflict when the playlist
+// moved on since.
+//
+// The removal is by index range. Rem.items_as_key would make the items the
+// key instead and remove every entry of uri, duplicates included.
+func (c *Spclient) PlaylistRemove(ctx context.Context, playlist librespot.SpotifyId, username string, revision []byte, uri string, position int) error {
+	return c.playlistChange(ctx, playlist, username, revision, &playlist4pb.Op{
+		Kind: playlist4pb.Op_REM.Enum(),
+		Rem: &playlist4pb.Rem{
+			FromIndex: proto.Int32(int32(position)),
+			Length:    proto.Int32(1),
+			Items:     []*playlist4pb.Item{{Uri: proto.String(uri)}},
+		},
+	})
 }
 
 // PlaylistAppend appends uris to the end of a playlist, as a change based on
@@ -155,13 +220,19 @@ func (c *Spclient) PlaylistAppend(ctx context.Context, playlist librespot.Spotif
 		items = append(items, &playlist4pb.Item{Uri: proto.String(uri)})
 	}
 
+	return c.playlistChange(ctx, playlist, username, revision, &playlist4pb.Op{
+		Kind: playlist4pb.Op_ADD.Enum(),
+		Add:  &playlist4pb.Add{Items: items, AddLast: proto.Bool(true)},
+	})
+}
+
+// playlistChange sends one operation as a change to a playlist based on
+// revision.
+func (c *Spclient) playlistChange(ctx context.Context, playlist librespot.SpotifyId, username string, revision []byte, op *playlist4pb.Op) error {
 	body, err := proto.Marshal(&playlist4pb.ListChanges{
 		BaseRevision: revision,
 		Deltas: []*playlist4pb.Delta{{
-			Ops: []*playlist4pb.Op{{
-				Kind: playlist4pb.Op_ADD.Enum(),
-				Add:  &playlist4pb.Add{Items: items, AddLast: proto.Bool(true)},
-			}},
+			Ops: []*playlist4pb.Op{op},
 			Info: &playlist4pb.ChangeInfo{
 				User:      proto.String(username),
 				Timestamp: proto.Int64(time.Now().UnixMilli()),

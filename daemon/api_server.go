@@ -138,6 +138,8 @@ const (
 	ApiRequestTypeSetLiked            ApiRequestType = "set_liked"
 	ApiRequestTypeGetLiked            ApiRequestType = "get_liked"
 	ApiRequestTypePlaylistAddTracks   ApiRequestType = "playlist_add_tracks"
+	ApiRequestTypePlaylistRemoveTrack ApiRequestType = "playlist_remove_track"
+	ApiRequestTypePlaylistContains    ApiRequestType = "playlist_contains"
 )
 
 // ApiRequestDataContextTracks carries the uri query parameter of the context
@@ -624,12 +626,47 @@ func (s *ConcreteApiServer) PlaylistAddTracks(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if id, err := librespot.SpotifyIdFromUri(data.PlaylistUri); err != nil || id.Type() != librespot.SpotifyIdTypePlaylist {
+	if !validPlaylistUri(data.PlaylistUri) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistAddTracks, Data: data}, w)
+}
+
+// validPlaylistUri reports whether uri names a playlist.
+func validPlaylistUri(uri string) bool {
+	id, err := librespot.SpotifyIdFromUri(uri)
+	return err == nil && id.Type() == librespot.SpotifyIdTypePlaylist
+}
+
+func (s *ConcreteApiServer) PlaylistRemoveTrack(w http.ResponseWriter, r *http.Request) {
+	var data ApiPlaylistRemoveTrack
+	if err := jsonDecode(r, &data); err != nil ||
+		!validPlaylistUri(data.PlaylistUri) ||
+		!validItemUris([]string{data.Uri}, librespot.SpotifyIdTypeTrack, librespot.SpotifyIdTypeEpisode) ||
+		(data.Position != nil && *data.Position < 0) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistRemoveTrack, Data: data}, w)
+}
+
+// ApiRequestDataPlaylistContains carries the query of a contains request.
+type ApiRequestDataPlaylistContains struct {
+	PlaylistUri string
+	Uris        []string
+}
+
+func (s *ConcreteApiServer) PlaylistContains(w http.ResponseWriter, _ *http.Request, params PlaylistContainsParams) {
+	if !validPlaylistUri(params.PlaylistUri) ||
+		!validItemUris(params.Uris, librespot.SpotifyIdTypeTrack, librespot.SpotifyIdTypeEpisode) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistContains, Data: ApiRequestDataPlaylistContains{PlaylistUri: params.PlaylistUri, Uris: params.Uris}}, w)
 }
 
 func (s *ConcreteApiServer) PlayerResume(w http.ResponseWriter, _ *http.Request) {

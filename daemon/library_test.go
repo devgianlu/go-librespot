@@ -147,3 +147,24 @@ func TestLibraryErrorMapsStatuses(t *testing.T) {
 	require.NotErrorIs(t, other, ErrNotFound)
 	require.ErrorIs(t, libraryError("x", spclient.ErrPlaylistConflict), spclient.ErrPlaylistConflict)
 }
+
+func TestItemPosition(t *testing.T) {
+	uris := []string{"spotify:track:a", "spotify:track:b", "spotify:track:a"}
+	at := func(i int) *int { return &i }
+
+	got, err := itemPosition(uris, "spotify:track:a", at(2))
+	require.NoError(t, err)
+	require.Equal(t, 2, got, "the named duplicate, not the first one")
+
+	got, err = itemPosition(uris, "spotify:track:a", nil)
+	require.NoError(t, err)
+	require.Equal(t, 0, got, "without a position, the first occurrence")
+
+	_, err = itemPosition(uris, "spotify:track:a", at(1))
+	require.ErrorIs(t, err, spclient.ErrPlaylistConflict, "another item at the position: the listing is stale")
+	_, err = itemPosition(uris, "spotify:track:a", at(7))
+	require.ErrorIs(t, err, spclient.ErrPlaylistConflict, "a position past the end: the listing is stale")
+
+	_, err = itemPosition(uris, "spotify:track:z", nil)
+	require.ErrorIs(t, err, ErrNotFound)
+}

@@ -190,3 +190,70 @@ func libraryError(what string, err error) error {
 	}
 	return fmt.Errorf("%s: %w", what, err)
 }
+
+// errPlaylistItemMoved reports that the entry a removal names is no longer
+// there; the client's listing is out of date.
+var errPlaylistItemMoved = fmt.Errorf("%w: the item is no longer at that position", spclient.ErrPlaylistConflict)
+
+// itemPosition finds the entry to remove: the one at position, which must
+// still be uri, or without a position the first occurrence of uri.
+func itemPosition(uris []string, uri string, position *int) (int, error) {
+	if position != nil {
+		if *position < len(uris) && uris[*position] == uri {
+			return *position, nil
+		}
+		return 0, errPlaylistItemMoved
+	}
+	for i, u := range uris {
+		if u == uri {
+			return i, nil
+		}
+	}
+	return 0, ErrNotFound
+}
+
+// removeFromPlaylist removes one entry of uri from a playlist. The change
+// names the revision it is based on; if the playlist moves on in between, it
+// is read again and the removal retried once.
+func removeFromPlaylist(ctx context.Context, spc *spclient.Spclient, username, playlistUri, uri string, position *int) error {
+	id, err := librespot.SpotifyIdFromUri(playlistUri)
+	if err != nil {
+		return err
+	}
+
+	for attempt := 0; ; attempt++ {
+		revision, uris, err := spc.PlaylistContents(ctx, *id)
+		if err == nil {
+			var index int
+			if index, err = itemPosition(uris, uri, position); err != nil {
+				return err
+			}
+			err = spc.PlaylistRemove(ctx, *id, username, revision, uri, index)
+		}
+		if !errors.Is(err, spclient.ErrPlaylistConflict) || attempt > 0 {
+			return err
+		}
+	}
+}
+
+// playlistContains tells for each of uris whether the playlist holds it.
+func playlistContains(ctx context.Context, spc *spclient.Spclient, playlistUri string, uris []string) ([]ApiPlaylistContainsState, error) {
+	id, err := librespot.SpotifyIdFromUri(playlistUri)
+	if err != nil {
+		return nil, err
+	}
+	_, items, err := spc.PlaylistContents(ctx, *id)
+	if err != nil {
+		return nil, err
+	}
+
+	held := make(map[string]bool, len(items))
+	for _, item := range items {
+		held[item] = true
+	}
+	states := make([]ApiPlaylistContainsState, len(uris))
+	for i, uri := range uris {
+		states[i] = ApiPlaylistContainsState{Uri: uri, Contained: held[uri]}
+	}
+	return states, nil
+}
