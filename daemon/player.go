@@ -937,6 +937,36 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		})
 
 		return nil, errReplyDeferred
+	case ApiRequestTypePlaylistRemoveTrack:
+		data := req.Data.(ApiPlaylistRemoveTrack)
+		reply := apiReply(req)
+		spc, username := p.sess.Spclient(), p.sess.Username()
+		p.goDetached(libraryRequestTimeout, func(ctx context.Context) {
+			if err := removeFromPlaylist(ctx, spc, username, data.PlaylistUri, data.Uri, data.Position); err != nil {
+				reply.done(nil, libraryError("failed removing from playlist", err))
+				return
+			}
+
+			p.app.contextLists.invalidate(data.PlaylistUri)
+			reply.done(nil, nil)
+		})
+
+		return nil, errReplyDeferred
+	case ApiRequestTypePlaylistContains:
+		data := req.Data.(ApiRequestDataPlaylistContains)
+		reply := apiReply(req)
+		spc := p.sess.Spclient()
+		p.goDetached(libraryRequestTimeout, func(ctx context.Context) {
+			states, err := playlistContains(ctx, spc, data.PlaylistUri, data.Uris)
+			if err != nil {
+				reply.done(nil, libraryError("failed reading playlist", err))
+				return
+			}
+
+			reply.done(&ApiPlaylistContains{Items: states}, nil)
+		})
+
+		return nil, errReplyDeferred
 	case ApiRequestTypePlaylistAddTracks:
 		data := req.Data.(ApiPlaylistAddTracks)
 		reply := apiReply(req)

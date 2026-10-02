@@ -132,29 +132,31 @@ func body(t *testing.T, resp *http.Response) string {
 // Every endpoint and the methods it accepts. Anything else must be refused
 // before the daemon is involved.
 var endpointMethods = map[string][]string{
-	"/":                             {http.MethodGet},
-	"/status":                       {http.MethodGet},
-	"/auth/code":                    {http.MethodGet},
-	"/token":                        {http.MethodPost},
-	"/set_device_name":              {http.MethodPost},
-	"/player/play":                  {http.MethodPost},
-	"/player/resume":                {http.MethodPost},
-	"/player/pause":                 {http.MethodPost},
-	"/player/playpause":             {http.MethodPost},
-	"/player/stop":                  {http.MethodPost},
-	"/player/next":                  {http.MethodPost},
-	"/player/prev":                  {http.MethodPost},
-	"/player/seek":                  {http.MethodPost},
-	"/player/volume":                {http.MethodGet, http.MethodPost},
-	"/player/repeat_context":        {http.MethodPost},
-	"/player/repeat_track":          {http.MethodPost},
-	"/player/shuffle_context":       {http.MethodPost},
-	"/player/add_to_queue":          {http.MethodPost},
-	"/player/output":                {http.MethodPost},
-	"/context/tracks":               {http.MethodGet},
-	"/library/playlists":            {http.MethodGet},
-	"/library/liked":                {http.MethodGet, http.MethodPost},
-	"/library/playlists/add_tracks": {http.MethodPost},
+	"/":                               {http.MethodGet},
+	"/status":                         {http.MethodGet},
+	"/auth/code":                      {http.MethodGet},
+	"/token":                          {http.MethodPost},
+	"/set_device_name":                {http.MethodPost},
+	"/player/play":                    {http.MethodPost},
+	"/player/resume":                  {http.MethodPost},
+	"/player/pause":                   {http.MethodPost},
+	"/player/playpause":               {http.MethodPost},
+	"/player/stop":                    {http.MethodPost},
+	"/player/next":                    {http.MethodPost},
+	"/player/prev":                    {http.MethodPost},
+	"/player/seek":                    {http.MethodPost},
+	"/player/volume":                  {http.MethodGet, http.MethodPost},
+	"/player/repeat_context":          {http.MethodPost},
+	"/player/repeat_track":            {http.MethodPost},
+	"/player/shuffle_context":         {http.MethodPost},
+	"/player/add_to_queue":            {http.MethodPost},
+	"/player/output":                  {http.MethodPost},
+	"/context/tracks":                 {http.MethodGet},
+	"/library/playlists":              {http.MethodGet},
+	"/library/liked":                  {http.MethodGet, http.MethodPost},
+	"/library/playlists/add_tracks":   {http.MethodPost},
+	"/library/playlists/remove_track": {http.MethodPost},
+	"/library/playlists/contains":     {http.MethodGet},
 }
 
 func TestApiRejectsWrongMethod(t *testing.T) {
@@ -719,6 +721,62 @@ func TestApiPlaylistAddTracks(t *testing.T) {
 		})
 		require.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
+}
+
+func TestApiPlaylistRemoveTrack(t *testing.T) {
+	t.Run("forwards the payload", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/library/playlists/remove_track", map[string]any{
+			"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC", "position": 3,
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		data := ts.request().Data.(ApiPlaylistRemoveTrack)
+		require.NotNil(t, data.Position)
+		require.Equal(t, 3, *data.Position)
+	})
+
+	for name, payload := range map[string]any{
+		"album as playlist": map[string]any{"playlist_uri": "spotify:album:37i9dQZF1DXcBWIGoYBM5M", "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC"},
+		"artist item":       map[string]any{"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uri": "spotify:artist:4uLU6hMCjMI75M1A2tKUQC"},
+		"negative position": map[string]any{"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC", "position": -1},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/library/playlists/remove_track", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+
+	t.Run("maps a moved item to 409", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return nil, fmt.Errorf("failed removing from playlist: %w", errPlaylistItemMoved)
+		})
+
+		resp := ts.do(http.MethodPost, "/library/playlists/remove_track", map[string]any{
+			"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC", "position": 3,
+		})
+		require.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+}
+
+func TestApiPlaylistContains(t *testing.T) {
+	ts := newTestServer(t, func(ApiRequest) (any, error) {
+		return &ApiPlaylistContains{Items: []ApiPlaylistContainsState{{Uri: "spotify:track:4uLU6hMCjMI75M1A2tKUQC", Contained: true}}}, nil
+	})
+
+	resp := ts.do(http.MethodGet, "/library/playlists/contains?playlist_uri=spotify:playlist:37i9dQZF1DXcBWIGoYBM5M&uris=spotify:track:4uLU6hMCjMI75M1A2tKUQC", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"items":[{"uri":"spotify:track:4uLU6hMCjMI75M1A2tKUQC","contained":true}]}`, body(t, resp))
+
+	data := ts.request().Data.(ApiRequestDataPlaylistContains)
+	require.Equal(t, "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", data.PlaylistUri)
+
+	resp = ts.do(http.MethodGet, "/library/playlists/contains?playlist_uri=spotify:album:x&uris=spotify:track:4uLU6hMCjMI75M1A2tKUQC", nil)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestApiSetDeviceName(t *testing.T) {

@@ -148,3 +148,59 @@ func (suite *RequestSuite) TestPlaylistAppendIsSentOnce() {
 	suite.Error(err)
 	suite.Len(suite.requests(), 1)
 }
+
+func playlistPage(revision []byte, pos int32, truncated bool, uris ...string) []byte {
+	items := make([]*playlist4pb.Item, len(uris))
+	for i, uri := range uris {
+		items[i] = &playlist4pb.Item{Uri: proto.String(uri)}
+	}
+	body, _ := proto.Marshal(&playlist4pb.SelectedListContent{
+		Revision: revision,
+		Contents: &playlist4pb.ListItems{Pos: proto.Int32(pos), Truncated: proto.Bool(truncated), Items: items},
+	})
+	return body
+}
+
+func (suite *RequestSuite) TestPlaylistContentsReadsAllPages() {
+	suite.handler = func(attempt int, w http.ResponseWriter) {
+		if attempt == 0 {
+			_, _ = w.Write(playlistPage([]byte{1}, 0, true, "spotify:track:a", "spotify:track:b"))
+			return
+		}
+		_, _ = w.Write(playlistPage([]byte{1}, 2, false, "spotify:track:c"))
+	}
+
+	revision, uris, err := suite.spclient.PlaylistContents(suite.T().Context(), testPlaylistId(suite))
+	suite.Require().NoError(err)
+	suite.Equal([]byte{1}, revision)
+	suite.Equal([]string{"spotify:track:a", "spotify:track:b", "spotify:track:c"}, uris)
+
+	got := suite.requests()
+	suite.Require().Len(got, 2)
+	suite.Equal("0", got[0].query.Get("from"))
+	suite.Equal("2", got[1].query.Get("from"), "the next page starts after the items read")
+}
+
+func (suite *RequestSuite) TestPlaylistContentsReportsAChangeBetweenPages() {
+	suite.handler = func(attempt int, w http.ResponseWriter) {
+		_, _ = w.Write(playlistPage([]byte{byte(attempt)}, int32(attempt), attempt == 0, "spotify:track:a"))
+	}
+
+	_, _, err := suite.spclient.PlaylistContents(suite.T().Context(), testPlaylistId(suite))
+	suite.ErrorIs(err, spclient.ErrPlaylistConflict)
+}
+
+func (suite *RequestSuite) TestPlaylistRemoveSendsAnIndexRange() {
+	err := suite.spclient.PlaylistRemove(suite.T().Context(), testPlaylistId(suite), "user", []byte{9}, "spotify:track:b", 4)
+	suite.Require().NoError(err)
+
+	var changes playlist4pb.ListChanges
+	suite.Require().NoError(proto.Unmarshal(suite.requests()[0].body, &changes))
+	suite.Equal([]byte{9}, changes.GetBaseRevision())
+	op := changes.GetDeltas()[0].GetOps()[0]
+	suite.Equal(playlist4pb.Op_REM, op.GetKind())
+	suite.Equal(int32(4), op.GetRem().GetFromIndex())
+	suite.Equal(int32(1), op.GetRem().GetLength())
+	suite.False(op.GetRem().GetItemsAsKey(), "keyed by the item, Spotify would remove every duplicate of it")
+	suite.Equal("spotify:track:b", op.GetRem().GetItems()[0].GetUri())
+}

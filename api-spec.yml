@@ -366,6 +366,48 @@ components:
         liked:
           description: True to add the tracks to Liked Songs, false to remove them
           type: boolean
+    playlistRemoveTrack:
+      x-go-name: ApiPlaylistRemoveTrack
+      description: A remove from playlist payload
+      type: object
+      required: [ playlist_uri, uri ]
+      properties:
+        playlist_uri:
+          description: URI of the playlist to remove from
+          type: string
+        uri:
+          description: URI of the track or episode to remove
+          type: string
+        position:
+          description: >-
+            Position of the item to remove, as listed by /context/tracks; the
+            item there must be uri. Without it the first occurrence of uri is
+            removed.
+          type: integer
+          minimum: 0
+    playlistContainsState:
+      x-go-name: ApiPlaylistContainsState
+      description: Whether a playlist holds an item
+      type: object
+      required: [ uri, contained ]
+      properties:
+        uri:
+          description: Track or episode URI
+          type: string
+        contained:
+          description: Whether the playlist holds the item at least once
+          type: boolean
+    playlistContains:
+      x-go-name: ApiPlaylistContains
+      description: Membership of the requested items in a playlist
+      type: object
+      required: [ items ]
+      properties:
+        items:
+          description: One entry per requested URI, in request order
+          type: array
+          items:
+            $ref: '#/components/schemas/playlistContainsState'
     playlistAddTracks:
       x-go-name: ApiPlaylistAddTracks
       description: An append to playlist payload
@@ -794,6 +836,74 @@ paths:
           description: The playlist does not exist
         409:
           description: The playlist kept changing while appending
+  /library/playlists/remove_track:
+    post:
+      operationId: playlistRemoveTrack
+      description: >-
+        Remove one item from a playlist the user may edit. Playlists may hold
+        an item more than once, so clients that list the playlist pass the
+        position of the entry to remove; the change is based on the
+        playlist's current revision and retried once if it changed in
+        between.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/playlistRemoveTrack'
+      responses:
+        200:
+          description: Successful response
+        204:
+          description: No active session
+        400:
+          description: The playlist_uri or uri is not valid, or the position is negative
+        403:
+          description: The user may not edit the playlist
+        404:
+          description: The playlist does not exist or does not hold uri
+        409:
+          description: >-
+            The item at position is no longer uri, or the playlist kept
+            changing; list the playlist again
+  /library/playlists/contains:
+    get:
+      operationId: playlistContains
+      description: >-
+        Tell whether a playlist already holds items, for example to ask
+        before adding a duplicate. The playlist is read fresh on every call.
+      parameters:
+        - name: playlist_uri
+          in: query
+          required: true
+          description: URI of the playlist
+          schema:
+            type: string
+        - name: uris
+          in: query
+          required: true
+          description: Comma-separated track or episode URIs, 1 to 50
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/playlistContains'
+        204:
+          description: No active session
+        400:
+          description: The playlist_uri or the uris are not valid
+        403:
+          description: The user may not read the playlist
+        404:
+          description: The playlist does not exist
   /player/play:
     post:
       operationId: playerPlay
