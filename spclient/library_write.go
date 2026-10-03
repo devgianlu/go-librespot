@@ -21,6 +21,18 @@ const collectionContentType = "application/vnd.collection-v2.spotify.proto"
 // CollectionSetLikedSongs is the collection set holding the user's Liked Songs.
 const CollectionSetLikedSongs = "collection"
 
+// StatusError reports a status the collection or playlist service answered
+// a library request with, so callers can tell a permission problem (403) or a
+// missing playlist (404) from a fault.
+type StatusError struct {
+	Op         string
+	StatusCode int
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("invalid status code from %s: %d", e.Op, e.StatusCode)
+}
+
 // ErrPlaylistConflict reports that a playlist changed between reading its
 // revision and writing to it.
 var ErrPlaylistConflict = errors.New("playlist changed concurrently")
@@ -54,7 +66,7 @@ func (c *Spclient) CollectionWrite(ctx context.Context, username, set string, ur
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("invalid status code from collection write: %d", resp.StatusCode)
+		return &StatusError{Op: "collection write", StatusCode: resp.StatusCode}
 	}
 
 	return nil
@@ -84,7 +96,7 @@ func (c *Spclient) CollectionPage(ctx context.Context, username, set, token stri
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status code from collection paging: %d", resp.StatusCode)
+		return nil, &StatusError{Op: "collection paging", StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -116,7 +128,7 @@ func (c *Spclient) PlaylistRevision(ctx context.Context, playlist librespot.Spot
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status code from playlist: %d", resp.StatusCode)
+		return nil, &StatusError{Op: "playlist", StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -172,6 +184,6 @@ func (c *Spclient) PlaylistAppend(ctx context.Context, playlist librespot.Spotif
 	case http.StatusConflict:
 		return ErrPlaylistConflict
 	default:
-		return fmt.Errorf("invalid status code from playlist changes: %d", resp.StatusCode)
+		return &StatusError{Op: "playlist changes", StatusCode: resp.StatusCode}
 	}
 }
