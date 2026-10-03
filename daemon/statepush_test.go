@@ -18,7 +18,7 @@ import (
 // than by the network. The lane goroutine is not started: the queueing tests
 // drive submit and next by hand so they do not have to race it.
 func newTestStatePushLane(put func(context.Context, string, connectpb.PutStateReason, []byte) (*connectpb.Cluster, error)) *statePushLane {
-	return &statePushLane{
+	l := &statePushLane{
 		log:     &librespot.NullLogger{},
 		put:     put,
 		wake:    make(chan struct{}, 1),
@@ -26,6 +26,8 @@ func newTestStatePushLane(put func(context.Context, string, connectpb.PutStateRe
 		quit:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
+	l.ctx, l.cancel = context.WithCancel(context.Background())
+	return l
 }
 
 func push(seq uint64, reason connectpb.PutStateReason) statePush {
@@ -128,7 +130,46 @@ func TestStatePushSubmitDoesNotBlockOnAStalledPut(t *testing.T) {
 	l.close()
 }
 
-// Closing must not leave the caller waiting on a push that will never answer.
+// What was queued before close still goes out: a logout queues BECAME_INACTIVE
+// and closes the lane right after, so dropping the queue lost it every time.
+func TestStatePushCloseSendsWhatIsQueued(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var sent []connectpb.PutStateReason
+
+	l := newTestStatePushLane(func(ctx context.Context, _ string, reason connectpb.PutStateReason, _ []byte) (*connectpb.Cluster, error) {
+		if reason == connectpb.PutStateReason_PLAYER_STATE_CHANGED {
+			<-release
+		}
+		mu.Lock()
+		sent = append(sent, reason)
+		mu.Unlock()
+		return nil, nil
+	})
+	go l.run()
+
+	l.submit(push(1, connectpb.PutStateReason_PLAYER_STATE_CHANGED))
+	l.submit(push(2, connectpb.PutStateReason_BECAME_INACTIVE))
+
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		close(release)
+	}()
+	l.close()
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, []connectpb.PutStateReason{
+		connectpb.PutStateReason_PLAYER_STATE_CHANGED,
+		connectpb.PutStateReason_BECAME_INACTIVE,
+	}, sent)
+
+	l.submit(push(3, connectpb.PutStateReason_PLAYER_STATE_CHANGED))
+	require.Empty(t, drain(l), "submit after close must be ignored")
+}
+
+// Closing must not leave the caller waiting on a push that will never answer:
+// it gives up once the drain deadline passes.
 func TestStatePushCloseCancelsInFlight(t *testing.T) {
 	started := make(chan struct{})
 
