@@ -72,20 +72,20 @@ func (c *Spclient) CollectionWrite(ctx context.Context, username, set string, ur
 	return nil
 }
 
-// CollectionPage reads one page of a collection set; an empty token asks for
-// the first page. The response names the next page, empty on the last one.
-func (c *Spclient) CollectionPage(ctx context.Context, username, set, token string, limit int) (*collectionpb.PageResponse, error) {
-	body, err := proto.Marshal(&collectionpb.PageRequest{
-		Username:        username,
-		Set:             set,
-		PaginationToken: token,
-		Limit:           int32(limit),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed marshalling PageRequest: %w", err)
+// CollectionContains tells for each of uris whether it is in one of the
+// user's collection sets, in one round trip.
+func (c *Spclient) CollectionContains(ctx context.Context, username, set string, uris []string) ([]bool, error) {
+	req := &collectionpb.ContainsRequest{Username: username, Set: set}
+	for _, uri := range uris {
+		req.Items = append(req.Items, &collectionpb.CollectionItem{Uri: uri})
 	}
 
-	resp, err := c.Request(ctx, "POST", "/collection/v2/paging", nil, http.Header{
+	body, err := proto.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling ContainsRequest: %w", err)
+	}
+
+	resp, err := c.Request(ctx, "POST", "/collection/v2/contains", nil, http.Header{
 		"Content-Type": {collectionContentType},
 		"Accept":       {collectionContentType},
 	}, body)
@@ -96,7 +96,7 @@ func (c *Spclient) CollectionPage(ctx context.Context, username, set, token stri
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, &StatusError{Op: "collection paging", StatusCode: resp.StatusCode}
+		return nil, &StatusError{Op: "collection contains", StatusCode: resp.StatusCode}
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
@@ -104,12 +104,15 @@ func (c *Spclient) CollectionPage(ctx context.Context, username, set, token stri
 		return nil, fmt.Errorf("failed reading response body: %w", err)
 	}
 
-	var page collectionpb.PageResponse
-	if err := proto.Unmarshal(respBytes, &page); err != nil {
-		return nil, fmt.Errorf("failed unmarshalling PageResponse: %w", err)
+	var contains collectionpb.ContainsResponse
+	if err := proto.Unmarshal(respBytes, &contains); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling ContainsResponse: %w", err)
+	}
+	if len(contains.GetFound()) != len(uris) {
+		return nil, fmt.Errorf("collection contains answered %d items for %d", len(contains.GetFound()), len(uris))
 	}
 
-	return &page, nil
+	return contains.GetFound(), nil
 }
 
 // PlaylistRevision returns the current revision of a playlist, which a change

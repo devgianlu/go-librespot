@@ -105,30 +105,38 @@ func (suite *RequestSuite) TestPlaylistAppendReportsConflict() {
 	suite.ErrorIs(err, spclient.ErrPlaylistConflict)
 }
 
-func (suite *RequestSuite) TestCollectionPageReadsPage() {
+func (suite *RequestSuite) TestCollectionContainsAsksForTheItems() {
 	suite.handler = func(_ int, w http.ResponseWriter) {
-		body, _ := proto.Marshal(&collectionpb.PageResponse{
-			Items:         []*collectionpb.CollectionItem{{Uri: "spotify:track:a", AddedAt: 1}},
-			NextPageToken: "next",
-		})
+		body, _ := proto.Marshal(&collectionpb.ContainsResponse{Found: []bool{true, false}})
 		_, _ = w.Write(body)
 	}
 
-	page, err := suite.spclient.CollectionPage(suite.T().Context(), "user", spclient.CollectionSetLikedSongs, "tok", 300)
+	found, err := suite.spclient.CollectionContains(suite.T().Context(), "user", spclient.CollectionSetLikedSongs,
+		[]string{"spotify:track:a", "spotify:track:b"})
 	suite.Require().NoError(err)
-	suite.Equal("next", page.GetNextPageToken())
-	suite.Require().Len(page.GetItems(), 1)
+	suite.Equal([]bool{true, false}, found)
 
 	got := suite.requests()[0]
-	suite.Equal("/collection/v2/paging", got.path)
+	suite.Equal("/collection/v2/contains", got.path)
 	suite.Equal("application/vnd.collection-v2.spotify.proto", got.header.Get("Content-Type"))
 
-	var req collectionpb.PageRequest
+	var req collectionpb.ContainsRequest
 	suite.Require().NoError(proto.Unmarshal(got.body, &req))
 	suite.Equal("user", req.GetUsername())
 	suite.Equal("collection", req.GetSet())
-	suite.Equal("tok", req.GetPaginationToken())
-	suite.Equal(int32(300), req.GetLimit())
+	suite.Require().Len(req.GetItems(), 2)
+	suite.Equal("spotify:track:b", req.GetItems()[1].GetUri(), "items are collection items, not bare strings")
+}
+
+func (suite *RequestSuite) TestCollectionContainsRejectsAShortAnswer() {
+	suite.handler = func(_ int, w http.ResponseWriter) {
+		body, _ := proto.Marshal(&collectionpb.ContainsResponse{Found: []bool{true}})
+		_, _ = w.Write(body)
+	}
+
+	_, err := suite.spclient.CollectionContains(suite.T().Context(), "user", spclient.CollectionSetLikedSongs,
+		[]string{"spotify:track:a", "spotify:track:b"})
+	suite.Error(err)
 }
 
 // An append the server may have applied before failing must not be resent,

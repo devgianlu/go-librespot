@@ -141,30 +141,29 @@ func (x *WriteRequest) GetItems() []*CollectionItem {
 	return nil
 }
 
-type PageRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Username        string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Set             string                 `protobuf:"bytes,2,opt,name=set,proto3" json:"set,omitempty"`
-	PaginationToken string                 `protobuf:"bytes,3,opt,name=pagination_token,json=paginationToken,proto3" json:"pagination_token,omitempty"`
-	Limit           int32                  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+type ContainsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
+	Set           string                 `protobuf:"bytes,2,opt,name=set,proto3" json:"set,omitempty"`
+	Items         []*CollectionItem      `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PageRequest) Reset() {
-	*x = PageRequest{}
+func (x *ContainsRequest) Reset() {
+	*x = ContainsRequest{}
 	mi := &file_spotify_collection_v2_collection_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PageRequest) String() string {
+func (x *ContainsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PageRequest) ProtoMessage() {}
+func (*ContainsRequest) ProtoMessage() {}
 
-func (x *PageRequest) ProtoReflect() protoreflect.Message {
+func (x *ContainsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_spotify_collection_v2_collection_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -176,62 +175,53 @@ func (x *PageRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PageRequest.ProtoReflect.Descriptor instead.
-func (*PageRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ContainsRequest.ProtoReflect.Descriptor instead.
+func (*ContainsRequest) Descriptor() ([]byte, []int) {
 	return file_spotify_collection_v2_collection_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PageRequest) GetUsername() string {
+func (x *ContainsRequest) GetUsername() string {
 	if x != nil {
 		return x.Username
 	}
 	return ""
 }
 
-func (x *PageRequest) GetSet() string {
+func (x *ContainsRequest) GetSet() string {
 	if x != nil {
 		return x.Set
 	}
 	return ""
 }
 
-func (x *PageRequest) GetPaginationToken() string {
+func (x *ContainsRequest) GetItems() []*CollectionItem {
 	if x != nil {
-		return x.PaginationToken
+		return x.Items
 	}
-	return ""
+	return nil
 }
 
-func (x *PageRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-type PageResponse struct {
+type ContainsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Items         []*CollectionItem      `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
-	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	SyncToken     string                 `protobuf:"bytes,3,opt,name=sync_token,json=syncToken,proto3" json:"sync_token,omitempty"`
+	Found         []bool                 `protobuf:"varint,1,rep,packed,name=found,proto3" json:"found,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PageResponse) Reset() {
-	*x = PageResponse{}
+func (x *ContainsResponse) Reset() {
+	*x = ContainsResponse{}
 	mi := &file_spotify_collection_v2_collection_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PageResponse) String() string {
+func (x *ContainsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PageResponse) ProtoMessage() {}
+func (*ContainsResponse) ProtoMessage() {}
 
-func (x *PageResponse) ProtoReflect() protoreflect.Message {
+func (x *ContainsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_spotify_collection_v2_collection_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -243,30 +233,16 @@ func (x *PageResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PageResponse.ProtoReflect.Descriptor instead.
-func (*PageResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ContainsResponse.ProtoReflect.Descriptor instead.
+func (*ContainsResponse) Descriptor() ([]byte, []int) {
 	return file_spotify_collection_v2_collection_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PageResponse) GetItems() []*CollectionItem {
+func (x *ContainsResponse) GetFound() []bool {
 	if x != nil {
-		return x.Items
+		return x.Found
 	}
 	return nil
-}
-
-func (x *PageResponse) GetNextPageToken() string {
-	if x != nil {
-		return x.NextPageToken
-	}
-	return ""
-}
-
-func (x *PageResponse) GetSyncToken() string {
-	if x != nil {
-		return x.SyncToken
-	}
-	return ""
 }
 
 var File_spotify_collection_v2_collection_proto protoreflect.FileDescriptor
@@ -283,16 +259,12 @@ const file_spotify_collection_v2_collection_proto_rawDesc = "" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x10\n" +
 	"\x03set\x18\x02 \x01(\tR\x03set\x12;\n" +
 	"\x05items\x18\x03 \x03(\v2%.spotify.collection.v2.CollectionItemR\x05items\"|\n" +
-	"\vPageRequest\x12\x1a\n" +
+	"\x0fContainsRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x10\n" +
-	"\x03set\x18\x02 \x01(\tR\x03set\x12)\n" +
-	"\x10pagination_token\x18\x03 \x01(\tR\x0fpaginationToken\x12\x14\n" +
-	"\x05limit\x18\x04 \x01(\x05R\x05limit\"\x92\x01\n" +
-	"\fPageResponse\x12;\n" +
-	"\x05items\x18\x01 \x03(\v2%.spotify.collection.v2.CollectionItemR\x05items\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12\x1d\n" +
-	"\n" +
-	"sync_token\x18\x03 \x01(\tR\tsyncTokenB\xee\x01\n" +
+	"\x03set\x18\x02 \x01(\tR\x03set\x12;\n" +
+	"\x05items\x18\x03 \x03(\v2%.spotify.collection.v2.CollectionItemR\x05items\"(\n" +
+	"\x10ContainsResponse\x12\x14\n" +
+	"\x05found\x18\x01 \x03(\bR\x05foundB\xee\x01\n" +
 	"\x19com.spotify.collection.v2B\x0fCollectionProtoP\x01ZJgithub.com/devgianlu/go-librespot/proto/spotify/collection/v2;collectionv2\xa2\x02\x03SCX\xaa\x02\x15Spotify.Collection.V2\xca\x02\x15Spotify\\Collection\\V2\xe2\x02!Spotify\\Collection\\V2\\GPBMetadata\xea\x02\x17Spotify::Collection::V2b\x06proto3"
 
 var (
@@ -309,14 +281,14 @@ func file_spotify_collection_v2_collection_proto_rawDescGZIP() []byte {
 
 var file_spotify_collection_v2_collection_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_spotify_collection_v2_collection_proto_goTypes = []any{
-	(*CollectionItem)(nil), // 0: spotify.collection.v2.CollectionItem
-	(*WriteRequest)(nil),   // 1: spotify.collection.v2.WriteRequest
-	(*PageRequest)(nil),    // 2: spotify.collection.v2.PageRequest
-	(*PageResponse)(nil),   // 3: spotify.collection.v2.PageResponse
+	(*CollectionItem)(nil),   // 0: spotify.collection.v2.CollectionItem
+	(*WriteRequest)(nil),     // 1: spotify.collection.v2.WriteRequest
+	(*ContainsRequest)(nil),  // 2: spotify.collection.v2.ContainsRequest
+	(*ContainsResponse)(nil), // 3: spotify.collection.v2.ContainsResponse
 }
 var file_spotify_collection_v2_collection_proto_depIdxs = []int32{
 	0, // 0: spotify.collection.v2.WriteRequest.items:type_name -> spotify.collection.v2.CollectionItem
-	0, // 1: spotify.collection.v2.PageResponse.items:type_name -> spotify.collection.v2.CollectionItem
+	0, // 1: spotify.collection.v2.ContainsRequest.items:type_name -> spotify.collection.v2.CollectionItem
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

@@ -722,10 +722,9 @@ paths:
     get:
       operationId: getLiked
       description: >-
-        Tell whether tracks are in the user's Liked Songs. The daemon reads
-        the whole set through the internal collection service and reuses it
-        for a minute, so changes made on other devices show up within that
-        time; changes made through POST /library/liked show up at once.
+        Tell whether tracks are in the user's Liked Songs, asking the
+        collection service for just these tracks, so changes made on other
+        devices show at once.
       parameters:
         - name: uris
           in: query
