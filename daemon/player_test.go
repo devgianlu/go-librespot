@@ -583,6 +583,25 @@ func TestEmptyTransferAskingForSomethingIsTakenOverIdle(t *testing.T) {
 	require.Contains(t, apiEvents(p), ApiEventTypeActive)
 }
 
+// The desktop client with nothing loaded sends a context that is there but
+// empty, rather than none. It names nothing to resolve, so it is taken over
+// idle the same way, instead of failing as an unsupported context.
+func TestEmptyContextTransferAskingForSomethingIsTakenOverIdle(t *testing.T) {
+	p := newTestAppPlayer(t)
+
+	req := transferCommand(t, &connectpb.TransferState{
+		Options:        &connectpb.ContextPlayerOptions{},
+		CurrentSession: &connectpb.Session{Context: &connectpb.Context{Restrictions: &connectpb.Restrictions{}}},
+		Playback:       &connectpb.Playback{Timestamp: 1790340000000},
+	})
+	req.Command.Options.RestoreTrack = "always_play_something"
+
+	require.NoError(t, p.handlePlayerCommand(req))
+
+	requireIdle(t, p)
+	require.Contains(t, apiEvents(p), ApiEventTypeActive)
+}
+
 // A Jam's end sends the speaker the Jam's list and nothing else: no track, no
 // position, no queue. The list was left unpositioned, and reading it panicked,
 // taking the daemon down. It plays from the top instead.
