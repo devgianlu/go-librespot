@@ -7,6 +7,7 @@ import (
 
 	playlist4pb "github.com/devgianlu/go-librespot/proto/spotify/playlist4"
 	playlist_permissionpb "github.com/devgianlu/go-librespot/proto/spotify/playlist_permission"
+	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 )
@@ -132,4 +133,17 @@ func uris(playlists []ApiLibraryPlaylist) []string {
 		out[i] = p.Uri
 	}
 	return out
+}
+
+func TestLibraryErrorMapsStatuses(t *testing.T) {
+	forbidden := libraryError("failed appending", &spclient.StatusError{Op: "playlist changes", StatusCode: 403})
+	require.ErrorIs(t, forbidden, ErrForbidden)
+	require.Contains(t, forbidden.Error(), "403", "the cause stays in the message")
+
+	require.ErrorIs(t, libraryError("x", &spclient.StatusError{Op: "playlist", StatusCode: 404}), ErrNotFound)
+
+	other := libraryError("x", &spclient.StatusError{Op: "playlist", StatusCode: 500})
+	require.NotErrorIs(t, other, ErrForbidden)
+	require.NotErrorIs(t, other, ErrNotFound)
+	require.ErrorIs(t, libraryError("x", spclient.ErrPlaylistConflict), spclient.ErrPlaylistConflict)
 }

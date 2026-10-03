@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -172,4 +173,20 @@ func appendToPlaylist(ctx context.Context, spc *spclient.Spclient, username, pla
 			return err
 		}
 	}
+}
+
+// libraryError wraps a failed library request, carrying a 403 or 404 from
+// Spotify over as ErrForbidden or ErrNotFound: a playlist the user may not
+// edit, or one that is gone, is the client's to handle, not a daemon fault.
+func libraryError(what string, err error) error {
+	var status *spclient.StatusError
+	if errors.As(err, &status) {
+		switch status.StatusCode {
+		case http.StatusForbidden:
+			return fmt.Errorf("%s: %w: %w", what, ErrForbidden, err)
+		case http.StatusNotFound:
+			return fmt.Errorf("%s: %w: %w", what, ErrNotFound, err)
+		}
+	}
+	return fmt.Errorf("%s: %w", what, err)
 }

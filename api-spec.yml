@@ -789,6 +789,10 @@ paths:
           description: >-
             The playlist_uri is not a playlist URI, or the uris are missing,
             too many, or not track or episode URIs
+        403:
+          description: The user may not edit the playlist
+        404:
+          description: The playlist does not exist
         409:
           description: The playlist kept changing while appending
   /player/play:

@@ -908,7 +908,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		spc, username := p.sess.Spclient(), p.sess.Username()
 		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
 			if err := spc.CollectionWrite(ctx, username, spclient.CollectionSetLikedSongs, data.Uris, !data.Liked); err != nil {
-				reply.done(nil, fmt.Errorf("failed writing liked songs: %w", err))
+				reply.done(nil, libraryError("failed writing liked songs", err))
 				return
 			}
 
@@ -941,7 +941,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		spc, username := p.sess.Spclient(), p.sess.Username()
 		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
 			if err := appendToPlaylist(ctx, spc, username, data.PlaylistUri, data.Uris); err != nil {
-				reply.done(nil, fmt.Errorf("failed appending to playlist: %w", err))
+				reply.done(nil, libraryError("failed appending to playlist", err))
 				return
 			}
 
