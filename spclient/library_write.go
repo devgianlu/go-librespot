@@ -157,7 +157,9 @@ func (c *Spclient) PlaylistAppend(ctx context.Context, playlist librespot.Spotif
 		return fmt.Errorf("failed marshalling ListChanges: %w", err)
 	}
 
-	resp, err := c.Request(ctx, "POST", fmt.Sprintf("/playlist/v2/playlist/%s/changes", playlist.Base62()), nil, nil, body)
+	// A change is not idempotent: resent after the server applied it but its
+	// answer got lost, an append would land twice.
+	resp, err := c.RequestOnce(ctx, "POST", fmt.Sprintf("/playlist/v2/playlist/%s/changes", playlist.Base62()), nil, nil, body)
 	if err != nil {
 		return err
 	}

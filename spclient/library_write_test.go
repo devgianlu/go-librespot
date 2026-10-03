@@ -130,3 +130,13 @@ func (suite *RequestSuite) TestCollectionPageReadsPage() {
 	suite.Equal("tok", req.GetPaginationToken())
 	suite.Equal(int32(300), req.GetLimit())
 }
+
+// An append the server may have applied before failing must not be resent,
+// or the tracks would land twice.
+func (suite *RequestSuite) TestPlaylistAppendIsSentOnce() {
+	suite.handler = func(_ int, w http.ResponseWriter) { w.WriteHeader(http.StatusGatewayTimeout) }
+
+	err := suite.spclient.PlaylistAppend(suite.T().Context(), testPlaylistId(suite), "user", []byte{9}, []string{"spotify:track:a"})
+	suite.Error(err)
+	suite.Len(suite.requests(), 1)
+}
