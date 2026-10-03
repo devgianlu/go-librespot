@@ -5,14 +5,20 @@ package mpris
 import (
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
 )
+
+// busRetryInterval is how long the server waits before looking for the session
+// bus again, while there is none or after it went away.
+var busRetryInterval = 10 * time.Second
 
 type DBusInstance struct {
 	props *prop.Properties
@@ -38,15 +44,17 @@ func (d *DBusInstance) setProperty(interfaceName string, fieldName string, value
 	return err
 }
 
+// ConcreteServer publishes the player on the D-Bus session bus. The bus is
+// owned by the user's session, which a system service can start before: the
+// server waits for it rather than failing, and comes back when it does after
+// losing it.
 type ConcreteServer struct {
-	dbus            *DBusInstance
 	rootInterface   MediaPlayer2RootInterface
 	playerInterface MediaPlayer2PlayerInterface
 
-	lastUploadedState MediaState
-
 	closeOnce sync.Once
 	done      chan struct{}
+	stopped   chan struct{}
 
 	log librespot.Logger
 
@@ -160,64 +168,171 @@ func (s *ConcreteServer) Receive() <-chan MediaPlayer2PlayerCommand {
 	return s.playerInterface.commands
 }
 
-func (s *ConcreteServer) executeStateUpdate(state MediaState) *dbus.Error {
-	if state.PlaybackStatus != s.lastUploadedState.PlaybackStatus {
-		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "PlaybackStatus", state.PlaybackStatus); err != nil {
+// executeStateUpdate publishes what changed in state since last, or all of it
+// when last is nil, as on a fresh connection.
+func (d *DBusInstance) executeStateUpdate(state MediaState, last *MediaState) *dbus.Error {
+	if last == nil || state.PlaybackStatus != last.PlaybackStatus {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "PlaybackStatus", state.PlaybackStatus); err != nil {
 			return err
 		}
 	}
-	if state.LoopStatus != s.lastUploadedState.LoopStatus {
-		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "LoopStatus", state.LoopStatus); err != nil {
+	if last == nil || state.LoopStatus != last.LoopStatus {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "LoopStatus", state.LoopStatus); err != nil {
 			return err
 		}
 	}
-	if state.Shuffle != s.lastUploadedState.Shuffle {
-		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Shuffle", state.Shuffle); err != nil {
+	if last == nil || state.Shuffle != last.Shuffle {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "Shuffle", state.Shuffle); err != nil {
 			return err
 		}
 	}
-	if state.Volume != s.lastUploadedState.Volume {
-		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Volume", state.Volume); err != nil {
+	if last == nil || state.Volume != last.Volume {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "Volume", state.Volume); err != nil {
 			return err
 		}
 	}
-	if state.PositionMs != s.lastUploadedState.PositionMs {
-		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs); err != nil {
+	if last == nil || state.PositionMs != last.PositionMs {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs); err != nil {
 			return err
 		}
 	}
-	if state.Media != s.lastUploadedState.Media {
+	if last == nil || state.Media != last.Media {
 		mt := makeMetadata(state.Uri, state.Media)
-		if err := s.dbus.setProperty("org.mpris.MediaPlayer2.Player", "Metadata", mt); err != nil {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "Metadata", mt); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *ConcreteServer) executeSeekSignal(state SeekState) error {
-	return s.dbus.conn.Emit(
+func (d *DBusInstance) executeSeekSignal(state SeekState) error {
+	return d.conn.Emit(
 		"/org/mpris/MediaPlayer2",
 		"org.mpris.MediaPlayer2.Player.Seeked",
 		state.PositionMs*1000,
 	)
 }
 
-func (s *ConcreteServer) waitOnChannel() {
+// connect opens the session bus and exports the player on it. It never
+// autolaunches a bus: dbus-launch would start one of our own that nothing else
+// listens on, and is usually not even installed where this runs as a service.
+func (s *ConcreteServer) connect() (_ *DBusInstance, err error) {
+	conn, err := dbus.SessionBusPrivateNoAutoStartup()
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = conn.Close()
+		}
+	}()
+
+	if err := conn.Auth(nil); err != nil {
+		return nil, fmt.Errorf("failed authenticating to the session bus: %w", err)
+	}
+	if err := conn.Hello(); err != nil {
+		return nil, fmt.Errorf("failed greeting the session bus: %w", err)
+	}
+
+	d := &DBusInstance{conn: conn, log: s.log}
+	d.props, err = prop.Export(
+		conn,
+		"/org/mpris/MediaPlayer2",
+		map[string]map[string]*prop.Prop{
+			"org.mpris.MediaPlayer2":        mediaPlayer2Props,
+			"org.mpris.MediaPlayer2.Player": s.playerInterface.Props(),
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed exporting mpris properties: %w", err)
+	}
+
+	reply, err := conn.RequestName("org.mpris.MediaPlayer2.go-librespot", dbus.NameFlagReplaceExisting)
+	if err != nil {
+		return nil, err
+	}
+	if reply != dbus.RequestNameReplyPrimaryOwner {
+		return nil, errors.New("mpris name is already taken")
+	}
+
+	if err := conn.Export(s.rootInterface, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2"); err != nil {
+		return nil, err
+	}
+	if err := conn.ExportWithMap(s.playerInterface, playerMethodNames, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player"); err != nil {
+		return nil, err
+	}
+
+	return d, nil
+}
+
+// serve publishes updates on d until the server is closed or the bus goes
+// away. It starts by publishing want in full, and returns the latest state it
+// was handed, for the next connection to start from.
+func (s *ConcreteServer) serve(d *DBusInstance, want MediaState) MediaState {
+	var last *MediaState
+	if err := d.executeStateUpdate(want, nil); err == nil {
+		last = &want
+	}
+
 	for {
 		select {
 		case <-s.done:
-			return
-		case state := <-s.stateChannel:
-			err := s.executeStateUpdate(state)
-			if err != nil {
-				continue
+			return want
+		case <-d.conn.Context().Done():
+			return want
+		case want = <-s.stateChannel:
+			// On failure last stays put, so the next update retries what
+			// did not get through.
+			if err := d.executeStateUpdate(want, last); err == nil {
+				uploaded := want
+				last = &uploaded
 			}
-			s.lastUploadedState = state
 		case seekState := <-s.seekChannel:
-			err := s.executeSeekSignal(seekState)
-			if err != nil {
+			if err := d.executeSeekSignal(seekState); err != nil {
 				s.log.Warnf("error executing mpris state seek %s", err)
+			}
+		}
+	}
+}
+
+func (s *ConcreteServer) run(want MediaState) {
+	defer close(s.stopped)
+
+	waiting := false
+	for {
+		d, err := s.connect()
+		if err == nil {
+			waiting = false
+			s.log.Debugf("created mpris server")
+
+			want = s.serve(d, want)
+			_ = d.conn.Close()
+
+			select {
+			case <-s.done:
+				return
+			default:
+			}
+			s.log.Warn("lost the D-Bus session bus, mpris waits for it to come back")
+		} else if !waiting {
+			waiting = true
+			s.log.WithError(err).Warn("no D-Bus session bus for mpris yet, waiting for one")
+		} else {
+			s.log.WithError(err).Tracef("still no D-Bus session bus for mpris")
+		}
+
+		retry := time.NewTimer(busRetryInterval)
+	wait:
+		for {
+			select {
+			case <-s.done:
+				retry.Stop()
+				return
+			case want = <-s.stateChannel:
+			case <-s.seekChannel:
+				// A seek is a signal, not state: with no bus, nobody missed it.
+			case <-retry.C:
+				break wait
 			}
 		}
 	}
@@ -225,11 +340,12 @@ func (s *ConcreteServer) waitOnChannel() {
 
 func (s *ConcreteServer) Close() error {
 	s.closeOnce.Do(func() { close(s.done) })
-
-	return s.dbus.conn.Close()
+	<-s.stopped
+	return nil
 }
 
-// NewServer opens the dbus connection and registers everything important
+// NewServer starts publishing the player on the session bus. It does not fail
+// for want of a bus: it connects in the background, as soon as there is one.
 func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
 	s := &ConcreteServer{
 		log: logger,
@@ -241,61 +357,16 @@ func NewServer(logger librespot.Logger) (_ *ConcreteServer, err error) {
 
 			commands: make(chan MediaPlayer2PlayerCommand),
 		},
-		lastUploadedState: MediaState{
-			PlaybackStatus: Stopped,
-			LoopStatus:     None,
-			Shuffle:        false,
-			Volume:         0,
-			PositionMs:     0,
-			Media:          nil,
-		},
 		done:         make(chan struct{}),
+		stopped:      make(chan struct{}),
 		stateChannel: make(chan MediaState, 1),
 		seekChannel:  make(chan SeekState, 1),
 	}
 
-	conn, err := dbus.SessionBus()
-	if err != nil {
-		return nil, err
-	}
-
-	s.dbus = &DBusInstance{
-		conn: conn,
-		log:  logger,
-	}
-
-	s.dbus.props, err = prop.Export(
-		conn,
-		"/org/mpris/MediaPlayer2",
-		map[string]map[string]*prop.Prop{
-			"org.mpris.MediaPlayer2":        mediaPlayer2Props,
-			"org.mpris.MediaPlayer2.Player": s.playerInterface.Props(),
-		},
-	)
-
-	reply, err := conn.RequestName("org.mpris.MediaPlayer2.go-librespot", dbus.NameFlagReplaceExisting)
-	if err != nil {
-		return nil, err
-	}
-	if reply != dbus.RequestNameReplyPrimaryOwner {
-		return s, errors.New("mpris name is already taken")
-	}
-
-	err = conn.Export(s.rootInterface, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2")
-	if err != nil {
-		return nil, err
-	}
-	err = conn.ExportWithMap(s.playerInterface, playerMethodNames, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player")
-	if err != nil {
-		return nil, err
-	}
-
-	if dbusErr := s.executeStateUpdate(s.lastUploadedState); dbusErr != nil {
-		return nil, err
-	}
-	go s.waitOnChannel()
-
-	s.log.Debugf("created mpris server")
+	go s.run(MediaState{
+		PlaybackStatus: Stopped,
+		LoopStatus:     None,
+	})
 
 	return s, nil
 }
