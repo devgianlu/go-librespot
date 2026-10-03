@@ -603,13 +603,18 @@ func (s *ConcreteApiServer) GetLiked(w http.ResponseWriter, _ *http.Request, par
 }
 
 func (s *ConcreteApiServer) SetLiked(w http.ResponseWriter, r *http.Request) {
-	var data ApiSetLiked
-	if err := jsonDecode(r, &data); err != nil || !validItemUris(data.Uris, librespot.SpotifyIdTypeTrack) {
+	// liked is required: decoded into a plain bool, a missing or null value
+	// would read as false and remove the tracks from Liked Songs.
+	var data struct {
+		Uris  []string `json:"uris"`
+		Liked *bool    `json:"liked"`
+	}
+	if err := jsonDecode(r, &data); err != nil || data.Liked == nil || !validItemUris(data.Uris, librespot.SpotifyIdTypeTrack) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetLiked, Data: data}, w)
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetLiked, Data: ApiSetLiked{Uris: data.Uris, Liked: *data.Liked}}, w)
 }
 
 func (s *ConcreteApiServer) PlaylistAddTracks(w http.ResponseWriter, r *http.Request) {

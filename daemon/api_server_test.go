@@ -662,10 +662,12 @@ func TestApiSetLiked(t *testing.T) {
 		tooMany[i] = "spotify:track:4uLU6hMCjMI75M1A2tKUQC"
 	}
 	for name, payload := range map[string]any{
-		"no uris":   map[string]any{"uris": []string{}, "liked": true},
-		"too many":  map[string]any{"uris": tooMany, "liked": true},
-		"not track": map[string]any{"uris": []string{"spotify:album:4uLU6hMCjMI75M1A2tKUQC"}, "liked": true},
-		"garbage":   map[string]any{"uris": []string{"nope"}, "liked": true},
+		"missing liked": map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}},
+		"null liked":    map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}, "liked": nil},
+		"no uris":       map[string]any{"uris": []string{}, "liked": true},
+		"too many":      map[string]any{"uris": tooMany, "liked": true},
+		"not track":     map[string]any{"uris": []string{"spotify:album:4uLU6hMCjMI75M1A2tKUQC"}, "liked": true},
+		"garbage":       map[string]any{"uris": []string{"nope"}, "liked": true},
 	} {
 		t.Run("rejects "+name, func(t *testing.T) {
 			ts := newTestServer(t, okReply)
