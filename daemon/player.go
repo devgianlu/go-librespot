@@ -293,6 +293,23 @@ func singleTrackContext(track *connectpb.ContextTrack) *connectpb.Context {
 	}
 }
 
+// emptyContext reports whether a transferred context names nothing to play: no
+// uri, no url, and no page holding tracks or saying where to fetch them. A
+// client with nothing loaded sends one of those rather than no context at all.
+func emptyContext(ctx *connectpb.Context) bool {
+	if ctx.GetUri() != "" || ctx.GetUrl() != "" {
+		return false
+	}
+
+	for _, page := range ctx.GetPages() {
+		if len(page.Tracks) > 0 || page.PageUrl != "" || page.NextPageUrl != "" {
+			return false
+		}
+	}
+
+	return true
+}
+
 // trackOnlyContext is singleTrackContext with the track already in its only
 // page, so that playing it needs nothing resolved: it is the fallback for a
 // context that could not be.
@@ -391,7 +408,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		// A queued or autoplayed track is handed over on its own, with no
 		// context to take it from. Play it as a context of one.
-		if transferState.CurrentSession.Context == nil {
+		if emptyContext(transferState.CurrentSession.Context) {
 			p.app.log.Debugf("transfer command without a context, falling back to the current track")
 
 			transferState.CurrentSession.Context = singleTrackContext(transferState.Playback.CurrentTrack)
