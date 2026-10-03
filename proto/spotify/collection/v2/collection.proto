@@ -17,15 +17,12 @@ message WriteRequest {
   repeated CollectionItem items = 3;
 }
 
-message PageRequest {
+message ContainsRequest {
   string username = 1;
   string set = 2;
-  string pagination_token = 3;
-  int32 limit = 4;
+  repeated CollectionItem items = 3;
 }
 
-message PageResponse {
-  repeated CollectionItem items = 1;
-  string next_page_token = 2;
-  string sync_token = 3;
+message ContainsResponse {
+  repeated bool found = 1;
 }

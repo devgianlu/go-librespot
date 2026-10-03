@@ -18,8 +18,8 @@ import (
 // libraryPlaylistsTimeout bounds fetching the rootlist for an API caller.
 const libraryPlaylistsTimeout = 30 * time.Second
 
-// libraryWriteTimeout bounds a write to Liked Songs or a playlist.
-const libraryWriteTimeout = 30 * time.Second
+// libraryRequestTimeout bounds a request to Liked Songs or a playlist.
+const libraryRequestTimeout = 30 * time.Second
 
 // rootlistPageSize is how many rootlist entries are asked for per request.
 // Folder markers count as entries, so a library needs a few more requests

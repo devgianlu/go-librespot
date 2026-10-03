@@ -52,9 +52,6 @@ type App struct {
 	metaCache    *trackMetaCache
 	contextLists *contextListCache
 
-	// liked caches the Liked Songs set for GET /library/liked.
-	liked *likedTracks
-
 	// stateMu guards state and the store behind it. Two AppPlayers overlap
 	// briefly whenever a zeroconf session is replaced, and volume changes are
 	// written back from off the player loop.
@@ -89,7 +86,6 @@ func New(opts *Options) (*App, error) {
 	}
 
 	app := &App{
-		liked:      newLikedTracks(),
 		log:        opts.Logger,
 		cfg:        opts.Config,
 		stateStore: opts.StateStore,

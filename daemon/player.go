@@ -906,13 +906,12 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		data := req.Data.(ApiSetLiked)
 		reply := apiReply(req)
 		spc, username := p.sess.Spclient(), p.sess.Username()
-		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
+		p.goDetached(libraryRequestTimeout, func(ctx context.Context) {
 			if err := spc.CollectionWrite(ctx, username, spclient.CollectionSetLikedSongs, data.Uris, !data.Liked); err != nil {
 				reply.done(nil, libraryError("failed writing liked songs", err))
 				return
 			}
 
-			p.app.liked.apply(username, data.Uris, data.Liked)
 			for _, uri := range likedSongsContextUris(username) {
 				p.app.contextLists.invalidate(uri)
 			}
@@ -924,10 +923,13 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		uris := req.Data.([]string)
 		reply := apiReply(req)
 		spc, username := p.sess.Spclient(), p.sess.Username()
-		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
-			states, err := p.app.liked.contains(ctx, username, uris, fetchLikedTracks(spc))
+		p.goDetached(libraryRequestTimeout, func(ctx context.Context) {
+			contains := func(ctx context.Context, uris []string) ([]bool, error) {
+				return spc.CollectionContains(ctx, username, spclient.CollectionSetLikedSongs, uris)
+			}
+			states, err := likedStates(ctx, contains, uris)
 			if err != nil {
-				reply.done(nil, fmt.Errorf("failed reading liked songs: %w", err))
+				reply.done(nil, libraryError("failed reading liked songs", err))
 				return
 			}
 
@@ -939,7 +941,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		data := req.Data.(ApiPlaylistAddTracks)
 		reply := apiReply(req)
 		spc, username := p.sess.Spclient(), p.sess.Username()
-		p.goDetached(libraryWriteTimeout, func(ctx context.Context) {
+		p.goDetached(libraryRequestTimeout, func(ctx context.Context) {
 			if err := appendToPlaylist(ctx, spc, username, data.PlaylistUri, data.Uris); err != nil {
 				reply.done(nil, libraryError("failed appending to playlist", err))
 				return

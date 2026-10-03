@@ -573,13 +573,13 @@ func (s *ConcreteApiServer) GetLibraryPlaylists(w http.ResponseWriter, r *http.R
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeLibraryPlaylists, Data: ApiRequestDataLibraryPlaylists{Offset: params.Offset, Limit: params.Limit}}, w)
 }
 
-// maxLibraryWriteUris caps how many items one library write may carry.
-const maxLibraryWriteUris = 50
+// maxLibraryUris caps how many items one library request may name.
+const maxLibraryUris = 50
 
-// validItemUris reports whether uris holds 1 to maxLibraryWriteUris URIs, all
+// validItemUris reports whether uris holds 1 to maxLibraryUris URIs, all
 // of one of the given types.
 func validItemUris(uris []string, types ...librespot.SpotifyIdType) bool {
-	if len(uris) == 0 || len(uris) > maxLibraryWriteUris {
+	if len(uris) == 0 || len(uris) > maxLibraryUris {
 		return false
 	}
 
