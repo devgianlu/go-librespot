@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
+	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 
 	"github.com/stretchr/testify/require"
 )
@@ -74,6 +75,36 @@ func TestInferSpotifyIdTypeEpisodeContexts(t *testing.T) {
 
 // These used to be reported as tracks, which meant their ids were base62
 // decoded as track gids and failed confusingly later on.
+// A context with no uri is a bare list of items, what the Web API plays for
+// "uris": its items decide, and gids alone are tracks.
+func TestInferSpotifyIdTypeFromContext(t *testing.T) {
+	page := func(tracks ...*connectpb.ContextTrack) *connectpb.Context {
+		return &connectpb.Context{Pages: []*connectpb.ContextPage{{Tracks: tracks}}}
+	}
+	gid := []byte{0x34, 0x95, 0x09, 0xf4, 0xc5, 0x1f, 0x47, 0x46, 0x87, 0xb6, 0x81, 0xfc, 0x9b, 0xe9, 0x3e, 0x27}
+
+	tests := []struct {
+		name string
+		ctx  *connectpb.Context
+		want librespot.SpotifyIdType
+	}{
+		{"uri decides", &connectpb.Context{Uri: "spotify:show:5CfCWKI5pZ28U0uOzXkDHe"}, librespot.SpotifyIdTypeEpisode},
+		{"unsupported uri", &connectpb.Context{Uri: "spotify:socialsession:5xwj7pphGg7mJSfWz2vXY8"}, librespot.SpotifyIdTypeUnknown},
+		{"bare tracks", page(&connectpb.ContextTrack{Uri: "spotify:track:1BdI8NEvZx61tnkbuAxC5x"}), librespot.SpotifyIdTypeTrack},
+		{"bare episodes", page(&connectpb.ContextTrack{Uri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}), librespot.SpotifyIdTypeEpisode},
+		{"first recognised item", page(&connectpb.ContextTrack{Uri: "spotify:local:a:b:c:1"}, &connectpb.ContextTrack{Uri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}), librespot.SpotifyIdTypeEpisode},
+		{"bare gids", page(&connectpb.ContextTrack{Gid: gid}), librespot.SpotifyIdTypeTrack},
+		{"no uri, no items", &connectpb.Context{Pages: []*connectpb.ContextPage{{}}}, librespot.SpotifyIdTypeUnknown},
+		{"nothing", &connectpb.Context{}, librespot.SpotifyIdTypeUnknown},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, librespot.InferSpotifyIdTypeFromContext(tt.ctx))
+		})
+	}
+}
+
 func TestInferSpotifyIdTypeUnsupportedContexts(t *testing.T) {
 	uris := []string{
 		"spotify:socialsession:5xwj7pphGg7mJSfWz2vXY8",

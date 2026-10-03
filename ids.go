@@ -68,6 +68,36 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 	}
 }
 
+// InferSpotifyIdTypeFromContext is InferSpotifyIdTypeFromContextUri for a whole
+// context, which also covers the one kind that has no uri: a bare list of
+// items. The Web API plays one for a request naming "uris" rather than a
+// "context_uri", and a device playing it transfers it the same way. Such a list
+// takes its type from the first item whose uri names a track or an episode; on
+// a transfer the items carry only gids, and are taken to be tracks.
+func InferSpotifyIdTypeFromContext(ctx *connectpb.Context) SpotifyIdType {
+	if ctx.GetUri() != "" {
+		return InferSpotifyIdTypeFromContextUri(ctx.GetUri())
+	}
+
+	hasItems := false
+	for _, page := range ctx.GetPages() {
+		for _, track := range page.Tracks {
+			hasItems = true
+			if m := UriRegexp.FindStringSubmatch(track.Uri); m != nil {
+				switch typ := SpotifyIdType(m[1]); typ {
+				case SpotifyIdTypeTrack, SpotifyIdTypeEpisode:
+					return typ
+				}
+			}
+		}
+	}
+
+	if hasItems {
+		return SpotifyIdTypeTrack
+	}
+	return SpotifyIdTypeUnknown
+}
+
 func ContextTrackToProvidedTrack(typ SpotifyIdType, track *connectpb.ContextTrack) *connectpb.ProvidedTrack {
 	var uri string
 	if len(track.Uri) > 0 {
