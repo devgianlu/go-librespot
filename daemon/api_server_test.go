@@ -153,6 +153,8 @@ var endpointMethods = map[string][]string{
 	"/player/output":                {http.MethodPost},
 	"/context/tracks":               {http.MethodGet},
 	"/library/playlists":            {http.MethodGet},
+	"/library/albums":               {http.MethodGet},
+	"/library/artists":              {http.MethodGet},
 	"/library/liked":                {http.MethodGet, http.MethodPost},
 	"/library/playlists/add_tracks": {http.MethodPost},
 }
@@ -581,7 +583,7 @@ func TestApiLibraryPlaylists(t *testing.T) {
 
 		req := ts.request()
 		require.Equal(t, ApiRequestTypeLibraryPlaylists, req.Type)
-		require.Equal(t, ApiRequestDataLibraryPlaylists{Offset: 0, Limit: 50}, req.Data)
+		require.Equal(t, ApiRequestDataLibraryPage{Offset: 0, Limit: 50}, req.Data)
 	})
 
 	t.Run("forwards the paging", func(t *testing.T) {
@@ -589,7 +591,7 @@ func TestApiLibraryPlaylists(t *testing.T) {
 
 		resp := ts.do(http.MethodGet, "/library/playlists?offset=20&limit=500", nil)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
-		require.Equal(t, ApiRequestDataLibraryPlaylists{Offset: 20, Limit: 500}, ts.request().Data)
+		require.Equal(t, ApiRequestDataLibraryPage{Offset: 20, Limit: 500}, ts.request().Data)
 	})
 
 	for _, query := range []string{"limit=0", "limit=501", "offset=-1", "limit=abc"} {
@@ -617,6 +619,27 @@ func TestApiLibraryPlaylists(t *testing.T) {
 			"uri":"spotify:playlist:xxx","name":"Mix","description":"","owner_username":"",
 			"length":0,"image_url":null,"collaborative":false,"can_edit":false,"folder":[]}]}`, body(t, resp))
 	})
+}
+
+func TestApiLibraryAlbumsAndArtists(t *testing.T) {
+	for path, typ := range map[string]ApiRequestType{
+		"/library/albums":  ApiRequestTypeLibraryAlbums,
+		"/library/artists": ApiRequestTypeLibraryArtists,
+	} {
+		t.Run(path, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodGet, path+"?offset=5&limit=10", nil)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			req := ts.request()
+			require.Equal(t, typ, req.Type)
+			require.Equal(t, ApiRequestDataLibraryPage{Offset: 5, Limit: 10}, req.Data)
+
+			resp = ts.do(http.MethodGet, path+"?limit=0", nil)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
 }
 
 func TestApiGetLiked(t *testing.T) {

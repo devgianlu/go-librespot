@@ -52,6 +52,10 @@ type App struct {
 	metaCache    *trackMetaCache
 	contextLists *contextListCache
 
+	// albums and artists cache the saved albums and followed artists.
+	albums  *cachedList[ApiLibraryAlbum]
+	artists *cachedList[ApiLibraryArtist]
+
 	// stateMu guards state and the store behind it. Two AppPlayers overlap
 	// briefly whenever a zeroconf session is replaced, and volume changes are
 	// written back from off the player loop.
@@ -86,6 +90,8 @@ func New(opts *Options) (*App, error) {
 	}
 
 	app := &App{
+		albums:     newCachedList[ApiLibraryAlbum](),
+		artists:    newCachedList[ApiLibraryArtist](),
 		log:        opts.Logger,
 		cfg:        opts.Config,
 		stateStore: opts.StateStore,

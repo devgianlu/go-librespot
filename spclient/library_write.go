@@ -18,7 +18,8 @@ import (
 // collectionContentType is the media type the collection service speaks.
 const collectionContentType = "application/vnd.collection-v2.spotify.proto"
 
-// CollectionSetLikedSongs is the collection set holding the user's Liked Songs.
+// CollectionSetLikedSongs is the collection set holding the user's Liked Songs
+// and saved albums.
 const CollectionSetLikedSongs = "collection"
 
 // StatusError reports a status the collection or playlist service answered
@@ -32,6 +33,10 @@ type StatusError struct {
 func (e *StatusError) Error() string {
 	return fmt.Sprintf("invalid status code from %s: %d", e.Op, e.StatusCode)
 }
+
+// CollectionSetArtists is the collection set holding the artists the user
+// follows.
+const CollectionSetArtists = "artist"
 
 // ErrPlaylistConflict reports that a playlist changed between reading its
 // revision and writing to it.
@@ -70,6 +75,46 @@ func (c *Spclient) CollectionWrite(ctx context.Context, username, set string, ur
 	}
 
 	return nil
+}
+
+// CollectionPage reads one page of a collection set; an empty token asks for
+// the first page. The response names the next page, empty on the last one.
+func (c *Spclient) CollectionPage(ctx context.Context, username, set, token string, limit int) (*collectionpb.PageResponse, error) {
+	body, err := proto.Marshal(&collectionpb.PageRequest{
+		Username:        username,
+		Set:             set,
+		PaginationToken: token,
+		Limit:           int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling PageRequest: %w", err)
+	}
+
+	resp, err := c.Request(ctx, "POST", "/collection/v2/paging", nil, http.Header{
+		"Content-Type": {collectionContentType},
+		"Accept":       {collectionContentType},
+	}, body)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("invalid status code from collection paging: %d", resp.StatusCode)
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var page collectionpb.PageResponse
+	if err := proto.Unmarshal(respBytes, &page); err != nil {
+		return nil, fmt.Errorf("failed unmarshalling PageResponse: %w", err)
+	}
+
+	return &page, nil
 }
 
 // CollectionContains tells for each of uris whether it is in one of the
