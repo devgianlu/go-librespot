@@ -124,6 +124,14 @@ func (r *ContextResolver) loadPage(ctx context.Context, url string) (*connectpb.
 
 	r.log.WithField("uri", r.Uri()).Tracef("loading context page from %s", url)
 
+	if IsPlaylistPageUrl(url) {
+		page, err := r.sp.PlaylistPage(ctx, url)
+		if err != nil {
+			return nil, fmt.Errorf("failed requesting page at %s: %w", url, err)
+		}
+		return page, nil
+	}
+
 	resp, err := r.sp.RequestHm(ctx, "GET", url, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting page at %s: %w", url, err)

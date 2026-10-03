@@ -505,6 +505,17 @@ func (c *Spclient) ContextResolve(ctx context.Context, uri string) (*connectpb.C
 		return nil, fmt.Errorf("unsupported context type: %s", uri)
 	}
 
+	// Playlists come from the playlist service: context resolve drops the
+	// episodes of one that mixes them with tracks. Anything that goes wrong
+	// there is left to context resolve to answer, refusals included.
+	if id, err := librespot.SpotifyIdFromUri(uri); err == nil && id.Type() == librespot.SpotifyIdTypePlaylist {
+		spotCtx, err := c.PlaylistContext(ctx, *id)
+		if err == nil {
+			return spotCtx, nil
+		}
+		c.log.WithError(err).Debugf("failed building playlist context for %s, resolving it instead", uri)
+	}
+
 	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/context-resolve/v1/%s", uri), nil, nil, nil)
 	if err != nil {
 		return nil, err
