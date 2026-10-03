@@ -162,7 +162,7 @@ func (d *DBusInstance) executeStateUpdate(state MediaState, last *MediaState) *d
 		}
 	}
 	if last == nil || state.PositionMs != last.PositionMs {
-		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs); err != nil {
+		if err := d.setProperty("org.mpris.MediaPlayer2.Player", "Position", state.PositionMs*1000); err != nil { // in microseconds
 			return err
 		}
 	}
