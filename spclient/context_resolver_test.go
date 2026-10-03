@@ -3,10 +3,30 @@
 package spclient
 
 import (
+	"context"
 	"testing"
 
+	librespot "github.com/devgianlu/go-librespot"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
+	"github.com/stretchr/testify/require"
 )
+
+// A Web API play naming "uris" sends a context with no uri and the tracks
+// inline. It needs nothing resolved, so there is no spclient here to ask.
+func TestNewContextResolverBareUris(t *testing.T) {
+	spotCtx := &connectpb.Context{Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{
+		{Uri: "spotify:track:1BdI8NEvZx61tnkbuAxC5x"},
+		{Uri: "spotify:track:4u615SPuJfGtPaEUSKwuK4"},
+	}}}}
+
+	r, err := NewContextResolver(context.Background(), &librespot.NullLogger{}, nil, spotCtx)
+	require.NoError(t, err)
+	require.Equal(t, librespot.SpotifyIdTypeTrack, r.Type())
+	require.Empty(t, r.Uri())
+
+	_, err = NewContextResolver(context.Background(), &librespot.NullLogger{}, nil, &connectpb.Context{})
+	require.Error(t, err, "a context with neither a uri nor items has nothing to play")
+}
 
 func TestHasResolvablePages(t *testing.T) {
 	tests := []struct {

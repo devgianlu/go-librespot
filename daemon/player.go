@@ -446,7 +446,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// dereferenced here; the loader then plays it from the top.
 		p.state.player.Track = nil
 		if current := transferState.Playback.CurrentTrack; singleTrackContext(current) != nil {
-			contextSpotType := librespot.InferSpotifyIdTypeFromContextUri(p.state.player.ContextUri)
+			contextSpotType := librespot.InferSpotifyIdTypeFromContext(transferState.CurrentSession.Context)
 			p.state.player.Track = librespot.ContextTrackToProvidedTrack(contextSpotType, current)
 		}
 		p.state.player.PrevTracks = nil
