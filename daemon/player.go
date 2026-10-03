@@ -257,10 +257,19 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed unmarshalling ClusterUpdate: %w", err)
 		}
 
-		stopBeingActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId && clusterUpdate.Cluster.PlayerState.Timestamp > p.state.lastTransferTimestamp
+		if !p.state.active {
+			p.state.lastClusterTimestamp = clusterUpdate.Cluster.GetPlayerState().GetTimestamp()
+		}
+
+		otherActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId
+		stopBeingActive := otherActive && clusterUpdate.Cluster.PlayerState.Timestamp > p.state.activationTimestamp
 
 		// We are still the active device, do not quit
 		if !stopBeingActive {
+			if otherActive {
+				p.app.log.Debugf("ignoring cluster update naming %s active: its state predates this device's activation",
+					clusterUpdate.Cluster.ActiveDeviceId)
+			}
 			return nil
 		}
 
@@ -404,7 +413,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		if err := proto.Unmarshal(req.Command.Data, &transferState); err != nil {
 			return fmt.Errorf("failed unmarshalling TransferState: %w", err)
 		}
-		p.state.lastTransferTimestamp = transferState.Playback.Timestamp
+		p.state.activationTimestamp = transferState.Playback.Timestamp
 
 		// A queued or autoplayed track is handed over on its own, with no
 		// context to take it from. Play it as a context of one.
@@ -482,7 +491,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 
 		return nil
 	case "play":
-		p.state.setActive(true)
+		p.state.takeOver()
 
 		p.state.player.PlayOrigin = req.Command.PlayOrigin
 		p.state.player.PlayOrigin.DeviceIdentifier = req.SentByDeviceId
@@ -794,7 +803,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 						return
 					}
 
-					p.state.setActive(true)
+					p.state.takeOver()
 					p.state.setPaused(data.Paused)
 					p.state.player.Suppressions = &connectpb.Suppressions{}
 					p.state.player.PlayOrigin = &connectpb.PlayOrigin{
