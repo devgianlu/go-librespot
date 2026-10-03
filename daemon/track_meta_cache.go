@@ -127,18 +127,18 @@ type contextListCache struct {
 	// now is the clock the TTL is checked against; replaced by tests.
 	now func() time.Time
 
-	// inFlight is the set of uris being enumerated right now, so that a client
-	// polling every second does not spawn an enumeration per poll.
+	// inFlight maps the uris being enumerated right now to the generation
+	// they started at, so that a client polling every second does not spawn
+	// an enumeration per poll, and an invalidation during an enumeration can
+	// tell put to drop its possibly pre-change result. Changes to the LRU go
+	// through mu too, so a put and an invalidation cannot interleave.
 	mu       sync.Mutex
-	inFlight map[string]bool
-	// stale marks in-flight enumerations that began before an invalidation;
-	// their result may predate the change, so it is not cached.
-	stale map[string]bool
+	inFlight map[string]uint64
 }
 
 func newContextListCache() *contextListCache {
 	l, _ := lru.New[string, contextListEntry](contextListCacheLimit)
-	return &contextListCache{lru: l, now: time.Now, inFlight: map[string]bool{}, stale: map[string]bool{}}
+	return &contextListCache{lru: l, now: time.Now, inFlight: map[string]uint64{}}
 }
 
 func (c *contextListCache) get(uri string) ([]string, bool) {
@@ -153,15 +153,16 @@ func (c *contextListCache) get(uri string) ([]string, bool) {
 	return e.uris, true
 }
 
-func (c *contextListCache) put(uri string, uris []string) {
+// put caches the listing an enumeration begun at gen produced, unless the
+// context was invalidated since: the listing may then predate the change.
+func (c *contextListCache) put(uri string, uris []string, gen uint64) {
 	c.mu.Lock()
-	stale := c.stale[uri]
-	delete(c.stale, uri)
-	c.mu.Unlock()
+	defer c.mu.Unlock()
 
-	if !stale {
-		c.lru.Add(uri, contextListEntry{uris: uris, fetched: c.now()})
+	if started, ok := c.inFlight[uri]; ok && started != gen {
+		return
 	}
+	c.lru.Add(uri, contextListEntry{uris: uris, fetched: c.now()})
 }
 
 // invalidate drops the listing of uri after it was changed through the
@@ -171,33 +172,35 @@ func (c *contextListCache) invalidate(uri string) {
 	if c == nil {
 		return
 	}
-	c.lru.Remove(uri)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.inFlight[uri] {
-		c.stale[uri] = true
+
+	c.lru.Remove(uri)
+	if gen, ok := c.inFlight[uri]; ok {
+		c.inFlight[uri] = gen + 1
 	}
 }
 
-// beginFetch claims the right to enumerate uri, reporting false when the
-// listing is already cached or another goroutine is already enumerating it.
-func (c *contextListCache) beginFetch(uri string) bool {
+// beginFetch claims the right to enumerate uri and returns the generation to
+// hand to put, reporting false when the listing is already cached or another
+// goroutine is already enumerating it.
+func (c *contextListCache) beginFetch(uri string) (gen uint64, ok bool) {
 	if c == nil {
-		return false
+		return 0, false
 	}
 	if _, ok := c.get(uri); ok {
-		return false
+		return 0, false
 	}
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.inFlight[uri] {
-		return false
+	if _, ok := c.inFlight[uri]; ok {
+		return 0, false
 	}
-	c.inFlight[uri] = true
-	return true
+	c.inFlight[uri] = 0
+	return 0, true
 }
 
 func (c *contextListCache) endFetch(uri string) {
@@ -564,7 +567,8 @@ func (p *AppPlayer) scheduleContextEnumerate(contextUri string) {
 		p.scheduleMetaSweep(uris, contextUri)
 		return
 	}
-	if !p.app.contextLists.beginFetch(contextUri) {
+	gen, ok := p.app.contextLists.beginFetch(contextUri)
+	if !ok {
 		return
 	}
 
@@ -587,7 +591,7 @@ func (p *AppPlayer) scheduleContextEnumerate(contextUri string) {
 			p.app.log.Debugf("context listing truncated to %d tracks: %s", len(uris), contextUri)
 		}
 
-		p.app.contextLists.put(contextUri, uris)
+		p.app.contextLists.put(contextUri, uris, gen)
 		p.scheduleMetaSweep(uris, contextUri)
 	})
 }

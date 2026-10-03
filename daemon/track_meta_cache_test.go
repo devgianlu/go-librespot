@@ -198,13 +198,18 @@ func TestTrackMetaCacheCapacityFitsMaxTracks(t *testing.T) {
 // A client polling a filling sweep asks for the same context every second or
 // two; enumerating pages over the network, so those polls must be served from
 // memory rather than re-paging the whole playlist each time.
+func claimed(c *contextListCache, uri string) bool {
+	_, ok := c.beginFetch(uri)
+	return ok
+}
+
 func TestContextListCacheServesRepeatLookups(t *testing.T) {
 	c := newContextListCache()
 
 	_, ok := c.get("spotify:playlist:a")
 	require.False(t, ok, "miss on an empty cache")
 
-	c.put("spotify:playlist:a", []string{"spotify:track:1", "spotify:track:2"})
+	c.put("spotify:playlist:a", []string{"spotify:track:1", "spotify:track:2"}, 0)
 
 	uris, ok := c.get("spotify:playlist:a")
 	require.True(t, ok)
@@ -215,12 +220,12 @@ func TestContextListCacheServesRepeatLookups(t *testing.T) {
 // served from the cache afterwards.
 func TestContextListCacheInvalidate(t *testing.T) {
 	c := newContextListCache()
-	c.put("spotify:playlist:a", []string{"spotify:track:1"})
+	c.put("spotify:playlist:a", []string{"spotify:track:1"}, 0)
 
 	c.invalidate("spotify:playlist:a")
 	_, ok := c.get("spotify:playlist:a")
 	require.False(t, ok, "an invalidated listing is a miss")
-	require.True(t, c.beginFetch("spotify:playlist:a"), "and is enumerated again")
+	require.True(t, claimed(c, "spotify:playlist:a"), "and is enumerated again")
 
 	var nilCache *contextListCache
 	nilCache.invalidate("spotify:playlist:a") // metadata disabled: no-op
@@ -230,21 +235,81 @@ func TestContextListCacheInvalidate(t *testing.T) {
 // read it before the change; its result must not land in the cache.
 func TestContextListCacheInvalidateDuringEnumeration(t *testing.T) {
 	c := newContextListCache()
-	require.True(t, c.beginFetch("spotify:playlist:a"))
+	gen, ok := c.beginFetch("spotify:playlist:a")
+	require.True(t, ok)
 
 	c.invalidate("spotify:playlist:a")
-	c.put("spotify:playlist:a", []string{"spotify:track:old"})
+	c.put("spotify:playlist:a", []string{"spotify:track:old"}, gen)
 	c.endFetch("spotify:playlist:a")
 
-	_, ok := c.get("spotify:playlist:a")
+	_, ok = c.get("spotify:playlist:a")
 	require.False(t, ok, "the possibly stale result was dropped")
 
-	require.True(t, c.beginFetch("spotify:playlist:a"))
-	c.put("spotify:playlist:a", []string{"spotify:track:new"})
+	gen, ok = c.beginFetch("spotify:playlist:a")
+	require.True(t, ok)
+	c.put("spotify:playlist:a", []string{"spotify:track:new"}, gen)
 	c.endFetch("spotify:playlist:a")
 	uris, ok := c.get("spotify:playlist:a")
 	require.True(t, ok, "the next enumeration is cached again")
 	require.Equal(t, []string{"spotify:track:new"}, uris)
+}
+
+// An invalidated enumeration that fails never calls put; that must not mark
+// the next, correct enumeration as stale.
+func TestContextListCacheInvalidatedEnumerationThatFails(t *testing.T) {
+	c := newContextListCache()
+	_, ok := c.beginFetch("spotify:playlist:a")
+	require.True(t, ok)
+	c.invalidate("spotify:playlist:a")
+	c.endFetch("spotify:playlist:a") // failed: no put
+
+	gen, ok := c.beginFetch("spotify:playlist:a")
+	require.True(t, ok)
+	c.put("spotify:playlist:a", []string{"spotify:track:new"}, gen)
+	c.endFetch("spotify:playlist:a")
+	_, ok = c.get("spotify:playlist:a")
+	require.True(t, ok, "the next enumeration is cached")
+}
+
+// An invalidation between put and endFetch drops the listing put just cached
+// and must not leave anything that drops the next enumeration.
+func TestContextListCacheInvalidateAfterPut(t *testing.T) {
+	c := newContextListCache()
+	gen, ok := c.beginFetch("spotify:playlist:a")
+	require.True(t, ok)
+	c.put("spotify:playlist:a", []string{"spotify:track:old"}, gen)
+	c.invalidate("spotify:playlist:a")
+	c.endFetch("spotify:playlist:a")
+
+	_, ok = c.get("spotify:playlist:a")
+	require.False(t, ok, "the invalidated listing is gone")
+
+	gen, ok = c.beginFetch("spotify:playlist:a")
+	require.True(t, ok)
+	c.put("spotify:playlist:a", []string{"spotify:track:new"}, gen)
+	c.endFetch("spotify:playlist:a")
+	uris, ok := c.get("spotify:playlist:a")
+	require.True(t, ok)
+	require.Equal(t, []string{"spotify:track:new"}, uris)
+}
+
+// put and invalidate run from different goroutines; neither may let a
+// listing from before an invalidation survive it.
+func TestContextListCacheInvalidateRacesPut(t *testing.T) {
+	for range 200 {
+		c := newContextListCache()
+		gen, _ := c.beginFetch("spotify:playlist:a")
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); c.put("spotify:playlist:a", []string{"spotify:track:old"}, gen) }()
+		go func() { defer wg.Done(); c.invalidate("spotify:playlist:a") }()
+		wg.Wait()
+		c.endFetch("spotify:playlist:a")
+
+		_, ok := c.get("spotify:playlist:a")
+		require.False(t, ok, "whichever ran first, the pre-change listing must not be served")
+	}
 }
 
 // The listing carries no revision, so a stale entry is the only way a client
@@ -255,7 +320,7 @@ func TestContextListCacheExpires(t *testing.T) {
 	now := time.Now()
 	c.now = func() time.Time { return now }
 
-	c.put("spotify:playlist:a", []string{"spotify:track:1"})
+	c.put("spotify:playlist:a", []string{"spotify:track:1"}, 0)
 
 	now = now.Add(contextListTTL)
 	_, ok := c.get("spotify:playlist:a")
@@ -264,14 +329,14 @@ func TestContextListCacheExpires(t *testing.T) {
 	now = now.Add(time.Second)
 	_, ok = c.get("spotify:playlist:a")
 	require.False(t, ok, "an entry older than the TTL is a miss")
-	require.True(t, c.beginFetch("spotify:playlist:a"), "an expired listing is re-enumerated")
+	require.True(t, claimed(c, "spotify:playlist:a"), "an expired listing is re-enumerated")
 }
 
 func TestContextListCacheEviction(t *testing.T) {
 	c := newContextListCache()
 
 	for i := 0; i < contextListCacheLimit+3; i++ {
-		c.put(fmt.Sprintf("spotify:playlist:%d", i), []string{"spotify:track:1"})
+		c.put(fmt.Sprintf("spotify:playlist:%d", i), []string{"spotify:track:1"}, 0)
 	}
 
 	require.Equal(t, contextListCacheLimit, c.lru.Len())
@@ -289,15 +354,15 @@ func TestContextListCacheEviction(t *testing.T) {
 func TestContextListCacheSingleFlightsEnumeration(t *testing.T) {
 	c := newContextListCache()
 
-	require.True(t, c.beginFetch("spotify:playlist:a"), "the first caller claims the enumeration")
-	require.False(t, c.beginFetch("spotify:playlist:a"), "a concurrent caller is turned away")
+	require.True(t, claimed(c, "spotify:playlist:a"), "the first caller claims the enumeration")
+	require.False(t, claimed(c, "spotify:playlist:a"), "a concurrent caller is turned away")
 
 	c.endFetch("spotify:playlist:a")
-	require.True(t, c.beginFetch("spotify:playlist:a"), "claimable again once the previous one finished")
+	require.True(t, claimed(c, "spotify:playlist:a"), "claimable again once the previous one finished")
 	c.endFetch("spotify:playlist:a")
 
-	c.put("spotify:playlist:a", []string{"spotify:track:1"})
-	require.False(t, c.beginFetch("spotify:playlist:a"), "a cached listing needs no enumeration")
+	c.put("spotify:playlist:a", []string{"spotify:track:1"}, 0)
+	require.False(t, claimed(c, "spotify:playlist:a"), "a cached listing needs no enumeration")
 }
 
 // The entire feature is opt-in: with metadata.enabled false the caches are
@@ -313,7 +378,7 @@ func TestMetadataDisabledIsNoop(t *testing.T) {
 	var cl *contextListCache
 	_, ok := cl.get("spotify:playlist:a")
 	require.False(t, ok)
-	require.False(t, cl.beginFetch("spotify:playlist:a"), "a nil cache never claims an enumeration")
+	require.False(t, claimed(cl, "spotify:playlist:a"), "a nil cache never claims an enumeration")
 
 	// A disabled player: no timer is armed and no session is touched.
 	p := &AppPlayer{app: &App{cfg: &Config{}}, state: &State{}}
