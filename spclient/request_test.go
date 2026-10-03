@@ -421,3 +421,34 @@ func (suite *RequestSuite) TestContextResolveUrlReportsTheStatus() {
 func TestRequestSuite(t *testing.T) {
 	suite.Run(t, new(RequestSuite))
 }
+
+// A request that is not idempotent may already have been applied when the
+// server or the network fails, so it is not sent again.
+func (suite *RequestSuite) TestRequestOnceDoesNotRepeatTransientFailures() {
+	suite.handler = func(_ int, w http.ResponseWriter) { w.WriteHeader(http.StatusServiceUnavailable) }
+
+	resp, err := suite.spclient.RequestOnce(suite.T().Context(), "POST", "/x", nil, nil, []byte("change"))
+	suite.Require().NoError(err)
+	defer func() { _ = resp.Body.Close() }()
+
+	suite.Equal(http.StatusServiceUnavailable, resp.StatusCode, "the caller sees the status")
+	suite.Len(suite.requests(), 1, "sent once")
+}
+
+// A 401 means the server refused the request, so renewing the token and
+// sending it again is safe even when it is not idempotent.
+func (suite *RequestSuite) TestRequestOnceStillRenewsTheToken() {
+	suite.handler = func(attempt int, w http.ResponseWriter) {
+		if attempt == 0 {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	}
+
+	resp, err := suite.spclient.RequestOnce(suite.T().Context(), "POST", "/x", nil, nil, []byte("change"))
+	suite.Require().NoError(err)
+	defer func() { _ = resp.Body.Close() }()
+
+	suite.Equal(http.StatusOK, resp.StatusCode)
+	suite.Len(suite.requests(), 2)
+	suite.Equal("Bearer fresh-token", suite.requests()[1].header.Get("Authorization"))
+}

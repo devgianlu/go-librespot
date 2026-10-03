@@ -78,10 +78,14 @@ func NewSpclient(ctx context.Context, log librespot.Logger, client *http.Client,
 }
 
 func (c *Spclient) innerRequest(ctx context.Context, method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
-	return c.innerRequestWith(ctx, c.client, method, reqUrl, query, header, body)
+	return c.innerRequestWith(ctx, c.client, method, reqUrl, query, header, body, true)
 }
 
-func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+// innerRequestWith sends a request, renewing the access token on 401. With
+// retryTransient it also repeats the request on network errors and transient
+// statuses, which is only safe when the request is idempotent: the server may
+// have acted on it before the failure.
+func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, method string, reqUrl *url.URL, query url.Values, header http.Header, body []byte, retryTransient bool) (*http.Response, error) {
 	if query != nil {
 		reqUrl.RawQuery = query.Encode()
 	}
@@ -137,6 +141,9 @@ func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, me
 
 		resp, err := client.Do(req.WithContext(ctx))
 		if err != nil {
+			if !retryTransient {
+				return nil, backoff.Permanent(err)
+			}
 			return nil, err
 		}
 
@@ -147,7 +154,7 @@ func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, me
 			return nil, fmt.Errorf("unauthorized")
 		}
 
-		if isRetryableHTTPStatus(resp.StatusCode) {
+		if retryTransient && isRetryableHTTPStatus(resp.StatusCode) {
 			status := resp.StatusCode
 			_ = resp.Body.Close()
 			c.log.Debugf(
@@ -169,6 +176,16 @@ func (c *Spclient) innerRequestWith(ctx context.Context, client *http.Client, me
 	return resp, nil
 }
 
+// RequestOnce is Request for requests that are not idempotent: it does not
+// repeat them on network errors or transient statuses, since the server may
+// already have acted on them, and leaves such failures to the caller. A 401
+// is still answered by renewing the token and sending again, as the server
+// refused the request.
+func (c *Spclient) RequestOnce(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
+	reqUrl := c.baseUrl.JoinPath(path)
+	return c.innerRequestWith(ctx, c.client, method, reqUrl, query, header, body, false)
+}
+
 func (c *Spclient) Request(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqUrl := c.baseUrl.JoinPath(path)
 	return c.innerRequest(ctx, method, reqUrl, query, header, body)
@@ -178,7 +195,7 @@ func (c *Spclient) Request(ctx context.Context, method string, path string, quer
 // following it, for endpoints that answer with a Location instead of a body.
 func (c *Spclient) RequestNoRedirect(ctx context.Context, method string, path string, query url.Values, header http.Header, body []byte) (*http.Response, error) {
 	reqUrl := c.baseUrl.JoinPath(path)
-	return c.innerRequestWith(ctx, c.noRedirectClient, method, reqUrl, query, header, body)
+	return c.innerRequestWith(ctx, c.noRedirectClient, method, reqUrl, query, header, body, true)
 }
 
 // RequestHm issues a request against an hm:// URL, the form Spotify uses to name
