@@ -10,7 +10,6 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
-	"github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
 )
@@ -85,18 +84,6 @@ func offer[T any](done <-chan struct{}, ch chan T, val T) bool {
 	}
 }
 
-func last[T any](a []T) T {
-	return a[len(a)-1]
-}
-
-func artistsNames(artists []*metadata.Artist) []*string {
-	res := make([]*string, len(artists))
-	for idx, it := range artists {
-		res[idx] = it.Name
-	}
-	return res
-}
-
 func makeMetadata(uri *string, media *librespot.Media) map[string]any {
 	m := make(map[string]any)
 
@@ -108,16 +95,11 @@ func makeMetadata(uri *string, media *librespot.Media) map[string]any {
 	}
 
 	if media != nil {
-		var coverArtFileId []byte = nil
+		if artUrl := mediaCoverUrl(media); artUrl != "" {
+			m["mpris:artUrl"] = artUrl
+		}
 		if media.IsTrack() {
-			if coverGroupImages := media.Track().GetAlbum().GetCoverGroup().GetImage(); len(coverGroupImages) > 0 {
-				coverArtFileId = coverGroupImages[len(coverGroupImages)-1].FileId
-			}
-
 			m["mpris:length"] = media.Track().GetDuration() * 1000 // convert from ms to us
-			if coverArtFileId != nil {
-				m["mpris:artUrl"] = coverArtUrl(coverArtFileId)
-			}
 			m["xesam:album"] = media.Track().Album.Name
 			m["xesam:albumArtist"] = artistsNames(media.Track().Album.Artist)
 			m["xesam:artist"] = artistsNames(media.Track().Artist)
@@ -127,14 +109,7 @@ func makeMetadata(uri *string, media *librespot.Media) map[string]any {
 			m["xesam:trackNumber"] = *media.Track().Number
 		}
 		if media.IsEpisode() {
-			if coverGroupImages := media.Episode().GetShow().GetCoverImage().GetImage(); len(coverGroupImages) > 0 {
-				coverArtFileId = coverGroupImages[len(coverGroupImages)-1].FileId
-			}
-
 			m["mpris:length"] = media.Episode().GetDuration() * 1000
-			if coverArtFileId != nil {
-				m["mpris:artUrl"] = coverArtUrl(coverArtFileId)
-			}
 			m["xesam:album"] = media.Episode().GetShow().GetName()
 			m["xesam:albumArtist"] = []string{media.Episode().GetShow().GetName()}
 			m["xesam:artist"] = []string{media.Episode().GetShow().GetName()}
