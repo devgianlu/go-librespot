@@ -19,7 +19,8 @@ const statePutTimeout = 20 * time.Second
 // coalesce, so a deep queue would only hold states nobody wants any more.
 const statePushQueueSize = 4
 
-// statePushDrainTimeout bounds how long Close waits for a push in flight.
+// statePushDrainTimeout bounds how long Close waits for the pushes already
+// queued, the one in flight included, before cancelling them.
 const statePushDrainTimeout = 5 * time.Second
 
 // statePush is one connect-state PUT, carrying bytes rather than the live
@@ -66,6 +67,11 @@ type statePushLane struct {
 	results chan statePushResult
 	quit    chan struct{}
 	done    chan struct{}
+
+	// ctx is what every push runs under; close cancels it once draining has
+	// taken too long.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func newStatePushLane(log librespot.Logger, sp *spclient.Spclient, deviceId string) *statePushLane {
@@ -77,6 +83,7 @@ func newStatePushLane(log librespot.Logger, sp *spclient.Spclient, deviceId stri
 		quit:     make(chan struct{}),
 		done:     make(chan struct{}),
 	}
+	l.ctx, l.cancel = context.WithCancel(context.Background())
 
 	l.put = func(ctx context.Context, spotConnId string, reason connectpb.PutStateReason, body []byte) (*connectpb.Cluster, error) {
 		if reason == connectpb.PutStateReason_BECAME_INACTIVE {
@@ -150,19 +157,16 @@ func (l *statePushLane) run() {
 			case <-l.wake:
 				continue
 			case <-l.quit:
+				// A push submitted just before close may have raced the
+				// empty queue above: only stop once nothing is left.
+				if l.pending() {
+					continue
+				}
 				return
 			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), statePutTimeout)
-		go func() {
-			select {
-			case <-l.quit:
-				cancel()
-			case <-ctx.Done():
-			}
-		}()
-
+		ctx, cancel := context.WithTimeout(l.ctx, statePutTimeout)
 		cluster, err := l.put(ctx, push.spotConnId, push.reason, push.body)
 		cancel()
 
@@ -174,13 +178,21 @@ func (l *statePushLane) run() {
 		select {
 		case l.results <- res:
 		case <-l.quit:
-			return
+			// Closing: the player loop no longer reads results.
 		}
 	}
 }
 
-// close stops the lane, abandoning anything queued. A push in flight is
-// cancelled rather than waited out: the session it described is going away.
+func (l *statePushLane) pending() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.queue) > 0
+}
+
+// close stops the lane. What is already queued is still sent, for at most
+// statePushDrainTimeout: the last push before a logout is the BECAME_INACTIVE
+// that tells the backend this device let go, and closing straight away used to
+// drop it every time. Whatever is left after that is cancelled.
 func (l *statePushLane) close() {
 	l.mu.Lock()
 	if l.closed {
@@ -188,7 +200,6 @@ func (l *statePushLane) close() {
 		return
 	}
 	l.closed = true
-	l.queue = nil
 	l.mu.Unlock()
 
 	close(l.quit)
@@ -197,5 +208,9 @@ func (l *statePushLane) close() {
 	case <-l.done:
 	case <-time.After(statePushDrainTimeout):
 		l.log.Warn("connect-state push lane did not drain in time")
+		l.mu.Lock()
+		l.queue = nil
+		l.mu.Unlock()
 	}
+	l.cancel()
 }
