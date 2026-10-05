@@ -460,8 +460,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		// playback
 		// Note: this sets playback speed to 0 or 1 because that's all we're
 		// capable of, depending on whether the playback is paused or not.
-		p.state.player.Timestamp = transferState.Playback.Timestamp
-		p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.PositionAsOfTimestamp)
+		p.state.player.Timestamp, p.state.player.PositionAsOfTimestamp = transferAnchor(transferState.Playback)
 		p.state.setPaused(pause)
 
 		// Claim the transfer before doing anything slow. The surrounding tracks
