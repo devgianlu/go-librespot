@@ -130,6 +130,18 @@ type AppPlayer struct {
 	// until a burst of skips has settled, so the burst costs one request.
 	metaPrefetchTimer *time.Timer
 
+	// remote is what the account plays on another device, from the latest
+	// cluster; remoteSeen is the player state timestamp of the latest cluster
+	// it was read from; remoteMeta brings back the metadata resolved for its
+	// track. Run goroutine only.
+	remote     *remotePlayback
+	remoteSeen int64
+	remoteMeta chan remoteMetaResult
+
+	// fetchRemoteMedia resolves the remote track's metadata; nil with
+	// metadata.enabled off, which leaves the remote track unnamed.
+	fetchRemoteMedia func(ctx context.Context, uri string) (*librespot.Media, error)
+
 	// lastFullMetaContext is the context uri the last full sweep ran for, so
 	// replaying the same playlist does not re-sweep it. Run goroutine only.
 	lastFullMetaContext string
@@ -260,6 +272,8 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 
 		if !p.state.active {
 			p.state.lastClusterTimestamp = clusterUpdate.Cluster.GetPlayerState().GetTimestamp()
+			p.remoteSeen = p.state.lastClusterTimestamp
+			p.observeCluster(clusterUpdate.Cluster)
 		}
 
 		otherActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId
@@ -281,6 +295,8 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 		p.app.log.Infof("playback was transferred to %s", name)
 
 		p.stopPlayback()
+		p.remoteSeen = clusterUpdate.Cluster.PlayerState.Timestamp
+		p.observeCluster(clusterUpdate.Cluster)
 		return nil
 	}
 
@@ -701,6 +717,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		}
 
 		resp.NextTrack = p.apiNextTrack()
+		resp.Remote = p.apiRemote()
 
 		return resp, nil
 	case ApiRequestTypeContextTracks:
@@ -729,6 +746,16 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 	case ApiRequestTypeStop:
 		p.stopPlayback()
 		return nil, nil
+	case ApiRequestTypeTransfer:
+		if p.state.active {
+			return nil, nil
+		}
+
+		reply := apiReply(req)
+		p.goDetached(transferTimeout, func(ctx context.Context) {
+			reply.done(nil, transferError(p.sess.Spclient().TransferFromActive(ctx)))
+		})
+		return nil, errReplyDeferred
 	case ApiRequestTypePlayPause:
 		if p.state.player.IsPaused {
 			_ = p.play()
@@ -1237,6 +1264,8 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			p.applyLoaderResult(res)
 		case res := <-p.statePush.results:
 			p.applyStatePushResult(res)
+		case res := <-p.remoteMeta:
+			p.applyRemoteMeta(res)
 		case <-p.stateTimer.C:
 			p.statePutScheduled = false
 			if !p.stateDirty {

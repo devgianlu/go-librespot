@@ -274,6 +274,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 		ctx:             playerCtx,
 		cancel:          playerCancel,
 		stop:            make(chan struct{}, 1),
+		remoteMeta:      make(chan remoteMetaResult, 1),
 		logout:          app.logoutCh,
 		volumeUpdate:    make(chan float32, 1),
 		playbackReadyCh: make(chan struct{}),
@@ -315,6 +316,7 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 	appPlayer.statePush = newStatePushLane(app.log, appPlayer.sess.Spclient(), app.deviceId)
 	if app.metaCache != nil {
 		appPlayer.meta = newMetaFetcher(app.log, app.metaCache, appPlayer.sess.Spclient())
+		appPlayer.fetchRemoteMedia = appPlayer.meta.fetchOne
 	}
 
 	if appPlayer.player, err = player.NewPlayer(&player.Options{

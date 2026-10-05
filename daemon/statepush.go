@@ -29,6 +29,10 @@ type statePush struct {
 	seq        uint64
 	reason     connectpb.PutStateReason
 	spotConnId string
+	// active is whether this device was the active one when it pushed: the
+	// cluster answering such a push names it, even if the answer arrives
+	// after another device took over.
+	active bool
 
 	// body is the marshalled PutStateRequest, or nil for BECAME_INACTIVE, which
 	// has an endpoint of its own and no payload.
@@ -43,10 +47,12 @@ func (p statePush) coalesces() bool {
 }
 
 type statePushResult struct {
-	seq      uint64
-	reason   connectpb.PutStateReason
-	publicIp string
-	err      error
+	seq        uint64
+	reason     connectpb.PutStateReason
+	sentActive bool
+	publicIp   string
+	cluster    *connectpb.Cluster
+	err        error
 }
 
 // statePushLane owns the connect-state PUT. It exists so that a stalled push
@@ -170,7 +176,7 @@ func (l *statePushLane) run() {
 		cluster, err := l.put(ctx, push.spotConnId, push.reason, push.body)
 		cancel()
 
-		res := statePushResult{seq: push.seq, reason: push.reason, err: err}
+		res := statePushResult{seq: push.seq, reason: push.reason, sentActive: push.active, cluster: cluster, err: err}
 		if device := cluster.GetDevice()[l.deviceId]; device != nil {
 			res.publicIp = device.PublicIp
 		}
