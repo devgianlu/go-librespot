@@ -150,6 +150,7 @@ var endpointMethods = map[string][]string{
 	"/player/repeat_track":            {http.MethodPost},
 	"/player/shuffle_context":         {http.MethodPost},
 	"/player/add_to_queue":            {http.MethodPost},
+	"/player/queue":                   {http.MethodGet},
 	"/player/output":                  {http.MethodPost},
 	"/context/tracks":                 {http.MethodGet},
 	"/library/playlists":              {http.MethodGet},
@@ -338,6 +339,35 @@ func TestApiStatusWireFormat(t *testing.T) {
 			"bit_depth": 16
 		}
 	}`, body(t, resp))
+}
+
+// GET /player/queue says null where an entry has no uid or no metadata yet,
+// and [] where nothing is listed, rather than leaving the field out.
+func TestApiPlayerQueueWireFormat(t *testing.T) {
+	ts := newTestServer(t, func(ApiRequest) (any, error) {
+		return &ApiQueue{
+			PrevTracks: []ApiQueueEntry{},
+			Track:      &ApiQueueEntry{Uri: "spotify:track:xxx", Provider: QueueEntryProviderContext},
+			NextTracks: []ApiQueueEntry{},
+		}, nil
+	})
+
+	resp := ts.do(http.MethodGet, "/player/queue", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, ApiRequestTypeGetQueue, ts.request().Type)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body(t, resp)), &got))
+	require.Equal(t, []any{}, got["prev_tracks"])
+	require.Equal(t, []any{}, got["next_tracks"])
+	track, ok := got["track"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "context", track["provider"])
+	for _, field := range []string{"uid", "track"} {
+		value, present := track[field]
+		require.True(t, present, "%s must be present", field)
+		require.Nil(t, value, "%s must be null", field)
+	}
 }
 
 // The nullable fields must serialise as null rather than disappear.

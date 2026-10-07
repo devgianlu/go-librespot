@@ -130,6 +130,14 @@ type AppPlayer struct {
 	// until a burst of skips has settled, so the burst costs one request.
 	metaPrefetchTimer *time.Timer
 
+	// metaCached wakes the Run loop when a metadata fetch cached tracks, which
+	// may name entries of the play order; queueListed is what GET /player/queue
+	// returned when the queue event was last raised, queueSigned what it was
+	// made of when last looked at. Run goroutine only.
+	metaCached  chan struct{}
+	queueListed *ApiQueue
+	queueSigned queueSignature
+
 	// lastFullMetaContext is the context uri the last full sweep ran for, so
 	// replaying the same playlist does not re-sweep it. Run goroutine only.
 	lastFullMetaContext string
@@ -704,6 +712,8 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		resp.NextTrack = p.apiNextTrack()
 
 		return resp, nil
+	case ApiRequestTypeGetQueue:
+		return p.apiQueue(), nil
 	case ApiRequestTypeContextTracks:
 		if p.meta == nil {
 			return nil, ErrNotFound
@@ -1095,6 +1105,8 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 		return
 	}
 
+	defer p.emitQueueGone()
+
 	apRecv := p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
 	msgRecv := p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/")
 	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
@@ -1128,6 +1140,10 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 	}
 
 	for {
+		// Whatever the last turn did — a skip, a queue edit, a stop, a load,
+		// metadata cached — the queue event says so before the loop waits.
+		p.emitQueueIfMoved()
+
 		select {
 		case <-p.stop:
 			return
@@ -1215,6 +1231,8 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			p.prefetchNext()
 		case <-p.metaPrefetchTimer.C:
 			p.prefetchWindowMetadata()
+		case <-p.metaCached:
+			// Nothing to do but turn: the top of the loop looks.
 		case <-p.sleepTimer.C:
 			// Cleared before pause(), whose own updateState call picks this
 			// up - so the app stops showing the timer as active in the same

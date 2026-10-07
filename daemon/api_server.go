@@ -134,6 +134,7 @@ const (
 	ApiRequestSetDeviceName           ApiRequestType = "set_device_name"
 	ApiRequestTypeReopenOutput        ApiRequestType = "reopen_output"
 	ApiRequestTypeContextTracks       ApiRequestType = "context_tracks"
+	ApiRequestTypeGetQueue            ApiRequestType = "get_queue"
 	ApiRequestTypeLibraryPlaylists    ApiRequestType = "library_playlists"
 	ApiRequestTypeSetLiked            ApiRequestType = "set_liked"
 	ApiRequestTypeGetLiked            ApiRequestType = "get_liked"
@@ -173,6 +174,7 @@ const (
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 	ApiEventTypePlaybackReady  ApiEventType = "playback_ready"
 	ApiEventTypePlaybackError  ApiEventType = "playback_error"
+	ApiEventTypeQueue          ApiEventType = "queue"
 )
 
 type ApiRequest struct {
@@ -561,6 +563,10 @@ func (s *ConcreteApiServer) GetAuthCode(w http.ResponseWriter, _ *http.Request) 
 
 func (s *ConcreteApiServer) GetToken(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeToken}, w)
+}
+
+func (s *ConcreteApiServer) PlayerGetQueue(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeGetQueue}, w)
 }
 
 func (s *ConcreteApiServer) GetContextTracks(w http.ResponseWriter, _ *http.Request, params GetContextTracksParams) {
