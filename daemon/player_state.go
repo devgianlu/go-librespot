@@ -308,8 +308,10 @@ func (p *AppPlayer) publishUpcoming(snap *tracks.Snapshot) {
 	p.state.player.NextTracks = snap.Next
 
 	// Every path that moves the window — load, transfer, skip, queue edit,
-	// shuffle — lands here, so this is where its metadata is asked for.
+	// shuffle — lands here, so this is where its metadata is asked for and
+	// where the move is announced.
 	p.scheduleMetaPrefetch()
+	p.emitQueue()
 }
 
 // statePutMinInterval is the minimum spacing between connect-state PUTs.

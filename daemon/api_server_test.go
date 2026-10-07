@@ -151,6 +151,7 @@ var endpointMethods = map[string][]string{
 	"/player/repeat_track":            {http.MethodPost},
 	"/player/shuffle_context":         {http.MethodPost},
 	"/player/add_to_queue":            {http.MethodPost},
+	"/player/queue":                   {http.MethodGet},
 	"/player/output":                  {http.MethodPost},
 	"/context/tracks":                 {http.MethodGet},
 	"/library/playlists":              {http.MethodGet},
@@ -340,6 +341,28 @@ func TestApiStatusWireFormat(t *testing.T) {
 			"sample_rate": 44100,
 			"bit_depth": 16
 		}
+	}`, body(t, resp))
+}
+
+// GET /player/queue says null where an entry has no uid or no metadata yet,
+// and [] where nothing is listed, rather than leaving the field out.
+func TestApiPlayerQueueWireFormat(t *testing.T) {
+	ts := newTestServer(t, func(ApiRequest) (any, error) {
+		return &ApiQueue{
+			PrevTracks: []ApiQueueEntry{},
+			Track:      &ApiQueueEntry{Uri: "spotify:track:xxx", Provider: QueueEntryProviderContext},
+			NextTracks: []ApiQueueEntry{},
+		}, nil
+	})
+
+	resp := ts.do(http.MethodGet, "/player/queue", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, ApiRequestTypeGetQueue, ts.request().Type)
+
+	require.JSONEq(t, `{
+		"prev_tracks": [],
+		"track": {"uri": "spotify:track:xxx", "uid": null, "provider": "context", "track": null},
+		"next_tracks": []
 	}`, body(t, resp))
 }
 

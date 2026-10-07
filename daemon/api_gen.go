@@ -24,6 +24,13 @@ const (
 	ConnectCommandEndpointSkipPrev  ConnectCommandEndpoint = "skip_prev"
 )
 
+// Defines values for QueueEntryProvider.
+const (
+	QueueEntryProviderAutoplay QueueEntryProvider = "autoplay"
+	QueueEntryProviderContext  QueueEntryProvider = "context"
+	QueueEntryProviderQueue    QueueEntryProvider = "queue"
+)
+
 // Defines values for TrackCodec.
 const (
 	TrackCodecAac     TrackCodec = "aac"
@@ -337,6 +344,36 @@ type ApiPrev struct {
 	// AllowSeeking Whether to rewind a track played past three seconds instead of skipping to the previous one
 	AllowSeeking *bool `json:"allow_seeking,omitempty"`
 }
+
+// ApiQueue The play order around the current track
+type ApiQueue struct {
+	// NextTracks Entries after the current one, nearest first, the user's queue before the rest, up to 32
+	NextTracks []ApiQueueEntry `json:"next_tracks"`
+
+	// PrevTracks Entries before the current one in the play order, farthest first, up to 32. Not a play history: a context started from one of its tracks lists the tracks before it
+	PrevTracks []ApiQueueEntry `json:"prev_tracks"`
+
+	// Track The current entry, null when nothing is loaded
+	Track *ApiQueueEntry `json:"track"`
+}
+
+// ApiQueueEntry One entry of the play order
+type ApiQueueEntry struct {
+	// Provider Where the entry comes from: the user's queue, the context, or autoplay once the context has ended
+	Provider QueueEntryProvider `json:"provider"`
+
+	// Track Track metadata (metadata.enabled), null until cached or for entries without any, such as local files. Its position is the playback position for the current entry and 0 for the others
+	Track *ApiTrack `json:"track"`
+
+	// Uid The entry's uid in the play order, which tells two copies of a track apart; null when it has none, as for album tracks
+	Uid *string `json:"uid"`
+
+	// Uri The entry URI, usually a track or an episode
+	Uri string `json:"uri"`
+}
+
+// QueueEntryProvider Where the entry comes from: the user's queue, the context, or autoplay once the context has ended
+type QueueEntryProvider string
 
 // ApiRepeatContext A toggle repeating context payload
 type ApiRepeatContext struct {
@@ -686,6 +723,9 @@ type ServerInterface interface {
 
 	// (POST /player/prev)
 	PlayerPrev(w http.ResponseWriter, r *http.Request)
+
+	// (GET /player/queue)
+	PlayerGetQueue(w http.ResponseWriter, r *http.Request)
 
 	// (POST /player/repeat_context)
 	PlayerRepeatContext(w http.ResponseWriter, r *http.Request)
@@ -1176,6 +1216,20 @@ func (siw *ServerInterfaceWrapper) PlayerPrev(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// PlayerGetQueue operation middleware
+func (siw *ServerInterfaceWrapper) PlayerGetQueue(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PlayerGetQueue(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PlayerRepeatContext operation middleware
 func (siw *ServerInterfaceWrapper) PlayerRepeatContext(w http.ResponseWriter, r *http.Request) {
 
@@ -1472,6 +1526,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/player/play", wrapper.PlayerPlay)
 	m.HandleFunc("POST "+options.BaseURL+"/player/playpause", wrapper.PlayerPlayPause)
 	m.HandleFunc("POST "+options.BaseURL+"/player/prev", wrapper.PlayerPrev)
+	m.HandleFunc("GET "+options.BaseURL+"/player/queue", wrapper.PlayerGetQueue)
 	m.HandleFunc("POST "+options.BaseURL+"/player/repeat_context", wrapper.PlayerRepeatContext)
 	m.HandleFunc("POST "+options.BaseURL+"/player/repeat_track", wrapper.PlayerRepeatTrack)
 	m.HandleFunc("POST "+options.BaseURL+"/player/resume", wrapper.PlayerResume)

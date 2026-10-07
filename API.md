@@ -72,3 +72,4 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `value`: Whether repeating context is enabled
 - `repeat_track`: The player repeating track setting changed
     - `value`: Whether repeating track is enabled
+- `queue`: The `GET /player/queue` response changed, or the session ended and the endpoint now answers 204
