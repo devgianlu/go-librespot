@@ -280,18 +280,21 @@ func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position in
 	return resp
 }
 
+// newApiResponseStatusMedia describes cached or playing media. Fields are read
+// through the nil-safe getters: metadata the service left incomplete describes
+// what it has instead of taking the daemon down.
 func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position int64) *ApiTrack {
 	if media.IsTrack() {
 		track := media.Track()
 
-		var artists []string
+		artists := make([]string, 0, len(track.Artist))
 		for _, a := range track.Artist {
-			artists = append(artists, *a.Name)
+			artists = append(artists, a.GetName())
 		}
 
-		albumCoverId := getBestImageIdForSize(track.Album.Cover, p.app.cfg.ImageSize)
-		if albumCoverId == nil && track.Album.CoverGroup != nil {
-			albumCoverId = getBestImageIdForSize(track.Album.CoverGroup.Image, p.app.cfg.ImageSize)
+		albumCoverId := getBestImageIdForSize(track.GetAlbum().GetCover(), p.app.cfg.ImageSize)
+		if albumCoverId == nil {
+			albumCoverId = getBestImageIdForSize(track.GetAlbum().GetCoverGroup().GetImage(), p.app.cfg.ImageSize)
 		}
 
 		artistUris := make([]string, 0, len(track.Artist))
@@ -300,39 +303,48 @@ func (p *AppPlayer) newApiResponseStatusMedia(media *librespot.Media, position i
 		}
 
 		return &ApiTrack{
-			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, track.Gid).Uri(),
-			Name:          *track.Name,
+			Uri:           gidUri(librespot.SpotifyIdTypeTrack, track.GetGid()),
+			Name:          track.GetName(),
 			ArtistNames:   artists,
 			ArtistUris:    artistUris,
-			AlbumName:     *track.Album.Name,
-			AlbumUri:      gidUri(librespot.SpotifyIdTypeAlbum, track.Album.GetGid()),
+			AlbumName:     track.GetAlbum().GetName(),
+			AlbumUri:      gidUri(librespot.SpotifyIdTypeAlbum, track.GetAlbum().GetGid()),
 			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
-			Duration:      int(*track.Duration),
-			ReleaseDate:   track.Album.Date.String(),
-			TrackNumber:   int(*track.Number),
-			DiscNumber:    int(*track.DiscNumber),
+			Duration:      int(track.GetDuration()),
+			ReleaseDate:   releaseDate(track.GetAlbum().GetDate()),
+			TrackNumber:   int(track.GetNumber()),
+			DiscNumber:    int(track.GetDiscNumber()),
 		}
 	} else {
 		episode := media.Episode()
 
-		albumCoverId := getBestImageIdForSize(episode.CoverImage.Image, p.app.cfg.ImageSize)
+		albumCoverId := getBestImageIdForSize(episode.GetCoverImage().GetImage(), p.app.cfg.ImageSize)
 
 		return &ApiTrack{
-			Uri:           librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeEpisode, episode.Gid).Uri(),
-			Name:          *episode.Name,
-			ArtistNames:   []string{*episode.Show.Name},
+			Uri:           gidUri(librespot.SpotifyIdTypeEpisode, episode.GetGid()),
+			Name:          episode.GetName(),
+			ArtistNames:   []string{episode.GetShow().GetName()},
 			ArtistUris:    []string{},
-			AlbumName:     *episode.Show.Name,
-			AlbumUri:      gidUri(librespot.SpotifyIdTypeShow, episode.Show.GetGid()),
+			AlbumName:     episode.GetShow().GetName(),
+			AlbumUri:      gidUri(librespot.SpotifyIdTypeShow, episode.GetShow().GetGid()),
 			AlbumCoverUrl: p.prodInfo.ImageUrl(albumCoverId),
 			Position:      position,
-			Duration:      int(*episode.Duration),
+			Duration:      int(episode.GetDuration()),
 			ReleaseDate:   "",
 			TrackNumber:   0,
 			DiscNumber:    0,
 		}
 	}
+}
+
+// releaseDate describes an album's date, or "" when the metadata has none
+// (the message's String would say "<nil>").
+func releaseDate(date *metadatapb.Date) string {
+	if date == nil {
+		return ""
+	}
+	return date.String()
 }
 
 // gidUri turns a metadata gid into a URI of the given type, or "" when the
