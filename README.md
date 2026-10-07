@@ -233,10 +233,10 @@ cache:
 
 Optionally, the daemon can cache track metadata (name, artists, cover art) in memory and fetch it — via the same
 internal API playback uses, not the rate-limited public Web API — for the tracks around the playback position. This
-enables a `next_track` field in `GET /status` and a `GET /context/tracks?uri=...` endpoint that lists any playable
-context (playlist, album, artist) in order with metadata, so a client can render a browsable song list and start any
-entry via `POST /player/play` with `skip_to_uri`. Everything is opt-in and disabled by default: a headless speaker has
-no use for metadata beyond the playing track and should not pay network requests for it.
+enables a `next_track` field in `GET /status`, track metadata in `GET /player/queue` and a `GET /context/tracks?uri=...`
+endpoint that lists any playable context (playlist, album, artist) in order with metadata, so a client can render a
+browsable song list and start any entry via `POST /player/play` with `skip_to_uri`. Everything is opt-in and disabled by
+default: a headless speaker has no use for metadata beyond the playing track and should not pay network requests for it.
 
 ```yaml
 metadata:

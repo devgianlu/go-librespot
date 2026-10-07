@@ -104,9 +104,13 @@ func recordingFetch(fetch fetchFunc) (fetchFunc, func() [][]string) {
 func newMetaTestPlayer(t *testing.T, fetch fetchFunc, resolve func(context.Context, string) (tracks.ContextResolver, error)) *AppPlayer {
 	t.Helper()
 
+	server, err := NewStubApiServer(&librespot.NullLogger{})
+	require.NoError(t, err)
+
 	app := &App{
 		log:          &librespot.NullLogger{},
 		cfg:          &Config{Metadata: MetadataConfig{Enabled: true}},
+		server:       &recordingApiServer{ApiServer: server},
 		metaCache:    newTrackMetaCache(trackMetaCacheLimit),
 		contextLists: newContextListCache(),
 	}
@@ -381,8 +385,8 @@ func TestMetadataDisabledIsNoop(t *testing.T) {
 	require.False(t, claimed(cl, "spotify:playlist:a"), "a nil cache never claims an enumeration")
 
 	// A disabled player: no timer is armed and no session is touched.
-	p := &AppPlayer{app: &App{cfg: &Config{}}, state: &State{}}
-	p.state.reset()
+	p := newTestAppPlayer(t)
+	p.app.cfg = &Config{}
 	p.publishSnapshot(&tracks.Snapshot{Current: provided(trackUri(0x01)), Next: []*connectpb.ProvidedTrack{provided(trackUri(0x02))}})
 	p.scheduleContextEnumerate("spotify:playlist:a")
 	p.scheduleMetaSweep([]string{"spotify:track:a"}, "test")

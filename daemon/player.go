@@ -135,6 +135,10 @@ type AppPlayer struct {
 	// until a burst of skips has settled, so the burst costs one request.
 	metaPrefetchTimer *time.Timer
 
+	// lastQueue is the play order the last queue event announced. Run
+	// goroutine only.
+	lastQueue queueSignature
+
 	// lastFullMetaContext is the context uri the last full sweep ran for, so
 	// replaying the same playlist does not re-sweep it. Run goroutine only.
 	lastFullMetaContext string
@@ -217,6 +221,7 @@ func (p *AppPlayer) handleAccesspointPacket(pktType ap.PacketType, payload []byt
 		}
 
 		p.prodInfo = &prod
+		p.emitQueue()
 		return nil
 	case ap.PacketTypeCountryCode:
 		p.countryCode.Store(pointer(string(payload)))
@@ -493,6 +498,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		p.state.player.IsBuffering = true
 		p.state.player.PlaybackSpeed = 0 // not progressing while buffering
 		p.flushState()
+		p.emitQueue()
 
 		p.app.server.Emit(&ApiEvent{
 			Type: ApiEventTypeActive,
@@ -714,6 +720,8 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		resp.NextTrack = p.apiNextTrack()
 
 		return resp, nil
+	case ApiRequestTypeGetQueue:
+		return p.apiQueue(), nil
 	case ApiRequestTypeContextTracks:
 		if p.meta == nil {
 			return nil, ErrNotFound
@@ -1127,10 +1135,32 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 		return
 	}
 
-	apRecv := p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode)
-	msgRecv := p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/")
-	reqRecv := p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command")
-	playerRecv := p.player.Receive()
+	p.serve(
+		p.sess.Accesspoint().Receive(ap.PacketTypeProductInfo, ap.PacketTypeCountryCode),
+		p.sess.Dealer().ReceiveMessage("hm://pusher/v1/connections/", "hm://connect-state/v1/"),
+		p.sess.Dealer().ReceiveRequest("hm://connect-state/v1/player/command"),
+		p.player.Receive(),
+		apiRecv, mprisRecv,
+	)
+}
+
+// serve is Run's loop, split out so that tests can drive it without a session.
+func (p *AppPlayer) serve(
+	apRecv <-chan ap.Packet,
+	msgRecv <-chan dealer.Message,
+	reqRecv <-chan dealer.Request,
+	playerRecv <-chan player.Event,
+	apiRecv <-chan ApiRequest,
+	mprisRecv <-chan mpris.MediaPlayer2PlayerCommand,
+) {
+	defer p.emitQueueGone()
+
+	// Metadata fetches run detached and cannot read the play order, so they
+	// wake the loop to do it. Nil, never ready, with metadata disabled.
+	var metaCached <-chan struct{}
+	if p.meta != nil {
+		metaCached = p.meta.cached
+	}
 
 	volumeTimer := time.NewTimer(time.Minute)
 	volumeTimer.Stop() // don't emit a volume change event at start
@@ -1247,6 +1277,8 @@ func (p *AppPlayer) Run(apiRecv <-chan ApiRequest, mprisRecv <-chan mpris.MediaP
 			p.prefetchNext()
 		case <-p.metaPrefetchTimer.C:
 			p.prefetchWindowMetadata()
+		case <-metaCached:
+			p.emitQueue()
 		case <-p.sleepTimer.C:
 			// Cleared before pause(), whose own updateState call picks this
 			// up - so the app stops showing the timer as active in the same

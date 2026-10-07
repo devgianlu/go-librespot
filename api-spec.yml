@@ -233,6 +233,61 @@ components:
           allOf:
             - $ref: '#/components/schemas/track'
           nullable: true
+    queueEntry:
+      x-go-name: ApiQueueEntry
+      description: One entry of the play order
+      type: object
+      required: [ uri, uid, provider, track ]
+      properties:
+        uri:
+          description: The entry URI, usually a track or an episode
+          type: string
+        uid:
+          description: >-
+            The entry's uid in the play order, which tells two copies of a
+            track apart; null when it has none, as for album tracks
+          type: string
+          nullable: true
+        provider:
+          description: >-
+            Where the entry comes from: the user's queue, the context, or
+            autoplay once the context has ended
+          type: string
+          enum: [ queue, context, autoplay ]
+        track:
+          description: >-
+            Track metadata (metadata.enabled), null until cached or for entries
+            without any, such as local files. Its position is the playback
+            position for the current entry and 0 for the others
+          allOf:
+            - $ref: '#/components/schemas/track'
+          nullable: true
+    queue:
+      x-go-name: ApiQueue
+      description: The play order around the current track
+      type: object
+      required: [ prev_tracks, track, next_tracks ]
+      properties:
+        prev_tracks:
+          description: >-
+            Entries before the current one in the play order, farthest first,
+            up to 32. Not a play history: a context started from one of its
+            tracks lists the tracks before it
+          type: array
+          items:
+            $ref: '#/components/schemas/queueEntry'
+        track:
+          description: The current entry, null when nothing is loaded
+          allOf:
+            - $ref: '#/components/schemas/queueEntry'
+          nullable: true
+        next_tracks:
+          description: >-
+            Entries after the current one, nearest first, the user's queue
+            before the rest, up to 32
+          type: array
+          items:
+            $ref: '#/components/schemas/queueEntry'
     contextTracks:
       x-go-name: ApiContextTracks
       description: A context's track listing
@@ -1368,6 +1423,25 @@ paths:
       responses:
         200:
           description: Successful response
+  /player/queue:
+    get:
+      operationId: playerGetQueue
+      description: >-
+        List the play order around the current track, as Spotify Connect holds
+        it. With metadata.enabled, missing metadata is fetched in the background
+        and the response never waits for it. The queue event is raised whenever
+        the response changes, the current entry's position aside; a context
+        start can report the cleared order before the resolved one. A 204 means
+        the same as an empty order
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/queue'
+        204:
+          description: No active session
   /player/add_to_queue:
     post:
       operationId: playerAddToQueue

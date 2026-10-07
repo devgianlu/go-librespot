@@ -268,6 +268,9 @@ type metaFetcher struct {
 	fetch   func(ctx context.Context, req *extmetadatapb.BatchedEntityRequest) (*extmetadatapb.BatchedExtensionResponse, error)
 	resolve func(ctx context.Context, uri string) (tracks.ContextResolver, error)
 
+	// cached is signalled each time a batch cached tracks.
+	cached chan struct{}
+
 	// inFlight single-flights the window fetch: a timer that fires while one
 	// runs re-arms itself rather than starting another.
 	inFlight atomic.Bool
@@ -277,9 +280,10 @@ type metaFetcher struct {
 
 func newMetaFetcher(log librespot.Logger, cache *trackMetaCache, sp *spclient.Spclient) *metaFetcher {
 	return &metaFetcher{
-		log:   log,
-		cache: cache,
-		fetch: sp.ExtendedMetadata,
+		log:    log,
+		cache:  cache,
+		cached: make(chan struct{}, 1),
+		fetch:  sp.ExtendedMetadata,
 		resolve: func(ctx context.Context, uri string) (tracks.ContextResolver, error) {
 			// A context of its own, never the playing one: the resolver behind
 			// a track list mutates its pages as it walks, and is reachable only
@@ -346,6 +350,12 @@ func (f *metaFetcher) fetchBatch(ctx context.Context, uris []string) (int, error
 		}
 	}
 
+	if cached > 0 {
+		select {
+		case f.cached <- struct{}{}:
+		default: // one already pending says the same
+		}
+	}
 	return cached, nil
 }
 
@@ -691,6 +701,12 @@ func (p *AppPlayer) contextTracksResponse(contextUri string, uris []string, read
 			resp.Cached++
 		}
 		resp.Tracks = append(resp.Tracks, entry)
+	}
+
+	// Keep the window the most recently used part of the cache, ahead of the
+	// tracks just listed.
+	for _, uri := range p.windowMetaUris() {
+		p.meta.cache.get(uri)
 	}
 	return resp
 }
