@@ -332,6 +332,12 @@ type ApiPlaylistRemoveTrack struct {
 	Uri string `json:"uri"`
 }
 
+// ApiPrev A skip to previous payload
+type ApiPrev struct {
+	// AllowSeeking Whether to rewind a track played past three seconds instead of skipping to the previous one
+	AllowSeeking *bool `json:"allow_seeking,omitempty"`
+}
+
 // ApiRepeatContext A toggle repeating context payload
 type ApiRepeatContext struct {
 	// RepeatContext Whether repeating context should be enabled
@@ -590,6 +596,9 @@ type PlayerOutputJSONRequestBody = ApiOutput
 
 // PlayerPlayJSONRequestBody defines body for PlayerPlay for application/json ContentType.
 type PlayerPlayJSONRequestBody = ApiPlay
+
+// PlayerPrevJSONRequestBody defines body for PlayerPrev for application/json ContentType.
+type PlayerPrevJSONRequestBody = ApiPrev
 
 // PlayerRepeatContextJSONRequestBody defines body for PlayerRepeatContext for application/json ContentType.
 type PlayerRepeatContextJSONRequestBody = ApiRepeatContext

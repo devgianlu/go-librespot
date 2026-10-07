@@ -768,7 +768,8 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		_ = p.seek(position)
 		return nil, nil
 	case ApiRequestTypePrev:
-		_ = p.skipPrev(true)
+		data := req.Data.(ApiPrev)
+		_ = p.skipPrev(data.AllowSeeking == nil || *data.AllowSeeking)
 		return nil, nil
 	case ApiRequestTypeNext:
 		data := req.Data.(ApiNext)

@@ -376,7 +376,6 @@ func TestApiSimpleCommands(t *testing.T) {
 		"/player/pause":     ApiRequestTypePause,
 		"/player/playpause": ApiRequestTypePlayPause,
 		"/player/stop":      ApiRequestTypeStop,
-		"/player/prev":      ApiRequestTypePrev,
 		"/token":            ApiRequestTypeToken,
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -454,6 +453,45 @@ func TestApiNext(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.Nil(t, ts.request().Data.(ApiNext).Uri)
 	})
+}
+
+func TestApiPrev(t *testing.T) {
+	t.Run("without seeking", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		ts.do(http.MethodPost, "/player/prev", map[string]any{"allow_seeking": false})
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypePrev, req.Type)
+		data := req.Data.(ApiPrev)
+		require.NotNil(t, data.AllowSeeking)
+		require.False(t, *data.AllowSeeking)
+	})
+
+	t.Run("without a body", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/prev", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Nil(t, ts.request().Data.(ApiPrev).AllowSeeking, "absent: seeking allowed, as before")
+	})
+
+	// Prev used to ignore its body, so one that does not parse gets the default.
+	for name, body := range map[string]string{
+		"invalid json": "{not json",
+		"form data":    "allow_seeking=false",
+		"mistyped":     `{"allow_seeking":"true"}`,
+	} {
+		t.Run("falls back to the default on "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/player/prev", body)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			req := ts.request()
+			require.Equal(t, ApiRequestTypePrev, req.Type)
+			require.Nil(t, req.Data.(ApiPrev).AllowSeeking)
+		})
+	}
 }
 
 func TestApiSeek(t *testing.T) {
