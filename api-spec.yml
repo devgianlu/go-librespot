@@ -701,6 +701,17 @@ components:
             The track URI to skip to. When omitted the next track in the
             context is played.
           type: string
+    prev:
+      x-go-name: ApiPrev
+      description: A skip to previous payload
+      type: object
+      properties:
+        allow_seeking:
+          description: >-
+            Whether to rewind a track played past three seconds instead of
+            skipping to the previous one
+          type: boolean
+          default: true
     seek:
       x-go-name: ApiSeek
       description: A seek payload
@@ -1258,7 +1269,16 @@ paths:
   /player/prev:
     post:
       operationId: playerPrev
-      description: Skip to previous track (or rewind current track)
+      description: >-
+        Skip to previous track (or rewind current track); with none before it,
+        the current track restarts. From a queued track it returns to the
+        context, to the track before the one the queue was entered from (or
+        that one if it is the context's first); the queued track stays queued
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/prev'
       responses:
         200:
           description: Successful response

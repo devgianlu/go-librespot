@@ -751,8 +751,15 @@ func (s *ConcreteApiServer) PlayerStop(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeStop}, w)
 }
 
-func (s *ConcreteApiServer) PlayerPrev(w http.ResponseWriter, _ *http.Request) {
-	s.handleRequest(ApiRequest{Type: ApiRequestTypePrev}, w)
+func (s *ConcreteApiServer) PlayerPrev(w http.ResponseWriter, r *http.Request) {
+	// The body used to be ignored: one that does not parse gets the default
+	// rather than a 400.
+	var data ApiPrev
+	if err := jsonDecode(r, &data); err != nil {
+		data = ApiPrev{}
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePrev, Data: data}, w)
 }
 
 func (s *ConcreteApiServer) PlayerGetVolume(w http.ResponseWriter, _ *http.Request) {
