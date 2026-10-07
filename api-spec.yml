@@ -508,6 +508,19 @@ components:
             The track URI to skip to. When omitted the next track in the
             context is played.
           type: string
+    prev:
+      x-go-name: ApiPrev
+      description: A skip to previous payload
+      type: object
+      properties:
+        allow_seeking:
+          description: >-
+            Whether a track played past its first three seconds is rewound
+            instead of left for the previous one, as with Spotify Connect's own
+            skip_prev option. False goes to the previous track, or restarts
+            the current one when there is none before it.
+          type: boolean
+          default: true
     seek:
       x-go-name: ApiSeek
       description: A seek payload
@@ -987,6 +1000,11 @@ paths:
     post:
       operationId: playerPrev
       description: Skip to previous track (or rewind current track)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/prev'
       responses:
         200:
           description: Successful response

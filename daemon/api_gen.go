@@ -188,6 +188,12 @@ type ApiPlaylistRemoveTrack struct {
 	Uri string `json:"uri"`
 }
 
+// ApiPrev A skip to previous payload
+type ApiPrev struct {
+	// AllowSeeking Whether a track played past its first three seconds is rewound instead of left for the previous one, as with Spotify Connect's own skip_prev option. False goes to the previous track, or restarts the current one when there is none before it.
+	AllowSeeking *bool `json:"allow_seeking,omitempty"`
+}
+
 // ApiRepeatContext A toggle repeating context payload
 type ApiRepeatContext struct {
 	// RepeatContext Whether repeating context should be enabled
@@ -422,6 +428,9 @@ type PlayerOutputJSONRequestBody = ApiOutput
 
 // PlayerPlayJSONRequestBody defines body for PlayerPlay for application/json ContentType.
 type PlayerPlayJSONRequestBody = ApiPlay
+
+// PlayerPrevJSONRequestBody defines body for PlayerPrev for application/json ContentType.
+type PlayerPrevJSONRequestBody = ApiPrev
 
 // PlayerRepeatContextJSONRequestBody defines body for PlayerRepeatContext for application/json ContentType.
 type PlayerRepeatContextJSONRequestBody = ApiRepeatContext

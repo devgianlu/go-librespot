@@ -373,7 +373,6 @@ func TestApiSimpleCommands(t *testing.T) {
 		"/player/pause":     ApiRequestTypePause,
 		"/player/playpause": ApiRequestTypePlayPause,
 		"/player/stop":      ApiRequestTypeStop,
-		"/player/prev":      ApiRequestTypePrev,
 		"/token":            ApiRequestTypeToken,
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -451,6 +450,43 @@ func TestApiNext(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.Nil(t, ts.request().Data.(ApiNext).Uri)
 	})
+}
+
+func TestApiPrev(t *testing.T) {
+	t.Run("without seeking", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		ts.do(http.MethodPost, "/player/prev", map[string]any{"allow_seeking": false})
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypePrev, req.Type)
+		data := req.Data.(ApiPrev)
+		require.NotNil(t, data.AllowSeeking)
+		require.False(t, *data.AllowSeeking)
+	})
+
+	t.Run("without a body", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/prev", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Nil(t, ts.request().Data.(ApiPrev).AllowSeeking, "absent: seeking allowed, as before")
+	})
+
+	t.Run("rejects invalid json", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/prev", "{not json")
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		ts.requireNoRequest()
+	})
+}
+
+func TestPrevAllowsSeekingUnlessTold(t *testing.T) {
+	no, yes := false, true
+	require.True(t, ApiPrev{}.allowsSeeking(), "a bare request rewinds, as before")
+	require.True(t, ApiPrev{AllowSeeking: &yes}.allowsSeeking())
+	require.False(t, ApiPrev{AllowSeeking: &no}.allowsSeeking())
 }
 
 func TestApiSeek(t *testing.T) {

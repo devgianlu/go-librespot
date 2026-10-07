@@ -697,8 +697,20 @@ func (s *ConcreteApiServer) PlayerStop(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeStop}, w)
 }
 
-func (s *ConcreteApiServer) PlayerPrev(w http.ResponseWriter, _ *http.Request) {
-	s.handleRequest(ApiRequest{Type: ApiRequestTypePrev}, w)
+// allowsSeeking is whether a prev may rewind the track instead: unless the
+// request says otherwise, as a bare POST /player/prev always has.
+func (d ApiPrev) allowsSeeking() bool {
+	return d.AllowSeeking == nil || *d.AllowSeeking
+}
+
+func (s *ConcreteApiServer) PlayerPrev(w http.ResponseWriter, r *http.Request) {
+	var data ApiPrev
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePrev, Data: data}, w)
 }
 
 func (s *ConcreteApiServer) PlayerGetVolume(w http.ResponseWriter, _ *http.Request) {
