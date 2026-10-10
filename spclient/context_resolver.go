@@ -60,6 +60,16 @@ func hasResolvablePages(ctx *connectpb.Context) bool {
 	return false
 }
 
+// isItemUri reports whether a context uri names a single playable item
+// rather than a collection of them.
+func isItemUri(uri string) bool {
+	switch librespot.ContextUriType(uri) {
+	case "track", "episode", "chapter":
+		return !strings.HasPrefix(uri, "spotify:user:")
+	}
+	return false
+}
+
 func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient, spotCtx *connectpb.Context) (_ *ContextResolver, err error) {
 	typ := librespot.InferSpotifyIdTypeFromContext(spotCtx)
 	if typ == librespot.SpotifyIdTypeUnknown {
@@ -87,6 +97,17 @@ func NewContextResolver(ctx context.Context, log librespot.Logger, sp *Spclient,
 		maps.Copy(newSpotCtx.Metadata, spotCtx.Metadata)
 
 		spotCtx = newSpotCtx
+	}
+
+	if !hasResolvablePages(spotCtx) {
+		// Context resolve answers a bare track or episode uri with no pages:
+		// such a context is that one item.
+		if !isItemUri(spotCtx.Uri) {
+			return nil, fmt.Errorf("context %s has no tracks", spotCtx.Uri)
+		}
+		spotCtx.Pages = []*connectpb.ContextPage{{
+			Tracks: []*connectpb.ContextTrack{{Uri: spotCtx.Uri, Metadata: map[string]string{}}},
+		}}
 	}
 
 	autoplay := strings.HasPrefix(spotCtx.Uri, "spotify:station:")
@@ -160,7 +181,15 @@ func (r *ContextResolver) loadPage(ctx context.Context, url string) (*connectpb.
 }
 
 func (r *ContextResolver) Page(ctx context.Context, idx int) ([]*connectpb.ContextTrack, error) {
+	if idx < 0 {
+		return nil, fmt.Errorf("invalid page index %d", idx)
+	}
+
 	for idx >= len(r.ctx.Pages) {
+		if len(r.ctx.Pages) == 0 {
+			return nil, io.EOF
+		}
+
 		lastPage := r.ctx.Pages[len(r.ctx.Pages)-1]
 		if len(lastPage.NextPageUrl) == 0 {
 
