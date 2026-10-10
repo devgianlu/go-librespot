@@ -4,6 +4,7 @@ package spclient
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
@@ -89,5 +90,20 @@ func TestHasResolvablePages(t *testing.T) {
 				t.Errorf("hasResolvablePages() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// Context resolve answers a bare track uri with a context that has no pages.
+// It used to reach Page and index Pages[-1] (devgianlu/go-librespot#422).
+func TestContextResolverWithoutPages(t *testing.T) {
+	r := &ContextResolver{log: &librespot.NullLogger{}, typ: librespot.SpotifyIdTypeTrack, ctx: &connectpb.Context{Uri: "spotify:track:197PHOBtgwBTSky9oye0u9"}}
+	_, err := r.Page(context.Background(), 0)
+	require.ErrorIs(t, err, io.EOF, "a resolver with no pages ends instead of panicking")
+
+	for _, uri := range []string{"spotify:track:197PHOBtgwBTSky9oye0u9", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"} {
+		require.True(t, isItemUri(uri), uri)
+	}
+	for _, uri := range []string{"spotify:album:2up3OPMp9Tb4dAKM2erWXQ", "spotify:user:someone:collection", "spotify:show:5CfCWKI5pZ28U0uOzXkDHe"} {
+		require.False(t, isItemUri(uri), uri)
 	}
 }
