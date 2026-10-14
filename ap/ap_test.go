@@ -13,6 +13,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	librespot "github.com/devgianlu/go-librespot"
+	pb "github.com/devgianlu/go-librespot/proto/spotify"
 )
 
 type stubAddr string
@@ -179,5 +180,46 @@ func TestCloseCancelsReconnectBackoff(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("reconnect backoff kept running after Close")
+	}
+}
+
+func TestConnectGivesUpOnASilentAccesspoint(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		if conn, err := ln.Accept(); err == nil {
+			accepted <- conn
+		}
+	}()
+	defer func() {
+		select {
+		case conn := <-accepted:
+			_ = conn.Close()
+		default:
+		}
+	}()
+
+	prev := handshakeTimeout
+	handshakeTimeout = 100 * time.Millisecond
+	defer func() { handshakeTimeout = prev }()
+
+	ap := NewAccesspoint(&librespot.NullLogger{}, func(context.Context) string { return ln.Addr().String() }, "")
+	defer ap.Close()
+
+	done := make(chan error, 1)
+	go func() { done <- ap.connect(context.Background(), &pb.LoginCredentials{}) }()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected the handshake with a silent accesspoint to fail")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the handshake with a silent accesspoint never gave up")
 	}
 }
