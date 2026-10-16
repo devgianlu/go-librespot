@@ -842,18 +842,7 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			Value: p.apiVolume(),
 		}, nil
 	case ApiRequestTypeSetVolume:
-		data := req.Data.(ApiSetVolume)
-
-		var volume int32
-		if data.Relative {
-			volume = int32(p.apiVolume())
-			volume += data.Volume
-			volume = max(min(volume, int32(p.app.cfg.VolumeSteps)), 0)
-		} else {
-			volume = data.Volume
-		}
-
-		p.updateVolume(uint32(volume) * player.MaxStateVolume / p.app.cfg.VolumeSteps)
+		p.updateVolume(p.app.volumeFromApi(req.Data.(ApiSetVolume), p.state.device.Volume))
 		return nil, nil
 	case ApiRequestTypeSetRepeatingContext:
 		val := req.Data.(bool)

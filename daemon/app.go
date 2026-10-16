@@ -52,12 +52,17 @@ type App struct {
 	metaCache    *trackMetaCache
 	contextLists *contextListCache
 
-	// stateMu guards state and the store behind it. Two AppPlayers overlap
-	// briefly whenever a zeroconf session is replaced, and volume changes are
-	// written back from off the player loop.
+	// stateMu guards state and the store behind it, and volume. Two AppPlayers
+	// overlap briefly whenever a zeroconf session is replaced, and volume changes
+	// are written back from off the player loop.
 	stateMu   sync.Mutex
 	saving    bool
 	saveDirty bool
+
+	// volume is the last volume set while this process runs, in the range
+	// 0..player.MaxStateVolume. Unlike a session's own, it outlives sessions,
+	// and an external controller can set it while there is none.
+	volume *uint32
 
 	closed bool
 }
@@ -479,6 +484,9 @@ func (app *App) answerWithoutSession(ctx context.Context) (stop func()) {
 				switch req.Type {
 				case ApiRequestTypeRoot:
 					req.Reply(&ApiRoot{}, nil)
+				case ApiRequestTypeSetVolume:
+					app.setVolumeWithoutSession(req.Data.(ApiSetVolume))
+					req.Reply(nil, nil)
 				default:
 					// Renames included, unlike the zeroconf branch: the login
 					// running meanwhile reads the device name.
@@ -634,6 +642,9 @@ func (app *App) withAppPlayer(ctx context.Context, appPlayerFunc func(context.Co
 					switch req.Type {
 					case ApiRequestTypeRoot:
 						req.Reply(&ApiRoot{}, nil)
+					case ApiRequestTypeSetVolume:
+						app.setVolumeWithoutSession(req.Data.(ApiSetVolume))
+						req.Reply(nil, nil)
 					case ApiRequestSetDeviceName:
 						// The device name drives the zeroconf advertisement, which
 						// runs independently of any player session, so handle it

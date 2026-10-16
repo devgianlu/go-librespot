@@ -1628,12 +1628,7 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 
 	p.app.log.Debugf("update volume requested to %d/%d", newVal, player.MaxStateVolume)
 	p.player.SetVolume(newVal)
-
-	// Save the volume to the state
-	p.app.stateMu.Lock()
-	p.app.state.LastVolume = &newVal
-	p.app.stateMu.Unlock()
-	p.app.requestPersist()
+	p.app.setVolume(newVal)
 
 	// Replace whatever is already queued. The mixer writes to this channel too,
 	// so the send has to tolerate losing the race for the freed slot: this
@@ -1647,6 +1642,53 @@ func (p *AppPlayer) updateVolume(newVal uint32) {
 	case p.volumeUpdate <- float32(newVal) / player.MaxStateVolume:
 	default:
 	}
+}
+
+// setVolume records newVal, in the range 0..player.MaxStateVolume, as the
+// volume that outlives sessions, and saves it.
+func (app *App) setVolume(newVal uint32) {
+	app.stateMu.Lock()
+	app.volume = &newVal
+	app.state.LastVolume = &newVal
+	app.stateMu.Unlock()
+	app.requestPersist()
+}
+
+// setVolumeWithoutSession takes a volume set through the API while there is no
+// session, so that the next one starts from it.
+func (app *App) setVolumeWithoutSession(data ApiSetVolume) {
+	newVal := app.volumeFromApi(data, app.sessionVolume())
+	app.log.Debugf("volume set to %d/%d without a session", newVal, player.MaxStateVolume)
+	app.setVolume(newVal)
+}
+
+// sessionVolume is the volume a session starts at when the volume is external:
+// the last one set while this process runs, else the one saved by an earlier
+// run unless ignore_last_volume is set, else initial_volume.
+func (app *App) sessionVolume() uint32 {
+	app.stateMu.Lock()
+	defer app.stateMu.Unlock()
+
+	switch {
+	case app.volume != nil:
+		return *app.volume
+	case !app.cfg.IgnoreLastVolume && app.state.LastVolume != nil:
+		return *app.state.LastVolume
+	default:
+		return min(app.cfg.InitialVolume, app.cfg.VolumeSteps) * player.MaxStateVolume / app.cfg.VolumeSteps
+	}
+}
+
+// volumeFromApi resolves a set_volume request, given in steps, against current,
+// and returns the result in the range 0..player.MaxStateVolume.
+func (app *App) volumeFromApi(data ApiSetVolume, current uint32) uint32 {
+	steps := int32(app.cfg.VolumeSteps)
+	target := data.Volume
+	if data.Relative {
+		target += int32(math.Round(float64(current) * float64(steps) / player.MaxStateVolume))
+	}
+	target = max(min(target, steps), 0)
+	return uint32(target) * player.MaxStateVolume / uint32(steps)
 }
 
 // Send notification that the volume changed.

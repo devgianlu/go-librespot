@@ -17,6 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 	"github.com/devgianlu/go-librespot/spclient"
 	"github.com/stretchr/testify/require"
 )
@@ -903,6 +904,27 @@ func TestAnswerWithoutSession(t *testing.T) {
 	resp = ts.do(http.MethodGet, "/status", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Contains(t, body(t, resp), "someone")
+}
+
+// A volume set while there is no session is kept for the next one, so its first
+// state carries the real level instead of a placeholder.
+func TestAnswerWithoutSessionTakesVolume(t *testing.T) {
+	ts := newTestServer(t, nil)
+	app, saves := newVolumeTestApp(t, &Config{VolumeSteps: 100, InitialVolume: 100}, nil)
+	app.server = ts.server
+
+	stop := app.answerWithoutSession(context.Background())
+	t.Cleanup(stop)
+
+	resp := ts.do(http.MethodPost, "/player/volume", map[string]any{"volume": 37})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	requireSaved(t, saves, player.MaxStateVolume*37/100)
+
+	resp = ts.do(http.MethodPost, "/player/volume", map[string]any{"volume": -5, "relative": true})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	requireSaved(t, saves, player.MaxStateVolume*32/100)
+
+	require.Equal(t, uint32(player.MaxStateVolume*32/100), app.sessionVolume())
 }
 
 func TestApiUnknownPathIsNotFound(t *testing.T) {
