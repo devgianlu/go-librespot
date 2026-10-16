@@ -151,6 +151,7 @@ var endpointMethods = map[string][]string{
 	"/player/repeat_track":            {http.MethodPost},
 	"/player/shuffle_context":         {http.MethodPost},
 	"/player/add_to_queue":            {http.MethodPost},
+	"/player/queue":                   {http.MethodGet},
 	"/player/output":                  {http.MethodPost},
 	"/context/tracks":                 {http.MethodGet},
 	"/library/playlists":              {http.MethodGet},
@@ -341,6 +342,35 @@ func TestApiStatusWireFormat(t *testing.T) {
 	}`, body(t, resp))
 }
 
+// GET /player/queue says null where an entry has no uid or no metadata yet,
+// and [] where nothing is listed, rather than leaving the field out.
+func TestApiPlayerQueueWireFormat(t *testing.T) {
+	ts := newTestServer(t, func(ApiRequest) (any, error) {
+		return &ApiQueue{
+			PrevTracks: []ApiQueueEntry{},
+			Track:      &ApiQueueEntry{Uri: "spotify:track:xxx", Provider: QueueEntryProviderContext},
+			NextTracks: []ApiQueueEntry{},
+		}, nil
+	})
+
+	resp := ts.do(http.MethodGet, "/player/queue", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, ApiRequestTypeGetQueue, ts.request().Type)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body(t, resp)), &got))
+	require.Equal(t, []any{}, got["prev_tracks"])
+	require.Equal(t, []any{}, got["next_tracks"])
+	track, ok := got["track"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "context", track["provider"])
+	for _, field := range []string{"uid", "track"} {
+		value, present := track[field]
+		require.True(t, present, "%s must be present", field)
+		require.Nil(t, value, "%s must be null", field)
+	}
+}
+
 // The nullable fields must serialise as null rather than disappear.
 func TestApiStatusWireFormatNulls(t *testing.T) {
 	ts := newTestServer(t, func(ApiRequest) (any, error) {
@@ -374,7 +404,6 @@ func TestApiSimpleCommands(t *testing.T) {
 		"/player/pause":     ApiRequestTypePause,
 		"/player/playpause": ApiRequestTypePlayPause,
 		"/player/stop":      ApiRequestTypeStop,
-		"/player/prev":      ApiRequestTypePrev,
 		"/token":            ApiRequestTypeToken,
 	} {
 		t.Run(path, func(t *testing.T) {
@@ -452,6 +481,43 @@ func TestApiNext(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		require.Nil(t, ts.request().Data.(ApiNext).Uri)
 	})
+}
+
+func TestApiPrev(t *testing.T) {
+	t.Run("without seeking", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		ts.do(http.MethodPost, "/player/prev", map[string]any{"allow_seeking": false})
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypePrev, req.Type)
+		data := req.Data.(ApiPrev)
+		require.NotNil(t, data.AllowSeeking)
+		require.False(t, *data.AllowSeeking)
+	})
+
+	t.Run("without a body", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/prev", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Nil(t, ts.request().Data.(ApiPrev).AllowSeeking, "absent: seeking allowed, as before")
+	})
+
+	t.Run("rejects invalid json", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/prev", "{not json")
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		ts.requireNoRequest()
+	})
+}
+
+func TestPrevAllowsSeekingUnlessTold(t *testing.T) {
+	no, yes := false, true
+	require.True(t, ApiPrev{}.allowsSeeking(), "a bare request rewinds, as before")
+	require.True(t, ApiPrev{AllowSeeking: &yes}.allowsSeeking())
+	require.False(t, ApiPrev{AllowSeeking: &no}.allowsSeeking())
 }
 
 func TestApiSeek(t *testing.T) {

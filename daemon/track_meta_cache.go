@@ -61,6 +61,16 @@ func (c *trackMetaCache) get(uri string) *librespot.Media {
 	return media
 }
 
+// peek is get without counting as a use: looking does not keep an entry from
+// being evicted.
+func (c *trackMetaCache) peek(uri string) *librespot.Media {
+	if c == nil {
+		return nil
+	}
+	media, _ := c.lru.Peek(uri)
+	return media
+}
+
 func (c *trackMetaCache) put(uri string, media *librespot.Media) {
 	if c == nil || uri == "" || media == nil {
 		return
@@ -268,6 +278,9 @@ type metaFetcher struct {
 	fetch   func(ctx context.Context, req *extmetadatapb.BatchedEntityRequest) (*extmetadatapb.BatchedExtensionResponse, error)
 	resolve func(ctx context.Context, uri string) (tracks.ContextResolver, error)
 
+	// cached is told each time a batch cached tracks.
+	cached func()
+
 	// inFlight single-flights the window fetch: a timer that fires while one
 	// runs re-arms itself rather than starting another.
 	inFlight atomic.Bool
@@ -275,11 +288,12 @@ type metaFetcher struct {
 	sweeps metaSweepQueue
 }
 
-func newMetaFetcher(log librespot.Logger, cache *trackMetaCache, sp *spclient.Spclient) *metaFetcher {
+func newMetaFetcher(log librespot.Logger, cache *trackMetaCache, sp *spclient.Spclient, cached func()) *metaFetcher {
 	return &metaFetcher{
-		log:   log,
-		cache: cache,
-		fetch: sp.ExtendedMetadata,
+		log:    log,
+		cache:  cache,
+		cached: cached,
+		fetch:  sp.ExtendedMetadata,
 		resolve: func(ctx context.Context, uri string) (tracks.ContextResolver, error) {
 			// A context of its own, never the playing one: the resolver behind
 			// a track list mutates its pages as it walks, and is reachable only
@@ -346,6 +360,9 @@ func (f *metaFetcher) fetchBatch(ctx context.Context, uris []string) (int, error
 		}
 	}
 
+	if cached > 0 && f.cached != nil {
+		f.cached()
+	}
 	return cached, nil
 }
 
