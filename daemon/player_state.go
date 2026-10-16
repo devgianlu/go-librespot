@@ -201,11 +201,19 @@ func deviceAddressMask() string {
 }
 
 func (p *AppPlayer) initState() {
+	// The first state pushed to Spotify must carry the real level: a controller
+	// steps its volume buttons from what it was shown. Without external volume
+	// the session sets its own once the dealer connects.
+	volume := uint32(player.MaxStateVolume)
+	if p.app.cfg.ExternalVolume {
+		volume = p.app.sessionVolume()
+	}
+
 	p.state = &State{
 		lastCommand: nil,
 		device: &connectpb.DeviceInfo{
 			CanPlay:               true,
-			Volume:                player.MaxStateVolume,
+			Volume:                volume,
 			Name:                  p.app.cfg.DeviceName,
 			DeviceId:              p.app.deviceId,
 			DeviceType:            p.app.deviceType,

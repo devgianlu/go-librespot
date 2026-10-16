@@ -9,6 +9,7 @@ import (
 	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 	connectpb "github.com/devgianlu/go-librespot/proto/spotify/connectstate"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
@@ -288,4 +289,19 @@ func TestStateRetryDelayBacksOff(t *testing.T) {
 	}
 
 	require.GreaterOrEqual(t, prev, statePutMaxBackoff*4/5, "backoff should reach the cap")
+}
+
+// Under external volume the first state carries the level the app holds, not a
+// placeholder a controller would step its buttons from.
+func TestInitStateVolume(t *testing.T) {
+	held := uint32(player.MaxStateVolume * 37 / 100)
+
+	p := &AppPlayer{app: &App{cfg: &Config{ExternalVolume: true, VolumeSteps: 100}, volume: &held}}
+	p.initState()
+	require.Equal(t, held, p.state.device.Volume)
+
+	p = &AppPlayer{app: &App{cfg: &Config{VolumeSteps: 100}, volume: &held}}
+	p.initState()
+	require.Equal(t, uint32(player.MaxStateVolume), p.state.device.Volume,
+		"without external volume the session sets its own level once the dealer connects")
 }

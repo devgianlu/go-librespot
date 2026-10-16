@@ -1018,7 +1018,9 @@ paths:
                 $ref: '#/components/schemas/volume'
     post:
       operationId: playerSetVolume
-      description: Set player volume
+      description: |
+        Set player volume. Accepted without a session too: the volume is kept, and
+        with external volume every new session starts from it.
       requestBody:
         required: true
         content:
