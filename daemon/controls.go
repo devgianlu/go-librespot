@@ -1612,10 +1612,15 @@ func (p *AppPlayer) startAutoplay(prevTrackUris []string, drop bool, then func(b
 	})
 }
 
-// Return the volume as an integer in the range 0..player.MaxStateVolume, as
-// used in the API.
+// apiVolume is the session's volume in the API's range, 0..volume_steps.
 func (p *AppPlayer) apiVolume() uint32 {
-	return uint32(math.Round(float64(p.state.device.Volume*p.app.cfg.VolumeSteps) / player.MaxStateVolume))
+	return p.app.volumeSteps(p.state.device.Volume)
+}
+
+// volumeSteps converts a volume in the range 0..player.MaxStateVolume to the
+// API's range, 0..volume_steps.
+func (app *App) volumeSteps(volume uint32) uint32 {
+	return uint32(math.Round(float64(volume*app.cfg.VolumeSteps) / player.MaxStateVolume))
 }
 
 // Set the player volume to the new volume, also notifies about the change.
@@ -1662,6 +1667,12 @@ func (app *App) setVolumeWithoutSession(data ApiSetVolume) {
 	app.setVolume(newVal)
 }
 
+// volumeWithoutSession answers a volume request while there is no session with
+// the volume the next one starts from.
+func (app *App) volumeWithoutSession() *ApiVolume {
+	return &ApiVolume{Max: app.cfg.VolumeSteps, Value: app.volumeSteps(app.sessionVolume())}
+}
+
 // sessionVolume is the volume a session starts at when the volume is external:
 // the last one set while this process runs, else the one saved by an earlier
 // run unless ignore_last_volume is set, else initial_volume.
@@ -1685,7 +1696,7 @@ func (app *App) volumeFromApi(data ApiSetVolume, current uint32) uint32 {
 	steps := int32(app.cfg.VolumeSteps)
 	target := data.Volume
 	if data.Relative {
-		target += int32(math.Round(float64(current) * float64(steps) / player.MaxStateVolume))
+		target += int32(app.volumeSteps(current))
 	}
 	target = max(min(target, steps), 0)
 	return uint32(target) * player.MaxStateVolume / uint32(steps)

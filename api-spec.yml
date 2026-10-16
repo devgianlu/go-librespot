@@ -1008,7 +1008,9 @@ paths:
   /player/volume:
     get:
       operationId: playerGetVolume
-      description: Get player volume
+      description: |
+        Get player volume. Without a session, the volume the next session starts from
+        when the volume is external.
       responses:
         200:
           description: Returns the player volume settings
