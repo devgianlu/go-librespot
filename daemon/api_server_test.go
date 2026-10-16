@@ -916,7 +916,11 @@ func TestAnswerWithoutSessionTakesVolume(t *testing.T) {
 	stop := app.answerWithoutSession(context.Background())
 	t.Cleanup(stop)
 
-	resp := ts.do(http.MethodPost, "/player/volume", map[string]any{"volume": 37})
+	resp := ts.do(http.MethodGet, "/player/volume", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"value": 100, "max": 100}`, body(t, resp), "nothing set yet: initial_volume")
+
+	resp = ts.do(http.MethodPost, "/player/volume", map[string]any{"volume": 37})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	requireSaved(t, saves, player.MaxStateVolume*37/100)
 
@@ -925,6 +929,9 @@ func TestAnswerWithoutSessionTakesVolume(t *testing.T) {
 	requireSaved(t, saves, player.MaxStateVolume*32/100)
 
 	require.Equal(t, uint32(player.MaxStateVolume*32/100), app.sessionVolume())
+	resp = ts.do(http.MethodGet, "/player/volume", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"value": 32, "max": 100}`, body(t, resp))
 }
 
 func TestApiUnknownPathIsNotFound(t *testing.T) {
