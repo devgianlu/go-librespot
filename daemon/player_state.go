@@ -342,8 +342,10 @@ func contextMetadata(fromCommand, fromResolver map[string]string) map[string]str
 // goroutine, and never blocks: the state is marshalled here so that the lane
 // carries bytes rather than protos this loop goes on mutating.
 func (p *AppPlayer) pushState(reason connectpb.PutStateReason) {
+	p.forgetRemoteIfActive()
+
 	p.stateSeq++
-	push := statePush{seq: p.stateSeq, reason: reason, spotConnId: p.spotConnId}
+	push := statePush{seq: p.stateSeq, reason: reason, spotConnId: p.spotConnId, active: p.state.active}
 
 	if reason != connectpb.PutStateReason_BECAME_INACTIVE {
 		body, err := proto.Marshal(p.buildStateRequest(reason))
@@ -407,6 +409,22 @@ func (p *AppPlayer) applyStatePushResult(res statePushResult) {
 	}
 
 	p.stateRetries = 0
+
+	// The answer to a push is the cluster as it stands, the only one a device
+	// that just connected gets before something changes. It travels on another
+	// channel than the dealer's updates, so it can arrive after a newer one:
+	// an answer to a push made while this device was active (it names this
+	// device), or one no newer than the last cluster the remote was read from
+	// (the player state keeps its timestamp when a device leaves or takes
+	// over), would put back a remote that has moved on. It stays out of
+	// lastClusterTimestamp, which decides when this device was taken over:
+	// player state timestamps come from each device's own clock.
+	if res.cluster != nil && !p.state.active && !res.sentActive {
+		if ts := res.cluster.GetPlayerState().GetTimestamp(); ts > p.remoteSeen {
+			p.remoteSeen = ts
+			p.observeCluster(res.cluster)
+		}
+	}
 
 	// Any push registers the device, so playback readiness does not hinge on
 	// the initial one in particular having got through.

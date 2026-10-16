@@ -188,6 +188,24 @@ type ApiPlaylistRemoveTrack struct {
 	Uri string `json:"uri"`
 }
 
+// ApiRemote The playback of the device the account's session is active on, when it is another device than this one. Kept current from Spotify's Connect cluster updates, which also raise the remote event. It needs a session: with zeroconf the daemon logs out once another device takes the playback over, and reports the remote again once a session is back.
+type ApiRemote struct {
+	// DeviceId The active device ID
+	DeviceId string `json:"device_id"`
+
+	// DeviceName The active device name, as its app reports it
+	DeviceName string `json:"device_name"`
+
+	// DeviceType The active device type, for example SMARTPHONE or COMPUTER
+	DeviceType string `json:"device_type"`
+
+	// Paused Whether the playhead stands still on the active device: paused, stopped or buffering. When false, the position advances from the one given at the time of the status.
+	Paused bool `json:"paused"`
+
+	// Track The track playing there, its position as of the status or the event that carries it. Null until its metadata is resolved, for good with metadata.enabled off (the daemon makes no request playback does not need) and for an item with no metadata (a local file, an ad).
+	Track *ApiTrack `json:"track"`
+}
+
 // ApiRepeatContext A toggle repeating context payload
 type ApiRepeatContext struct {
 	// RepeatContext Whether repeating context should be enabled
@@ -276,6 +294,9 @@ type ApiStatus struct {
 
 	// PlayOriginDeviceId The device ID that sent the command starting the playback, null when the playback was started locally through this API
 	PlayOriginDeviceId *string `json:"play_origin_device_id"`
+
+	// Remote What the account plays on another Spotify Connect device, null when no device is active, this one is, or the active one has nothing loaded
+	Remote *ApiRemote `json:"remote"`
 
 	// RepeatContext Whether the repeat context feature is enabled
 	RepeatContext bool `json:"repeat_context"`
@@ -512,6 +533,9 @@ type ServerInterface interface {
 
 	// (POST /player/stop)
 	PlayerStop(w http.ResponseWriter, r *http.Request)
+
+	// (POST /player/transfer)
+	PlayerTransfer(w http.ResponseWriter, r *http.Request)
 
 	// (GET /player/volume)
 	PlayerGetVolume(w http.ResponseWriter, r *http.Request)
@@ -956,6 +980,20 @@ func (siw *ServerInterfaceWrapper) PlayerStop(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// PlayerTransfer operation middleware
+func (siw *ServerInterfaceWrapper) PlayerTransfer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PlayerTransfer(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PlayerGetVolume operation middleware
 func (siw *ServerInterfaceWrapper) PlayerGetVolume(w http.ResponseWriter, r *http.Request) {
 
@@ -1169,6 +1207,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/player/seek", wrapper.PlayerSeek)
 	m.HandleFunc("POST "+options.BaseURL+"/player/shuffle_context", wrapper.PlayerShuffleContext)
 	m.HandleFunc("POST "+options.BaseURL+"/player/stop", wrapper.PlayerStop)
+	m.HandleFunc("POST "+options.BaseURL+"/player/transfer", wrapper.PlayerTransfer)
 	m.HandleFunc("GET "+options.BaseURL+"/player/volume", wrapper.PlayerGetVolume)
 	m.HandleFunc("POST "+options.BaseURL+"/player/volume", wrapper.PlayerSetVolume)
 	m.HandleFunc("POST "+options.BaseURL+"/set_device_name", wrapper.SetDeviceName)
