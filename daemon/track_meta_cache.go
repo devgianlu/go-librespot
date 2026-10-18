@@ -289,6 +289,17 @@ func newMetaFetcher(log librespot.Logger, cache *trackMetaCache, sp *spclient.Sp
 	}
 }
 
+// fetchOne resolves one track or episode into the cache and returns it.
+func (f *metaFetcher) fetchOne(ctx context.Context, uri string) (*librespot.Media, error) {
+	if _, err := f.fetchBatch(ctx, []string{uri}); err != nil {
+		return nil, err
+	}
+	if media := f.cache.get(uri); media != nil {
+		return media, nil
+	}
+	return nil, fmt.Errorf("no metadata for %s", uri)
+}
+
 // fetchBatch performs one batched extended-metadata request for the given
 // track/episode URIs and fills the cache, returning how many were cached. Each
 // uri is queried under its own kind (TRACK_V4 or EPISODE_V4), so a mixed

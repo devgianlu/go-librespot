@@ -71,3 +71,13 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `value`: Whether repeating context is enabled
 - `repeat_track`: The player repeating track setting changed
     - `value`: Whether repeating track is enabled
+- `remote`: What the account plays on another Spotify Connect device changed: the `remote` object of `/status`, or
+  `null` when there is none (no device is active, this one is, or nothing is loaded there). Raised again once the
+  remote track is named, which takes `metadata.enabled`.
+    - `device_id`: The active device ID
+    - `device_name`: The active device name, as its app reports it
+    - `device_type`: The active device type, for example `SMARTPHONE` or `COMPUTER`
+    - `paused`: Whether the playhead stands still on the active device (paused, stopped or buffering); when false,
+      the position advances from the one given
+    - `track`: The track playing there, in the shape of the `track` of `/status` (its format fields empty), or `null`
+      until it is named

@@ -138,6 +138,7 @@ components:
         - repeat_track
         - shuffle_context
         - track
+        - remote
       properties:
         username:
           description: Currently active account's username
@@ -208,6 +209,14 @@ components:
           allOf:
             - $ref: '#/components/schemas/track'
           nullable: true
+        remote:
+          description: >-
+            What the account plays on another Spotify Connect device, null
+            when no device is active, this one is, or the active one has
+            nothing loaded
+          allOf:
+            - $ref: '#/components/schemas/remote'
+          nullable: true
         next_track:
           description: >-
             The upcoming track when its metadata is cached (metadata.enabled),
@@ -217,6 +226,41 @@ components:
             - $ref: '#/components/schemas/track'
           nullable: true
           x-omitempty: true
+    remote:
+      x-go-name: ApiRemote
+      description: >-
+        The playback of the device the account's session is active on, when it
+        is another device than this one. Kept current from Spotify's Connect
+        cluster updates, which also raise the remote event. It needs a session:
+        with zeroconf the daemon logs out once another device takes the
+        playback over, and reports the remote again once a session is back.
+      type: object
+      required: [ device_id, device_name, device_type, paused, track ]
+      properties:
+        device_id:
+          description: The active device ID
+          type: string
+        device_name:
+          description: The active device name, as its app reports it
+          type: string
+        device_type:
+          description: The active device type, for example SMARTPHONE or COMPUTER
+          type: string
+        paused:
+          description: >-
+            Whether the playhead stands still on the active device: paused,
+            stopped or buffering. When false, the position advances from the
+            one given at the time of the status.
+          type: boolean
+        track:
+          description: >-
+            The track playing there, its position as of the status or the
+            event that carries it. Null until its metadata is resolved, for good with metadata.enabled
+            off (the daemon makes no request playback does not need) and for
+            an item with no metadata (a local file, an ad).
+          allOf:
+            - $ref: '#/components/schemas/track'
+          nullable: true
     contextTrackItem:
       x-go-name: ApiContextTrackItem
       description: One entry of a context listing
@@ -1109,6 +1153,24 @@ paths:
       responses:
         200:
           description: Successful response
+  /player/transfer:
+    post:
+      operationId: playerTransfer
+      description: >-
+        Take over the session from whichever device of the account is active:
+        its context, track, position, queue and options carry over, and it
+        plays here even if it was paused there. Answers once Spotify accepted
+        the request; the transfer itself arrives afterwards like any other.
+        Does nothing when this device is already the active one.
+      responses:
+        200:
+          description: Spotify accepted the transfer, or this device is already active
+        204:
+          description: No active session
+        403:
+          description: Spotify refused the transfer
+        404:
+          description: Spotify answered the transfer with not found
   /player/output:
     post:
       operationId: playerOutput

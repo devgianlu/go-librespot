@@ -410,6 +410,17 @@ func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, p
 	})
 }
 
+// transferAnchor is where a transferred playback stands. A paused position
+// does not move: anchored at the pause, a transfer that resumes would count
+// the paused time as played, so a paused one is anchored at the transfer.
+func transferAnchor(playback *connectpb.Playback) (timestamp, position int64) {
+	timestamp = playback.GetTimestamp()
+	if playback.GetIsPaused() {
+		timestamp = time.Now().UnixMilli()
+	}
+	return timestamp, int64(playback.GetPositionAsOfTimestamp())
+}
+
 // transferContext takes over playback from another device. The transfer itself
 // is claimed by the caller before this is reached; resolving the context and
 // finding the track being handed over runs on the loader lane.
@@ -518,8 +529,7 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, sent
 					if continuation && !keep {
 						// Loaded like any other transfer, so from where it says.
 						p.app.log.Debugf("stream changed while resolving the transfer, loading it instead")
-						p.state.player.Timestamp = transferState.Playback.GetTimestamp()
-						p.state.player.PositionAsOfTimestamp = int64(transferState.Playback.GetPositionAsOfTimestamp())
+						p.state.player.Timestamp, p.state.player.PositionAsOfTimestamp = transferAnchor(transferState.Playback)
 						p.state.setPaused(paused)
 					}
 					if continuation {
@@ -546,6 +556,14 @@ func (p *AppPlayer) transferContext(transferState *connectpb.TransferState, sent
 					if keep {
 						p.continuePlayback(transferState.Playback, paused)
 						return
+					}
+
+					// A paused session resumed here stood still while the
+					// context resolved: its position starts moving with the
+					// load, unless something moved it meanwhile (a seek).
+					if transferState.Playback.GetIsPaused() &&
+						p.state.player.PositionAsOfTimestamp == int64(transferState.Playback.GetPositionAsOfTimestamp()) {
+						p.state.player.Timestamp = time.Now().UnixMilli()
 					}
 
 					// skip forward if the transferred track is unplayable, so a
