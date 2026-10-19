@@ -233,6 +233,65 @@ components:
           allOf:
             - $ref: '#/components/schemas/track'
           nullable: true
+    queueEntry:
+      x-go-name: ApiQueueEntry
+      description: One entry of the play order
+      type: object
+      required: [ uri, uid, provider, track ]
+      properties:
+        uri:
+          description: >-
+            The entry's URI: a track, an episode, or anything else the
+            context lists, such as a local file (its track is then null)
+          type: string
+        uid:
+          description: >-
+            The entry's unique id within the play order, which tells apart two
+            copies of the same track. Null for entries that have none, such as
+            the tracks of an album.
+          type: string
+          nullable: true
+        provider:
+          description: >-
+            Where the entry comes from: "queue" for the user's queue, "context"
+            for the context being played, "autoplay" for the station that
+            carries on once the context has run out.
+          type: string
+          enum: [ queue, context, autoplay ]
+        track:
+          description: >-
+            Full track metadata, or null while it is not cached (always null
+            with metadata.enabled off)
+          allOf:
+            - $ref: '#/components/schemas/track'
+          nullable: true
+    queue:
+      x-go-name: ApiQueue
+      description: The play order around the current track
+      type: object
+      required: [ prev_tracks, track, next_tracks ]
+      properties:
+        prev_tracks:
+          description: >-
+            The entries before the current one in the play order (the context,
+            in its shuffled order when shuffling), oldest first, up to 32. Not a
+            play history: they need not have played, as when a context is
+            started from one of its tracks
+          type: array
+          items:
+            $ref: '#/components/schemas/queueEntry'
+        track:
+          description: The current entry, null when nothing is loaded
+          allOf:
+            - $ref: '#/components/schemas/queueEntry'
+          nullable: true
+        next_tracks:
+          description: >-
+            The entries that play next, nearest first, the user's queue before
+            the rest, up to 32
+          type: array
+          items:
+            $ref: '#/components/schemas/queueEntry'
     contextTracks:
       x-go-name: ApiContextTracks
       description: A context's track listing
@@ -586,6 +645,19 @@ components:
             The track URI to skip to. When omitted the next track in the
             context is played.
           type: string
+    prev:
+      x-go-name: ApiPrev
+      description: A skip to previous payload
+      type: object
+      properties:
+        allow_seeking:
+          description: >-
+            Whether a track played past its first three seconds is rewound
+            instead of left for the previous one, as with Spotify Connect's own
+            skip_prev option. False goes to the previous track, or restarts
+            the current one when there is none before it.
+          type: boolean
+          default: true
     seek:
       x-go-name: ApiSeek
       description: A seek payload
@@ -1144,6 +1216,11 @@ paths:
     post:
       operationId: playerPrev
       description: Skip to previous track (or rewind current track)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/prev'
       responses:
         200:
           description: Successful response
@@ -1233,6 +1310,26 @@ paths:
       responses:
         200:
           description: Successful response
+  /player/queue:
+    get:
+      operationId: playerGetQueue
+      description: >-
+        List the play order around the current track, as Spotify Connect holds
+        it: the tracks before it in the play order, then the user's queue and
+        the rest of the context. Each entry says where it comes from and carries
+        its metadata when cached. The response never waits on the network: with
+        metadata.enabled the daemon fetches the metadata of these entries in the
+        background, and the queue event says when the response changed, entries
+        newly cached included.
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/queue'
+        204:
+          description: No active session
   /player/add_to_queue:
     post:
       operationId: playerAddToQueue
