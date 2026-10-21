@@ -102,15 +102,13 @@ func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl st
 	}()
 
 	// request the first chunk, needed for the complete content length
-	resp, err := r.downloadChunk(0)
+	firstChunk, header, err := r.downloadChunk(0)
 	if err != nil {
 		return nil, fmt.Errorf("failed requesting first chunk: %w", err)
 	}
 
-	defer func() { _ = resp.Body.Close() }()
-
 	// parse the Content-Range header with the complete content length
-	_, _, r.len, err = parseContentRange(resp)
+	_, _, r.len, err = parseContentRange(&http.Response{Header: header})
 	if err != nil {
 		return nil, fmt.Errorf("invalid first chunk content range response: %w", err)
 	}
@@ -123,10 +121,7 @@ func NewHttpChunkedReader(log librespot.Logger, client *http.Client, audioUrl st
 		r.chunks[i] = newChunkItem()
 	}
 
-	r.chunks[0].data, err = io.ReadAll(r.measureLatency(resp.Body))
-	if err != nil {
-		return nil, fmt.Errorf("failed reading first chunk: %w", err)
-	}
+	r.chunks[0].data = firstChunk
 
 	// The first chunk is fetched eagerly here, so count it towards completion.
 	r.completedChunks = 1
@@ -147,54 +142,108 @@ func (r *HttpChunkedReader) isClosed() bool {
 	return r.ctx.Err() != nil
 }
 
-func (r *HttpChunkedReader) downloadChunk(idx int) (*http.Response, error) {
+// chunkStallTimeout is how long a chunk request may go without receiving a
+// byte before it is abandoned and retried. A stalled CDN connection usually
+// recovers on a new request, while waiting for the client timeout holds up a
+// load or seek for the whole of it.
+var chunkStallTimeout = 10 * time.Second
+
+var errChunkStalled = errors.New("chunk download stalled")
+
+// downloadChunk requests and reads one chunk, returning its data and the
+// response header. A failed request, an unexpected status and a body that
+// breaks off or stalls are all retried.
+func (r *HttpChunkedReader) downloadChunk(idx int) ([]byte, http.Header, error) {
+	type chunkResponse struct {
+		data   []byte
+		header http.Header
+	}
+
 	retryBackoff := backoff.WithContext(
 		backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 3),
 		r.ctx,
 	)
 
-	return backoff.RetryWithData(func() (*http.Response, error) {
-		resp, err := r.client.Do((&http.Request{
-			Method: "GET",
-			URL:    r.url,
-			Header: http.Header{
-				"User-Agent": []string{librespot.UserAgent()},
-				"Range": []string{fmt.Sprintf("bytes=%d-%d",
-					idx*DefaultChunkSize,
-					min(max(r.len, DefaultChunkSize), int64((idx+1)*DefaultChunkSize))-1,
-				)},
-			},
-		}).WithContext(r.ctx))
+	res, err := backoff.RetryNotifyWithData(func() (chunkResponse, error) {
+		data, header, err := r.downloadChunkOnce(idx)
 		if err != nil {
 			err = r.closeErr(err)
 			if errors.Is(err, net.ErrClosed) {
-				return nil, backoff.Permanent(err)
+				return chunkResponse{}, backoff.Permanent(err)
 			}
 
-			return nil, err
+			return chunkResponse{}, err
 		}
 
-		if resp.StatusCode != http.StatusPartialContent {
-			_ = resp.Body.Close()
-			return nil, fmt.Errorf("unexpected chunk response status: %w",
-				&librespot.HTTPStatusError{Endpoint: "audio file", StatusCode: resp.StatusCode})
-		}
-
-		return resp, nil
-	}, retryBackoff)
+		return chunkResponse{data, header}, nil
+	}, retryBackoff, func(err error, _ time.Duration) {
+		r.log.Debugf("retrying chunk %d: %v", idx, err)
+	})
+	return res.data, res.header, err
 }
 
-func (r *HttpChunkedReader) downloadAndRead(idx int) ([]byte, error) {
-	resp, err := r.downloadChunk(idx)
+func (r *HttpChunkedReader) downloadChunkOnce(idx int) ([]byte, http.Header, error) {
+	ctx, cancel := context.WithCancelCause(r.ctx)
+	defer cancel(nil)
+
+	stall := time.AfterFunc(chunkStallTimeout, func() { cancel(errChunkStalled) })
+	defer stall.Stop()
+
+	stalled := func(err error) error {
+		if errors.Is(context.Cause(ctx), errChunkStalled) {
+			return errChunkStalled
+		}
+		return err
+	}
+
+	resp, err := r.client.Do((&http.Request{
+		Method: "GET",
+		URL:    r.url,
+		Header: http.Header{
+			"User-Agent": []string{librespot.UserAgent()},
+			"Range": []string{fmt.Sprintf("bytes=%d-%d",
+				idx*DefaultChunkSize,
+				min(max(r.len, DefaultChunkSize), int64((idx+1)*DefaultChunkSize))-1,
+			)},
+		},
+	}).WithContext(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("failed downloading chunk %d: %w", idx, r.closeErr(err))
+		return nil, nil, stalled(err)
 	}
 
 	defer func() { _ = resp.Body.Close() }()
 
-	data, err := io.ReadAll(r.measureLatency(resp.Body))
+	if resp.StatusCode != http.StatusPartialContent {
+		return nil, nil, fmt.Errorf("unexpected chunk response status: %w",
+			&librespot.HTTPStatusError{Endpoint: "audio file", StatusCode: resp.StatusCode})
+	}
+
+	data, err := io.ReadAll(r.measureLatency(&stallReader{resp.Body, stall}))
 	if err != nil {
-		return nil, fmt.Errorf("failed reading chunk %d: %w", idx, r.closeErr(err))
+		return nil, nil, fmt.Errorf("failed reading chunk %d: %w", idx, stalled(err))
+	}
+
+	return data, resp.Header, nil
+}
+
+// stallReader restarts the stall timer whenever the body makes progress.
+type stallReader struct {
+	io.Reader
+	timer *time.Timer
+}
+
+func (r *stallReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		r.timer.Reset(chunkStallTimeout)
+	}
+	return n, err
+}
+
+func (r *HttpChunkedReader) downloadAndRead(idx int) ([]byte, error) {
+	data, _, err := r.downloadChunk(idx)
+	if err != nil {
+		return nil, fmt.Errorf("failed downloading chunk %d: %w", idx, r.closeErr(err))
 	}
 
 	return data, nil
