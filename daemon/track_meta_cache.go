@@ -385,7 +385,10 @@ func (f *metaFetcher) sweep(ctx context.Context, missing []string, label string)
 // enumerateContextTracks walks every page of a context in its own order and
 // returns the track and episode uris it holds, at most maxTracks of them. It
 // stops at the end of the context, at the page cap, or on the first page that
-// fails to load.
+// fails to load, which is an error. A station that already yielded tracks is
+// the exception: it is endless, and the radio-router may answer 404 for a
+// later page, so a failure there ends the listing with the pages before it
+// instead of leaving the station unlisted forever.
 func enumerateContextTracks(ctx context.Context, resolver tracks.ContextResolver, maxTracks int) ([]string, error) {
 	typ := resolver.Type()
 
@@ -393,6 +396,8 @@ func enumerateContextTracks(ctx context.Context, resolver tracks.ContextResolver
 	for page := 0; page < maxContextPages; page++ {
 		items, err := resolver.Page(ctx, page)
 		if errors.Is(err, io.EOF) {
+			return uris, nil
+		} else if err != nil && len(uris) > 0 && strings.HasPrefix(resolver.Uri(), "spotify:station:") && ctx.Err() == nil {
 			return uris, nil
 		} else if err != nil {
 			return nil, fmt.Errorf("failed fetching page %d: %w", page, err)
