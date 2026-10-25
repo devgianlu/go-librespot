@@ -511,6 +511,121 @@ components:
             Whether the daemon is fully bootstrapped and ready to accept
             /player/play
           type: boolean
+    connectDevice:
+      x-go-name: ApiConnectDevice
+      description: A device of the account's Spotify Connect cluster
+      type: object
+      required: [ id, name, type, volume, is_self, is_active, is_offline, can_transfer ]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          description: Lowercase device type, e.g. `computer`, `smartphone`, `speaker`
+          type: string
+        volume:
+          description: Volume from 0 to 65535
+          type: integer
+          format: int32
+        is_self:
+          description: Whether this is the daemon's own device
+          type: boolean
+        is_active:
+          type: boolean
+        is_offline:
+          type: boolean
+        can_transfer:
+          description: Whether the device lists no reason to disallow a transfer
+          type: boolean
+    connectNowPlaying:
+      x-go-name: ApiConnectNowPlaying
+      description: The cluster's player state, as reported by the active device
+      type: object
+      required: [ context_uri, track_uri, track_name, artist_name, album_name, paused, playing, position, duration ]
+      properties:
+        context_uri:
+          type: string
+        track_uri:
+          type: string
+        track_name:
+          type: string
+        artist_name:
+          type: string
+        album_name:
+          type: string
+        paused:
+          type: boolean
+        playing:
+          type: boolean
+        position:
+          description: Position in milliseconds, extrapolated to the time of the response
+          type: integer
+          format: int64
+        duration:
+          type: integer
+          format: int64
+    connectDevices:
+      x-go-name: ApiConnectDevices
+      description: The latest Spotify Connect cluster known to the daemon
+      type: object
+      required: [ active_device_id, devices ]
+      properties:
+        active_device_id:
+          type: string
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/connectDevice'
+        now_playing:
+          $ref: '#/components/schemas/connectNowPlaying'
+    connectTransfer:
+      x-go-name: ApiConnectTransfer
+      description: A transfer of playback to another device
+      type: object
+      required: [ device_id ]
+      properties:
+        device_id:
+          type: string
+        paused:
+          description: Keep the playback paused on the target instead of resuming it
+          type: boolean
+          default: false
+          x-go-type-skip-optional-pointer: true
+    connectCommand:
+      x-go-name: ApiConnectCommand
+      description: A command for another device of the cluster
+      type: object
+      required: [ device_id, endpoint ]
+      properties:
+        device_id:
+          type: string
+        endpoint:
+          type: string
+          enum: [ pause, resume, skip_next, skip_prev, seek_to, set_volume, play ]
+        volume:
+          description: For `set_volume`, from 0 to 65535
+          type: integer
+          format: int32
+          x-go-type-skip-optional-pointer: true
+        position:
+          description: For `seek_to`, the position in milliseconds
+          type: integer
+          format: int64
+          x-go-type-skip-optional-pointer: true
+        uri:
+          description: For `play`, the context URI to play
+          type: string
+          x-go-type-skip-optional-pointer: true
+        skip_to_uri:
+          description: For `play`, the URI of the track of the context to start at
+          type: string
+          x-go-type-skip-optional-pointer: true
+        paused:
+          description: For `play`, load the context but keep it paused
+          type: boolean
+          default: false
+          x-go-type-skip-optional-pointer: true
     volume:
       x-go-name: ApiVolume
       description: The player volume settings
@@ -1248,3 +1363,58 @@ paths:
           description: Successful response
         400:
           description: The uri is missing or empty
+  /connect/devices:
+    get:
+      operationId: getConnectDevices
+      description: >-
+        Lists the devices of the account's Spotify Connect cluster, as last
+        reported by the connect-state service, with the cluster's now playing.
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/connectDevices'
+        204:
+          description: No active session
+        404:
+          description: No cluster has been received yet
+  /connect/transfer:
+    post:
+      operationId: connectTransfer
+      description: Transfers the playback of the account to another device.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/connectTransfer'
+      responses:
+        200:
+          description: Successful response
+        400:
+          description: The device is missing, or is this device and the request is a command
+        404:
+          description: The device is not in the cluster
+        502:
+          description: Spotify refused the request
+  /connect/command:
+    post:
+      operationId: connectCommand
+      description: Sends a playback command to another device of the cluster.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/connectCommand'
+      responses:
+        200:
+          description: Successful response
+        400:
+          description: The device or the command is invalid
+        404:
+          description: The device is not in the cluster
+        502:
+          description: Spotify refused the request

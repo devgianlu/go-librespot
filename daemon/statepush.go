@@ -46,6 +46,7 @@ type statePushResult struct {
 	seq      uint64
 	reason   connectpb.PutStateReason
 	publicIp string
+	cluster  *connectpb.Cluster
 	err      error
 }
 
@@ -170,7 +171,7 @@ func (l *statePushLane) run() {
 		cluster, err := l.put(ctx, push.spotConnId, push.reason, push.body)
 		cancel()
 
-		res := statePushResult{seq: push.seq, reason: push.reason, err: err}
+		res := statePushResult{seq: push.seq, reason: push.reason, err: err, cluster: cluster}
 		if device := cluster.GetDevice()[l.deviceId]; device != nil {
 			res.publicIp = device.PublicIp
 		}

@@ -13,6 +13,17 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for ConnectCommandEndpoint.
+const (
+	ConnectCommandEndpointPause     ConnectCommandEndpoint = "pause"
+	ConnectCommandEndpointPlay      ConnectCommandEndpoint = "play"
+	ConnectCommandEndpointResume    ConnectCommandEndpoint = "resume"
+	ConnectCommandEndpointSeekTo    ConnectCommandEndpoint = "seek_to"
+	ConnectCommandEndpointSetVolume ConnectCommandEndpoint = "set_volume"
+	ConnectCommandEndpointSkipNext  ConnectCommandEndpoint = "skip_next"
+	ConnectCommandEndpointSkipPrev  ConnectCommandEndpoint = "skip_prev"
+)
+
 // Defines values for TrackCodec.
 const (
 	TrackCodecAac     TrackCodec = "aac"
@@ -27,6 +38,81 @@ const (
 type ApiAddToQueue struct {
 	// Uri The URI for the track that should be added
 	Uri string `json:"uri"`
+}
+
+// ApiConnectCommand A command for another device of the cluster
+type ApiConnectCommand struct {
+	DeviceId string                 `json:"device_id"`
+	Endpoint ConnectCommandEndpoint `json:"endpoint"`
+
+	// Paused For `play`, load the context but keep it paused
+	Paused bool `json:"paused,omitempty"`
+
+	// Position For `seek_to`, the position in milliseconds
+	Position int64 `json:"position,omitempty"`
+
+	// SkipToUri For `play`, the URI of the track of the context to start at
+	SkipToUri string `json:"skip_to_uri,omitempty"`
+
+	// Uri For `play`, the context URI to play
+	Uri string `json:"uri,omitempty"`
+
+	// Volume For `set_volume`, from 0 to 65535
+	Volume int32 `json:"volume,omitempty"`
+}
+
+// ConnectCommandEndpoint defines model for ConnectCommand.Endpoint.
+type ConnectCommandEndpoint string
+
+// ApiConnectDevice A device of the account's Spotify Connect cluster
+type ApiConnectDevice struct {
+	// CanTransfer Whether the device lists no reason to disallow a transfer
+	CanTransfer bool   `json:"can_transfer"`
+	Id          string `json:"id"`
+	IsActive    bool   `json:"is_active"`
+	IsOffline   bool   `json:"is_offline"`
+
+	// IsSelf Whether this is the daemon's own device
+	IsSelf bool   `json:"is_self"`
+	Name   string `json:"name"`
+
+	// Type Lowercase device type, e.g. `computer`, `smartphone`, `speaker`
+	Type string `json:"type"`
+
+	// Volume Volume from 0 to 65535
+	Volume int32 `json:"volume"`
+}
+
+// ApiConnectDevices The latest Spotify Connect cluster known to the daemon
+type ApiConnectDevices struct {
+	ActiveDeviceId string             `json:"active_device_id"`
+	Devices        []ApiConnectDevice `json:"devices"`
+
+	// ApiConnectNowPlaying The cluster's player state, as reported by the active device
+	ApiConnectNowPlaying *ApiConnectNowPlaying `json:"now_playing,omitempty"`
+}
+
+// ApiConnectNowPlaying The cluster's player state, as reported by the active device
+type ApiConnectNowPlaying struct {
+	AlbumName  string `json:"album_name"`
+	ArtistName string `json:"artist_name"`
+	ContextUri string `json:"context_uri"`
+	Duration   int64  `json:"duration"`
+	Paused     bool   `json:"paused"`
+	Playing    bool   `json:"playing"`
+
+	// Position Position in milliseconds, extrapolated to the time of the response
+	Position  int64  `json:"position"`
+	TrackName string `json:"track_name"`
+	TrackUri  string `json:"track_uri"`
+}
+
+// ApiConnectTransfer A transfer of playback to another device
+type ApiConnectTransfer struct {
+	DeviceId string `json:"device_id"`
+
+	// Paused Keep the playback paused on the target instead of resuming it
+	Paused bool `json:"paused,omitempty"`
 }
 
 // ApiContextTrackItem One entry of a context listing
@@ -478,6 +564,12 @@ type PlaylistContainsParams struct {
 	Uris []string `form:"uris" json:"uris"`
 }
 
+// ConnectCommandJSONRequestBody defines body for ConnectCommand for application/json ContentType.
+type ConnectCommandJSONRequestBody = ApiConnectCommand
+
+// ConnectTransferJSONRequestBody defines body for ConnectTransfer for application/json ContentType.
+type ConnectTransferJSONRequestBody = ApiConnectTransfer
+
 // SetLikedJSONRequestBody defines body for SetLiked for application/json ContentType.
 type SetLikedJSONRequestBody = ApiSetLiked
 
@@ -525,6 +617,15 @@ type ServerInterface interface {
 
 	// (GET /auth/code)
 	GetAuthCode(w http.ResponseWriter, r *http.Request)
+
+	// (POST /connect/command)
+	ConnectCommand(w http.ResponseWriter, r *http.Request)
+
+	// (GET /connect/devices)
+	GetConnectDevices(w http.ResponseWriter, r *http.Request)
+
+	// (POST /connect/transfer)
+	ConnectTransfer(w http.ResponseWriter, r *http.Request)
 
 	// (GET /context/tracks)
 	GetContextTracks(w http.ResponseWriter, r *http.Request, params GetContextTracksParams)
@@ -639,6 +740,48 @@ func (siw *ServerInterfaceWrapper) GetAuthCode(w http.ResponseWriter, r *http.Re
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAuthCode(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConnectCommand operation middleware
+func (siw *ServerInterfaceWrapper) ConnectCommand(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConnectCommand(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetConnectDevices operation middleware
+func (siw *ServerInterfaceWrapper) GetConnectDevices(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetConnectDevices(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ConnectTransfer operation middleware
+func (siw *ServerInterfaceWrapper) ConnectTransfer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ConnectTransfer(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1300,6 +1443,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 
 	m.HandleFunc("GET "+options.BaseURL+"/{$}", wrapper.GetRoot)
 	m.HandleFunc("GET "+options.BaseURL+"/auth/code", wrapper.GetAuthCode)
+	m.HandleFunc("POST "+options.BaseURL+"/connect/command", wrapper.ConnectCommand)
+	m.HandleFunc("GET "+options.BaseURL+"/connect/devices", wrapper.GetConnectDevices)
+	m.HandleFunc("POST "+options.BaseURL+"/connect/transfer", wrapper.ConnectTransfer)
 	m.HandleFunc("GET "+options.BaseURL+"/context/tracks", wrapper.GetContextTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/events", wrapper.GetEvents)
 	m.HandleFunc("GET "+options.BaseURL+"/library/albums", wrapper.GetLibraryAlbums)
