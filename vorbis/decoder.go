@@ -70,6 +70,10 @@ type Decoder struct {
 	closed   bool
 	started  bool
 
+	// inputEnded is set once the input has no more bytes to give. What is
+	// already in the sync state still holds pages to decode.
+	inputEnded bool
+
 	lastGranulepos vorbis.OggInt64
 }
 
@@ -305,8 +309,16 @@ func (d *Decoder) readNextPage() (err error) {
 			continue
 		} else if ret == 0 {
 			// need more data
-			_, err = d.readChunk()
-			if err != nil {
+			if d.inputEnded {
+				return io.EOF
+			}
+
+			// The last chunk is short, and reported with the end of the input
+			// along with its bytes: those still hold the final pages, which
+			// are decoded before the stream is over.
+			if _, err = d.readChunk(); errors.Is(err, io.EOF) {
+				d.inputEnded = true
+			} else if err != nil {
 				return err
 			}
 		} else {
@@ -371,6 +383,7 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 	// empty the read buffer here, if we found the correct offset
 	// the buffer will contain the correct page data
 	d.buf = nil
+	d.inputEnded = false
 
 	// we trust that the bytes offset we were given is accurate and process the data at this point
 	if _, err = d.readChunk(); err != nil {
@@ -381,6 +394,7 @@ func (d *Decoder) SetPositionMs(pos int64) (err error) {
 			// of seeking close to the end, not a failure. Leave the decoder
 			// positioned at EOF; the next Read will correctly report the
 			// track as finished.
+			d.inputEnded = true
 			return nil
 		}
 		return fmt.Errorf("failed reading chunk: %w", err)
