@@ -48,6 +48,7 @@ type Player struct {
 
 	crossfadeSamples          int
 	flacEnabled               bool
+	silentPlayback            bool
 	normalisationEnabled      bool
 	normalisationUseAlbumGain bool
 	normalisationPregain      float32
@@ -122,6 +123,8 @@ type Options struct {
 	// FlacEnabled specifies if FLAC files should be preferred when available.
 	// When setting this to true, it is assumed that the PlayPlay plugin is provided.
 	FlacEnabled bool
+
+	SilentPlayback bool
 
 	// NormalisationEnabled specifies if the volume should be normalised according
 	// to Spotify parameters. Only track normalization is supported.
@@ -210,6 +213,7 @@ func NewPlayer(opts *Options) (*Player, error) {
 		cache:                     opts.Cache,
 		cdnQuarantine:             make(map[string]time.Time),
 		flacEnabled:               opts.FlacEnabled,
+		silentPlayback:            opts.SilentPlayback,
 		normalisationEnabled:      opts.NormalisationEnabled,
 		normalisationUseAlbumGain: opts.NormalisationUseAlbumGain,
 		normalisationPregain:      opts.NormalisationPregain,
@@ -843,6 +847,22 @@ func (p *Player) NewStream(ctx context.Context, client *http.Client, spotId libr
 	p.events.PostStreamResolveAudioFile(playbackId, int32(bitrate), media, file)
 
 	log.Debugf("selected format %s (%x)", file.Format.String(), file.FileId)
+
+	if p.silentPlayback {
+		silence := newSilentSource(int64(media.Duration()))
+		if position := StartPosition(mediaPosition, int64(media.Duration())); position > 0 {
+			_ = silence.SetPositionMs(position)
+		}
+
+		return &Stream{
+			PlaybackId:  playbackId,
+			RequestedId: requestedId,
+			Source:      silence,
+			Media:       media,
+			File:        file,
+			SampleRate:  SampleRate,
+		}, nil
+	}
 
 	audioKey, err := p.retrieveAudioKey(ctx, spotId, file.FileId)
 	if err != nil {

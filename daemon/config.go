@@ -42,7 +42,8 @@ type Config struct {
 	ZeroconfBackend               string
 	ZeroconfInterfacesToAdvertise []string
 
-	FlacEnabled bool
+	FlacEnabled    bool
+	SilentPlayback bool
 
 	// PreferFirewallFriendlyPorts tries accesspoints on 443 and 80 before the
 	// default 4070, which some networks block outbound.

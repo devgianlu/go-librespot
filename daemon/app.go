@@ -330,7 +330,8 @@ func (app *App) newAppPlayer(ctx context.Context, creds any) (_ *AppPlayer, err 
 
 		Cache: app.audioCache,
 
-		FlacEnabled: app.cfg.FlacEnabled,
+		FlacEnabled:    app.cfg.FlacEnabled,
+		SilentPlayback: app.cfg.SilentPlayback,
 
 		NormalisationEnabled:      !app.cfg.NormalisationDisabled,
 		NormalisationUseAlbumGain: app.cfg.NormalisationUseAlbumGain,

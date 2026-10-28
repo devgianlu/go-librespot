@@ -342,6 +342,11 @@
           "description": "Enables MPRIS communication with D-Bus on Linux, and the Now Playing widget and media keys on macOS",
           "default": false
         },
+        "silent_playback": {
+          "type": "boolean",
+          "description": "Play silence for each track's duration instead of fetching its audio, for a device that only relays playback state",
+          "default": false
+        },
         "flac_enabled": {
           "type": "boolean",
           "description": "Whether FLAC files should be preferred over other formats when available",
