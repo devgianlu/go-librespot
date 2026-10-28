@@ -342,6 +342,11 @@
           "description": "Enables MPRIS communication with D-Bus on Linux, and the Now Playing widget and media keys on macOS",
           "default": false
         },
+        "device_is_group": {
+          "type": "boolean",
+          "description": "Advertise the device as a group of speakers",
+          "default": false
+        },
         "flac_enabled": {
           "type": "boolean",
           "description": "Whether FLAC files should be preferred over other formats when available",

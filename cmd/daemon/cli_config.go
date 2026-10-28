@@ -65,6 +65,7 @@ type cliConfig struct {
 	ZeroconfInterfacesToAdvertise []string `koanf:"zeroconf_interfaces_to_advertise"`
 	MprisEnabled                  bool     `koanf:"mpris_enabled"`
 	FlacEnabled                   bool     `koanf:"flac_enabled"`
+	DeviceIsGroup                 bool     `koanf:"device_is_group"`
 	PreferFirewallFriendlyPorts   bool     `koanf:"prefer_firewall_friendly_ports"`
 	AccesspointPorts              []int    `koanf:"accesspoint_ports"`
 
@@ -141,8 +142,9 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 		ZeroconfBackend:               c.ZeroconfBackend,
 		ZeroconfInterfacesToAdvertise: c.ZeroconfInterfacesToAdvertise,
 
-		FlacEnabled: c.FlacEnabled,
-		ImageSize:   c.Server.ImageSize,
+		FlacEnabled:   c.FlacEnabled,
+		DeviceIsGroup: c.DeviceIsGroup,
+		ImageSize:     c.Server.ImageSize,
 
 		PreferFirewallFriendlyPorts: c.PreferFirewallFriendlyPorts,
 		AccesspointPorts:            c.AccesspointPorts,

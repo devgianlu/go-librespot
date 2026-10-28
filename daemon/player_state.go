@@ -223,6 +223,7 @@ func (p *AppPlayer) initState() {
 			Brand:                 "spotify",
 			Model:                 "go-librespot",
 			License:               "premium",
+			IsGroup:               p.app.cfg.DeviceIsGroup,
 			Capabilities: &connectpb.Capabilities{
 				CanBePlayer:                true,
 				RestrictToLocal:            false,
