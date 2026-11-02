@@ -47,7 +47,7 @@ func (suite *ApResolverSuite) SetupTest() {
 		_, _ = w.Write([]byte(suite.body))
 	}))
 
-	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client(), false)
+	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client(), nil)
 
 	// Point the resolver at the stub instead of the real endpoint.
 	baseUrl, err := url.Parse(suite.server.URL)
@@ -55,13 +55,17 @@ func (suite *ApResolverSuite) SetupTest() {
 	suite.resolver.baseUrl = baseUrl
 }
 
-// preferFirewallFriendlyPorts swaps in a resolver with the preference enabled,
-// pointed at the same stub. The preference is fixed at construction, so it
-// cannot be flipped on the resolver SetupTest already built.
-func (suite *ApResolverSuite) preferFirewallFriendlyPorts() {
+// preferPorts swaps in a resolver with a port order, pointed at the same stub.
+// The order is fixed at construction, so it cannot be changed on the resolver
+// SetupTest already built.
+func (suite *ApResolverSuite) preferPorts(ports []int) {
 	baseUrl := suite.resolver.baseUrl
-	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client(), true)
+	suite.resolver = NewApResolver(&librespot.NullLogger{}, suite.server.Client(), ports)
 	suite.resolver.baseUrl = baseUrl
+}
+
+func (suite *ApResolverSuite) preferFirewallFriendlyPorts() {
+	suite.preferPorts(AccesspointPorts(nil, true))
 }
 
 func (suite *ApResolverSuite) TearDownTest() {
@@ -239,6 +243,29 @@ func (suite *ApResolverSuite) TestPrefersFirewallFriendlyPorts() {
 	})
 }
 
+// Networks that intercept 443 but pass 80 ask for 80 first; unlisted ports
+// keep coming last in the directory's order.
+func (suite *ApResolverSuite) TestPrefersConfiguredPortOrder() {
+	suite.preferPorts([]int{80, 443})
+	suite.body = `{"accesspoint":[` +
+		`"ap-gew4:4070","ap-gew4:443","ap-gew4:80",` +
+		`"ap-guc3:4070","ap-gue1:443","ap-gae2:80"]}`
+
+	ctx := suite.T().Context()
+	get, err := suite.resolver.GetAccesspoint(ctx)
+	suite.Require().NoError(err)
+
+	got := make([]string, 6)
+	for i := range got {
+		got[i] = get(ctx)
+	}
+	suite.Equal([]string{
+		"ap-gew4:80", "ap-gae2:80",
+		"ap-gew4:443", "ap-gue1:443",
+		"ap-gew4:4070", "ap-guc3:4070",
+	}, got)
+}
+
 // Off by default: the directory's order is Spotify's own preference and should
 // not be second-guessed unless asked.
 func (suite *ApResolverSuite) TestKeepsServerOrderByDefault() {
@@ -268,7 +295,14 @@ func (suite *ApResolverSuite) TestDoesNotReorderOtherEndpointTypes() {
 	suite.Equal("s1:4070", spclient(ctx))
 }
 
-func TestFirewallFriendlyPortRank(t *testing.T) {
+func TestAccesspointPorts(t *testing.T) {
+	require.Nil(t, AccesspointPorts(nil, false))
+	require.Equal(t, []int{443, 80}, AccesspointPorts(nil, true))
+	// An explicit order wins over the firewall-friendly shorthand.
+	require.Equal(t, []int{80}, AccesspointPorts([]int{80}, true))
+}
+
+func TestPortRank(t *testing.T) {
 	for _, tt := range []struct {
 		addr string
 		want int
@@ -283,7 +317,7 @@ func TestFirewallFriendlyPortRank(t *testing.T) {
 		{"no-port", 2},
 	} {
 		t.Run(tt.addr, func(t *testing.T) {
-			require.Equal(t, tt.want, firewallFriendlyPortRank(tt.addr))
+			require.Equal(t, tt.want, portRank(tt.addr, FirewallFriendlyPorts))
 		})
 	}
 }

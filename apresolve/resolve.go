@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"sort"
-	"strings"
+	"strconv"
 	"sync"
 	"time"
 
@@ -30,42 +31,62 @@ type ApResolver struct {
 	endpointsExp  map[endpointType]time.Time
 	endpointsLock sync.RWMutex
 
-	preferFirewallFriendlyPorts bool
+	accesspointPorts []int
 
 	client *http.Client
 }
 
-// NewApResolver builds a resolver for Spotify's endpoint directory.
-func NewApResolver(log librespot.Logger, client *http.Client, preferFirewallFriendlyPorts bool) *ApResolver {
+// FirewallFriendlyPorts is the accesspoint port order for networks that only
+// allow HTTP and HTTPS outbound.
+var FirewallFriendlyPorts = []int{443, 80}
+
+// AccesspointPorts is the port order to try accesspoints in: ports when set,
+// else FirewallFriendlyPorts when preferFirewallFriendly, else nil (keep the
+// directory's order).
+func AccesspointPorts(ports []int, preferFirewallFriendly bool) []int {
+	if len(ports) == 0 && preferFirewallFriendly {
+		return FirewallFriendlyPorts
+	}
+	return ports
+}
+
+// NewApResolver builds a resolver for Spotify's endpoint directory. Accesspoints
+// on accesspointPorts are tried first, in that order, then the rest in the
+// directory's order; nil keeps the directory's order.
+func NewApResolver(log librespot.Logger, client *http.Client, accesspointPorts []int) *ApResolver {
 	baseUrl, err := url.Parse("https://apresolve.spotify.com/")
 	if err != nil {
 		panic("invalid apresolve base URL")
 	}
 
 	return &ApResolver{
-		log:                         log,
-		baseUrl:                     baseUrl,
-		client:                      client,
-		endpoints:                   map[endpointType][]string{},
-		endpointsExp:                map[endpointType]time.Time{},
-		preferFirewallFriendlyPorts: preferFirewallFriendlyPorts,
+		log:              log,
+		baseUrl:          baseUrl,
+		client:           client,
+		endpoints:        map[endpointType][]string{},
+		endpointsExp:     map[endpointType]time.Time{},
+		accesspointPorts: accesspointPorts,
 	}
 }
 
-func firewallFriendlyPortRank(addr string) int {
-	switch {
-	case strings.HasSuffix(addr, ":443"):
-		return 0
-	case strings.HasSuffix(addr, ":80"):
-		return 1
-	default:
-		return 2
+// portRank is the position of addr's port in ports, or len(ports) when the
+// port is not listed or cannot be parsed.
+func portRank(addr string, ports []int) int {
+	if _, p, err := net.SplitHostPort(addr); err == nil {
+		if n, err := strconv.Atoi(p); err == nil {
+			if i := slices.Index(ports, n); i >= 0 {
+				return i
+			}
+		}
 	}
+	return len(ports)
 }
 
-func sortFirewallFriendly(addrs []string) {
+// sortByPort orders addrs by ports, keeping the directory's order within each
+// port so the nearest endpoint still wins.
+func sortByPort(addrs []string, ports []int) {
 	sort.SliceStable(addrs, func(i, j int) bool {
-		return firewallFriendlyPortRank(addrs[i]) < firewallFriendlyPortRank(addrs[j])
+		return portRank(addrs[i], ports) < portRank(addrs[j], ports)
 	})
 }
 
@@ -123,8 +144,8 @@ func (r *ApResolver) fetchUrls(ctx context.Context, types ...endpointType) error
 	defer r.endpointsLock.Unlock()
 
 	if slices.Contains(types, endpointTypeAccesspoint) {
-		if r.preferFirewallFriendlyPorts {
-			sortFirewallFriendly(respJson.Accesspoint)
+		if len(r.accesspointPorts) > 0 {
+			sortByPort(respJson.Accesspoint, r.accesspointPorts)
 		}
 
 		r.endpoints[endpointTypeAccesspoint] = respJson.Accesspoint

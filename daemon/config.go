@@ -47,6 +47,10 @@ type Config struct {
 	// PreferFirewallFriendlyPorts tries accesspoints on 443 and 80 before the
 	// default 4070, which some networks block outbound.
 	PreferFirewallFriendlyPorts bool
+	// AccesspointPorts is the port order to try accesspoints in, e.g. [80, 443]
+	// where 443 is intercepted but 80 passes. Overrides
+	// PreferFirewallFriendlyPorts when set.
+	AccesspointPorts []int
 
 	// ImageSize selects which cover-art image variant the API server returns:
 	// "default", "small", "medium", "large", "xlarge".

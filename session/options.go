@@ -28,6 +28,9 @@ type Options struct {
 	// default 4070. Only consulted when Resolver is nil, since a supplied
 	// resolver already carries its own preference.
 	PreferFirewallFriendlyPorts bool
+	// AccesspointPorts is the port order to try accesspoints in, overriding
+	// PreferFirewallFriendlyPorts when set. Only consulted when Resolver is nil.
+	AccesspointPorts []int
 
 	// Client is the HTTP client to use for the session, leave empty for a new one.
 	Client *http.Client
