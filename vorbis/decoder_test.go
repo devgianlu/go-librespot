@@ -85,3 +85,19 @@ func TestDecoderStaysAtTheEnd(t *testing.T) {
 		require.ErrorIs(t, err, io.EOF)
 	}
 }
+
+// Closing releases the C state of the decoder. A decoder that is closed twice
+// must not touch what is gone, and says so when it is read from afterwards.
+func TestDecoderCloses(t *testing.T) {
+	data, err := os.ReadFile(sineStereo)
+	require.NoError(t, err)
+
+	d, err := New(&librespot.NullLogger{}, bytes.NewReader(data), nil, 1)
+	require.NoError(t, err)
+
+	d.Close()
+	d.Close()
+
+	_, err = d.Read(make([]float32, 16))
+	require.Error(t, err)
+}

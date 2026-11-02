@@ -138,6 +138,20 @@ func (d *Decoder) decoderStateCleanup() {
 		d.streamState.Free()
 	}
 
+	// The order matters: a block works on the dsp state, which points at the
+	// info and reads it when it is cleared, so each is cleared and freed before
+	// what it refers to. Freeing the info first made the dsp state read freed
+	// memory.
+	if d.block.Ref() != nil {
+		vorbis.BlockClear(&d.block)
+		d.block.Free()
+	}
+
+	if d.dspState.Ref() != nil {
+		vorbis.DspClear(&d.dspState)
+		d.dspState.Free()
+	}
+
 	if d.comment.Ref() != nil {
 		vorbis.CommentClear(&d.comment)
 		d.comment.Free()
@@ -146,16 +160,6 @@ func (d *Decoder) decoderStateCleanup() {
 	if d.info.Ref() != nil {
 		vorbis.InfoClear(&d.info)
 		d.info.Free()
-	}
-
-	if d.dspState.Ref() != nil {
-		vorbis.DspClear(&d.dspState)
-		d.dspState.Free()
-	}
-
-	if d.block.Ref() != nil {
-		vorbis.BlockClear(&d.block)
-		d.block.Free()
 	}
 
 	d.packet.Free()
