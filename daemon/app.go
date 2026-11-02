@@ -112,7 +112,7 @@ func New(opts *Options) (*App, error) {
 		app.state = &librespot.AppState{}
 	}
 
-	app.resolver = apresolve.NewApResolver(app.log, app.client, app.cfg.PreferFirewallFriendlyPorts)
+	app.resolver = apresolve.NewApResolver(app.log, app.client, apresolve.AccesspointPorts(app.cfg.AccesspointPorts, app.cfg.PreferFirewallFriendlyPorts))
 
 	if app.cfg.DeviceId != "" {
 		app.deviceId = app.cfg.DeviceId

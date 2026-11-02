@@ -66,6 +66,7 @@ type cliConfig struct {
 	MprisEnabled                  bool     `koanf:"mpris_enabled"`
 	FlacEnabled                   bool     `koanf:"flac_enabled"`
 	PreferFirewallFriendlyPorts   bool     `koanf:"prefer_firewall_friendly_ports"`
+	AccesspointPorts              []int    `koanf:"accesspoint_ports"`
 
 	Server struct {
 		Enabled     bool   `koanf:"enabled"`
@@ -144,6 +145,7 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 		ImageSize:   c.Server.ImageSize,
 
 		PreferFirewallFriendlyPorts: c.PreferFirewallFriendlyPorts,
+		AccesspointPorts:            c.AccesspointPorts,
 	}
 	dc.Cache.Enabled = c.Cache.Enabled
 	dc.Cache.Dir = c.Cache.Dir

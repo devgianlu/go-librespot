@@ -308,6 +308,7 @@ ignore_last_volume: false # Whether to ignore the last saved volume and always u
 external_volume: false # Whether volume is controlled externally 
 disable_autoplay: false # Whether autoplay of more songs should be disabled
 prefer_firewall_friendly_ports: false # Whether to try accesspoints on 443 and 80 before the default 4070
+accesspoint_ports: [] # Ports to try accesspoints on first, in order; overrides prefer_firewall_friendly_ports
 ```
 
 If your network only allows outbound HTTP and HTTPS, set
@@ -315,6 +316,11 @@ If your network only allows outbound HTTP and HTTPS, set
 4070, 443 and 80 and normally lists 4070 first, which restrictive firewalls
 tend to block; enabling this tries 443 first, then 80, and falls back to 4070.
 The dealer and spclient are unaffected, as they already use 443.
+
+Some networks intercept 443 and drop the accesspoint's handshake, which is not
+TLS, while letting 80 through. Each failed attempt costs up to the connect and
+handshake timeouts, so on those networks set `accesspoint_ports: [80, 443]` to
+try 80 first. Any port order works; ports not listed are tried last.
 
 With the pipe backend, opening the FIFO fails if no reader is connected when
 playback starts. Some readers (e.g. snapcast with `dryout_ms`) only connect to

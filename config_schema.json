@@ -352,6 +352,16 @@
           "description": "Whether to try Spotify accesspoints on ports 443 and 80 before the default 4070, for networks that only allow those outbound. Does not affect the dealer or spclient, which already use 443",
           "default": false
         },
+        "accesspoint_ports": {
+          "type": "array",
+          "description": "Ports to try Spotify accesspoints on first, in order (e.g. [80, 443]); unlisted ports follow. Overrides prefer_firewall_friendly_ports when set",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "default": []
+        },
         "metadata": {
           "type": "object",
           "description": "Opt-in in-memory track metadata cache behind the next_track status field and the GET /context/tracks listing",
