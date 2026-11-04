@@ -13,6 +13,13 @@ import (
 	"github.com/oapi-codegen/runtime"
 )
 
+// Defines values for QueueEntryProvider.
+const (
+	QueueEntryProviderAutoplay QueueEntryProvider = "autoplay"
+	QueueEntryProviderContext  QueueEntryProvider = "context"
+	QueueEntryProviderQueue    QueueEntryProvider = "queue"
+)
+
 // Defines values for TrackCodec.
 const (
 	TrackCodecAac     TrackCodec = "aac"
@@ -245,6 +252,42 @@ type ApiPlaylistRemoveTrack struct {
 	// Uri URI of the track or episode to remove
 	Uri string `json:"uri"`
 }
+
+// ApiPrev A skip to previous payload
+type ApiPrev struct {
+	// AllowSeeking Whether a track played past its first three seconds is rewound instead of left for the previous one, as with Spotify Connect's own skip_prev option. False goes to the previous track, or restarts the current one when there is none before it.
+	AllowSeeking *bool `json:"allow_seeking,omitempty"`
+}
+
+// ApiQueue The play order around the current track
+type ApiQueue struct {
+	// NextTracks The entries that play next, nearest first, the user's queue before the rest, up to 32
+	NextTracks []ApiQueueEntry `json:"next_tracks"`
+
+	// PrevTracks The entries before the current one in the play order (the context, in its shuffled order when shuffling), oldest first, up to 32. Not a play history: they need not have played, as when a context is started from one of its tracks
+	PrevTracks []ApiQueueEntry `json:"prev_tracks"`
+
+	// Track The current entry, null when nothing is loaded
+	Track *ApiQueueEntry `json:"track"`
+}
+
+// ApiQueueEntry One entry of the play order
+type ApiQueueEntry struct {
+	// Provider Where the entry comes from: "queue" for the user's queue, "context" for the context being played, "autoplay" for the station that carries on once the context has run out.
+	Provider QueueEntryProvider `json:"provider"`
+
+	// Track Full track metadata, or null while it is not cached (always null with metadata.enabled off)
+	Track *ApiTrack `json:"track"`
+
+	// Uid The entry's unique id within the play order, which tells apart two copies of the same track. Null for entries that have none, such as the tracks of an album.
+	Uid *string `json:"uid"`
+
+	// Uri The entry's URI: a track, an episode, or anything else the context lists, such as a local file (its track is then null)
+	Uri string `json:"uri"`
+}
+
+// QueueEntryProvider Where the entry comes from: "queue" for the user's queue, "context" for the context being played, "autoplay" for the station that carries on once the context has run out.
+type QueueEntryProvider string
 
 // ApiRepeatContext A toggle repeating context payload
 type ApiRepeatContext struct {
@@ -499,6 +542,9 @@ type PlayerOutputJSONRequestBody = ApiOutput
 // PlayerPlayJSONRequestBody defines body for PlayerPlay for application/json ContentType.
 type PlayerPlayJSONRequestBody = ApiPlay
 
+// PlayerPrevJSONRequestBody defines body for PlayerPrev for application/json ContentType.
+type PlayerPrevJSONRequestBody = ApiPrev
+
 // PlayerRepeatContextJSONRequestBody defines body for PlayerRepeatContext for application/json ContentType.
 type PlayerRepeatContextJSONRequestBody = ApiRepeatContext
 
@@ -576,6 +622,9 @@ type ServerInterface interface {
 
 	// (POST /player/prev)
 	PlayerPrev(w http.ResponseWriter, r *http.Request)
+
+	// (GET /player/queue)
+	PlayerGetQueue(w http.ResponseWriter, r *http.Request)
 
 	// (POST /player/repeat_context)
 	PlayerRepeatContext(w http.ResponseWriter, r *http.Request)
@@ -1024,6 +1073,20 @@ func (siw *ServerInterfaceWrapper) PlayerPrev(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// PlayerGetQueue operation middleware
+func (siw *ServerInterfaceWrapper) PlayerGetQueue(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PlayerGetQueue(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PlayerRepeatContext operation middleware
 func (siw *ServerInterfaceWrapper) PlayerRepeatContext(w http.ResponseWriter, r *http.Request) {
 
@@ -1317,6 +1380,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/player/play", wrapper.PlayerPlay)
 	m.HandleFunc("POST "+options.BaseURL+"/player/playpause", wrapper.PlayerPlayPause)
 	m.HandleFunc("POST "+options.BaseURL+"/player/prev", wrapper.PlayerPrev)
+	m.HandleFunc("GET "+options.BaseURL+"/player/queue", wrapper.PlayerGetQueue)
 	m.HandleFunc("POST "+options.BaseURL+"/player/repeat_context", wrapper.PlayerRepeatContext)
 	m.HandleFunc("POST "+options.BaseURL+"/player/repeat_track", wrapper.PlayerRepeatTrack)
 	m.HandleFunc("POST "+options.BaseURL+"/player/resume", wrapper.PlayerResume)

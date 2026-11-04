@@ -71,3 +71,5 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `value`: Whether repeating context is enabled
 - `repeat_track`: The player repeating track setting changed
     - `value`: Whether repeating track is enabled
+- `queue`: What `GET /player/queue` returns changed: the play order moved (a new track, the user's queue, shuffling,
+  a new context, a stop) or metadata for some of its entries was cached. No data is provided; read `GET /player/queue`.

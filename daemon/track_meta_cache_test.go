@@ -104,9 +104,13 @@ func recordingFetch(fetch fetchFunc) (fetchFunc, func() [][]string) {
 func newMetaTestPlayer(t *testing.T, fetch fetchFunc, resolve func(context.Context, string) (tracks.ContextResolver, error)) *AppPlayer {
 	t.Helper()
 
+	server, err := NewStubApiServer(&librespot.NullLogger{})
+	require.NoError(t, err)
+
 	app := &App{
 		log:          &librespot.NullLogger{},
 		cfg:          &Config{Metadata: MetadataConfig{Enabled: true}},
+		server:       &recordingApiServer{ApiServer: server},
 		metaCache:    newTrackMetaCache(trackMetaCacheLimit),
 		contextLists: newContextListCache(),
 	}
@@ -116,9 +120,11 @@ func newMetaTestPlayer(t *testing.T, fetch fetchFunc, resolve func(context.Conte
 		ctx:               t.Context(),
 		meta:              &metaFetcher{log: app.log, cache: app.metaCache, fetch: fetch, resolve: resolve},
 		metaPrefetchTimer: time.NewTimer(math.MaxInt64),
+		metaCached:        make(chan struct{}, 1),
 		prodInfo:          &ProductInfo{},
 		state:             &State{},
 	}
+	p.meta.cached = p.signalMetaCached
 	p.metaPrefetchTimer.Stop()
 	p.state.reset()
 
