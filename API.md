@@ -10,6 +10,7 @@ The REST API documentation is available as OpenAPI specification: [api-spec.yml]
 
 The websocket endpoint is available at `/events`. The following events are emitted:
 
+- `cluster`: The Spotify Connect cluster changed; the data is the `GET /connect/devices` response
 - `active`: The device has become active
 - `inactive`: The device has become inactive
 - `metadata`: A new track was loaded, the following metadata is available:

@@ -43,6 +43,11 @@ type AppPlayer struct {
 	app  *App
 	sess *session.Session
 
+	// cluster is the latest Spotify Connect cluster the service sent. Only the
+	// Run goroutine touches it.
+	cluster   *connectpb.Cluster
+	clusterAt time.Time
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -258,12 +263,17 @@ func (p *AppPlayer) handleDealerMessage(msg dealer.Message) error {
 			return fmt.Errorf("failed unmarshalling ClusterUpdate: %w", err)
 		}
 
+		p.setCluster(clusterUpdate.Cluster)
+		if resp := p.connectDevices(time.Now()); resp != nil {
+			p.app.server.Emit(&ApiEvent{Type: ApiEventTypeCluster, Data: resp})
+		}
+
 		if !p.state.active {
 			p.state.lastClusterTimestamp = clusterUpdate.Cluster.GetPlayerState().GetTimestamp()
 		}
 
 		otherActive := p.state.active && clusterUpdate.Cluster.ActiveDeviceId != p.app.deviceId
-		stopBeingActive := otherActive && clusterUpdate.Cluster.PlayerState.Timestamp > p.state.activationTimestamp
+		stopBeingActive := otherActive && clusterUpdate.Cluster.GetPlayerState().GetTimestamp() > p.state.activationTimestamp
 
 		// We are still the active device, do not quit
 		if !stopBeingActive {
@@ -721,6 +731,14 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		p.scheduleContextEnumerate(data.Uri)
 
 		return p.contextTracksResponse(data.Uri, uris, ready), nil
+	case ApiRequestTypeConnectDevices:
+		resp := p.connectDevices(time.Now())
+		if resp == nil {
+			return nil, ErrNotFound
+		}
+		return resp, nil
+	case ApiRequestTypeConnectTransfer, ApiRequestTypeConnectCommand:
+		return p.handleConnectControl(req)
 	case ApiRequestTypeResume:
 		_ = p.play()
 		return nil, nil

@@ -397,6 +397,7 @@ func (p *AppPlayer) buildStateRequest(reason connectpb.PutStateReason) *connectp
 // applyStatePushResult folds the outcome of a push back into the state. Runs on
 // the Run goroutine.
 func (p *AppPlayer) applyStatePushResult(res statePushResult) {
+	p.setCluster(res.cluster)
 	if res.publicIp != "" {
 		p.state.device.PublicIp = res.publicIp
 	}

@@ -142,6 +142,9 @@ const (
 	ApiRequestTypePlaylistAddTracks   ApiRequestType = "playlist_add_tracks"
 	ApiRequestTypePlaylistRemoveTrack ApiRequestType = "playlist_remove_track"
 	ApiRequestTypePlaylistContains    ApiRequestType = "playlist_contains"
+	ApiRequestTypeConnectDevices      ApiRequestType = "connect_devices"
+	ApiRequestTypeConnectTransfer     ApiRequestType = "connect_transfer"
+	ApiRequestTypeConnectCommand      ApiRequestType = "connect_command"
 )
 
 // ApiRequestDataContextTracks carries the uri query parameter of the context
@@ -175,6 +178,7 @@ const (
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 	ApiEventTypePlaybackReady  ApiEventType = "playback_ready"
 	ApiEventTypePlaybackError  ApiEventType = "playback_error"
+	ApiEventTypeCluster        ApiEventType = "cluster"
 )
 
 type ApiRequest struct {
@@ -493,6 +497,10 @@ func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter)
 		case errors.Is(resp.err, ErrBadRequest):
 			w.WriteHeader(http.StatusBadRequest)
 			return
+		case errors.Is(resp.err, ErrRemote):
+			s.log.WithError(resp.err).Warnf("failed handling request %s", req.Type)
+			w.WriteHeader(http.StatusBadGateway)
+			return
 		default:
 			s.log.WithError(resp.err).Errorf("failed handling request %s", req.Type)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -532,6 +540,30 @@ var _ ServerInterface = (*ConcreteApiServer)(nil)
 
 func (s *ConcreteApiServer) GetRoot(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeRoot}, w)
+}
+
+func (s *ConcreteApiServer) GetConnectDevices(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeConnectDevices}, w)
+}
+
+func (s *ConcreteApiServer) ConnectTransfer(w http.ResponseWriter, r *http.Request) {
+	var data ApiConnectTransfer
+	if err := jsonDecode(r, &data); err != nil || data.DeviceId == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeConnectTransfer, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) ConnectCommand(w http.ResponseWriter, r *http.Request) {
+	var data ApiConnectCommand
+	if err := jsonDecode(r, &data); err != nil || data.DeviceId == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeConnectCommand, Data: data}, w)
 }
 
 func (s *ConcreteApiServer) GetStatus(w http.ResponseWriter, _ *http.Request) {
