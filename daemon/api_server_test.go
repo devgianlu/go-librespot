@@ -321,6 +321,7 @@ func TestApiStatusWireFormat(t *testing.T) {
 		"repeat_context": false,
 		"repeat_track": false,
 		"shuffle_context": false,
+		"remote": null,
 		"track": {
 			"uri": "spotify:track:xxx",
 			"name": "Some Song",
@@ -343,6 +344,26 @@ func TestApiStatusWireFormat(t *testing.T) {
 	}`, body(t, resp))
 }
 
+// What plays on another device reaches clients with the device, whether its
+// playhead stands still, and its track; a track not resolved yet is null.
+func TestApiStatusWireFormatRemote(t *testing.T) {
+	ts := newTestServer(t, func(ApiRequest) (any, error) {
+		return &ApiStatus{Remote: &ApiRemote{DeviceId: "def", DeviceName: "iPhone", DeviceType: "SMARTPHONE", Paused: true}}, nil
+	})
+
+	resp := ts.do(http.MethodGet, "/status", nil)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(body(t, resp)), &got))
+	require.Equal(t, map[string]any{
+		"device_id":   "def",
+		"device_name": "iPhone",
+		"device_type": "SMARTPHONE",
+		"paused":      true,
+		"track":       nil,
+	}, got["remote"])
+}
+
 // The nullable fields must serialise as null rather than disappear.
 func TestApiStatusWireFormatNulls(t *testing.T) {
 	ts := newTestServer(t, func(ApiRequest) (any, error) {
@@ -354,7 +375,7 @@ func TestApiStatusWireFormatNulls(t *testing.T) {
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(body(t, resp)), &got))
 
-	for _, field := range []string{"play_origin", "play_origin_device_id", "context_uri", "context_name"} {
+	for _, field := range []string{"play_origin", "play_origin_device_id", "context_uri", "context_name", "remote"} {
 		value, present := got[field]
 		require.True(t, present, "%s must be present", field)
 		require.Nil(t, value, "%s must be null", field)
@@ -376,6 +397,7 @@ func TestApiSimpleCommands(t *testing.T) {
 		"/player/pause":     ApiRequestTypePause,
 		"/player/playpause": ApiRequestTypePlayPause,
 		"/player/stop":      ApiRequestTypeStop,
+		"/player/transfer":  ApiRequestTypeTransfer,
 		"/player/prev":      ApiRequestTypePrev,
 		"/token":            ApiRequestTypeToken,
 	} {

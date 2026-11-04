@@ -256,6 +256,29 @@ func (c *Spclient) PutConnectStateInactive(ctx context.Context, spotConnId strin
 	}
 }
 
+// TransferFromActive asks Spotify to move the session from whichever device is
+// active to this one. The path names the device sending the command and the
+// one to play on, both this one here; Spotify takes the session from the
+// active device.
+//
+// Sent once: Spotify carries out every transfer it receives, even one resent
+// with the same command_id, so one resent after Spotify acted on it would
+// transfer the session again while this device is already active.
+func (c *Spclient) TransferFromActive(ctx context.Context) error {
+	body := []byte(`{"transfer_options":{"restore_paused":"resume"}}`)
+	resp, err := c.RequestOnce(ctx, "POST",
+		fmt.Sprintf("/connect-state/v1/connect/transfer/from/%s/to/%s", c.deviceId, c.deviceId),
+		nil, http.Header{"Content-Type": []string{"application/json"}}, body)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return &StatusError{Op: "transfer", StatusCode: resp.StatusCode}
+	}
+	return nil
+}
+
 func (c *Spclient) PutConnectState(ctx context.Context, spotConnId string, reqProto *connectpb.PutStateRequest) (*connectpb.Cluster, error) {
 	reqBody, err := proto.Marshal(reqProto)
 	if err != nil {

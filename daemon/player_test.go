@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -756,4 +757,85 @@ func TestUpcomingQueueLeavesOutThePlayingEntry(t *testing.T) {
 	upcoming := list.UpcomingQueue()
 	require.Len(t, upcoming, 1)
 	require.Equal(t, "q1", upcoming[0].GetUid())
+}
+
+// A paused session transferred with "resume" starts from where it paused: the
+// time it spent paused on the other device is not played.
+func TestTransferOfAPausedSessionResumesWhereItPaused(t *testing.T) {
+	const uri = "spotify:track:2FY7b99s15jUprqC0M5NCT"
+	p := newTestAppPlayer(t)
+
+	req := transferCommand(t, &connectpb.TransferState{
+		CurrentSession: &connectpb.Session{},
+		Playback: &connectpb.Playback{
+			Timestamp:             time.Now().Add(-5 * time.Second).UnixMilli(),
+			PositionAsOfTimestamp: 220497,
+			IsPaused:              true,
+			CurrentTrack:          &connectpb.ContextTrack{Uri: uri},
+		},
+	})
+	req.Command.Options.RestorePaused = "resume"
+
+	require.NoError(t, p.handlePlayerCommand(req))
+	require.False(t, p.state.player.IsPaused)
+	require.InDelta(t, 220497, p.state.trackPosition(), 1000)
+}
+
+// loadPositions keeps the position each load starts at, from the line the
+// daemon logs for it: the position is handed to the load job and kept nowhere
+// else.
+type loadPositions struct {
+	librespot.NullLogger
+	positions []int64
+}
+
+func (l *loadPositions) WithField(string, interface{}) librespot.Logger { return l }
+func (l *loadPositions) WithError(error) librespot.Logger               { return l }
+func (l *loadPositions) Debugf(format string, args ...interface{}) {
+	if strings.HasPrefix(format, "loading %s") {
+		l.positions = append(l.positions, args[2].(int64))
+	}
+}
+
+// Nor the time its context takes to resolve: the track loads where it paused.
+func TestTransferOfAPausedSessionDoesNotCountTheResolve(t *testing.T) {
+	p := newTestAppPlayer(t)
+	log := &loadPositions{}
+	p.app.log = log
+	p.resolveTrackList = resolveWith(0)
+
+	req := transferCommand(t, &connectpb.TransferState{
+		Options: &connectpb.ContextPlayerOptions{},
+		CurrentSession: &connectpb.Session{Context: &connectpb.Context{
+			Uri:   jamListUri,
+			Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{{Uri: jamTrackUri}}}},
+		}},
+		Playback: &connectpb.Playback{
+			Timestamp:             time.Now().Add(-5 * time.Second).UnixMilli(),
+			PositionAsOfTimestamp: 47480,
+			IsPaused:              true,
+			CurrentTrack:          &connectpb.ContextTrack{Uri: jamTrackUri},
+		},
+	})
+	req.Command.Options.RestorePaused = "resume"
+
+	require.NoError(t, p.handlePlayerCommand(req))
+	time.Sleep(400 * time.Millisecond) // the context resolving
+	runQueuedJob(t, p)
+
+	require.Len(t, log.positions, 1, "the track is being loaded")
+	require.InDelta(t, 47480, log.positions[0], 150)
+}
+
+// A playing session keeps moving through the transfer: its anchor is the
+// sender's.
+func TestTransferAnchor(t *testing.T) {
+	ts, pos := transferAnchor(&connectpb.Playback{Timestamp: 1000, PositionAsOfTimestamp: 500})
+	require.EqualValues(t, 1000, ts)
+	require.EqualValues(t, 500, pos)
+
+	before := time.Now().UnixMilli()
+	ts, pos = transferAnchor(&connectpb.Playback{Timestamp: 1000, PositionAsOfTimestamp: 500, IsPaused: true})
+	require.GreaterOrEqual(t, ts, before, "a paused one is anchored at the transfer")
+	require.EqualValues(t, 500, pos)
 }

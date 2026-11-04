@@ -124,6 +124,7 @@ const (
 	ApiRequestTypeNext                ApiRequestType = "next"
 	ApiRequestTypePlay                ApiRequestType = "play"
 	ApiRequestTypeStop                ApiRequestType = "stop"
+	ApiRequestTypeTransfer            ApiRequestType = "transfer"
 	ApiRequestTypeGetVolume           ApiRequestType = "get_volume"
 	ApiRequestTypeSetVolume           ApiRequestType = "set_volume"
 	ApiRequestTypeSetRepeatingContext ApiRequestType = "repeating_context"
@@ -175,6 +176,7 @@ const (
 	ApiEventTypeShuffleContext ApiEventType = "shuffle_context"
 	ApiEventTypePlaybackReady  ApiEventType = "playback_ready"
 	ApiEventTypePlaybackError  ApiEventType = "playback_error"
+	ApiEventTypeRemote         ApiEventType = "remote"
 )
 
 type ApiRequest struct {
@@ -698,6 +700,10 @@ func (s *ConcreteApiServer) PlayerPlayPause(w http.ResponseWriter, _ *http.Reque
 
 func (s *ConcreteApiServer) PlayerStop(w http.ResponseWriter, _ *http.Request) {
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeStop}, w)
+}
+
+func (s *ConcreteApiServer) PlayerTransfer(w http.ResponseWriter, _ *http.Request) {
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeTransfer}, w)
 }
 
 func (s *ConcreteApiServer) PlayerPrev(w http.ResponseWriter, _ *http.Request) {
