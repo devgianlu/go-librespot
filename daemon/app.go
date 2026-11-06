@@ -95,7 +95,7 @@ func New(opts *Options) (*App, error) {
 		cfg:        opts.Config,
 		stateStore: opts.StateStore,
 		logoutCh:   make(chan *AppPlayer),
-		client:     &http.Client{Timeout: 30 * time.Second},
+		client:     librespot.NewHttpClient(),
 	}
 
 	var err error
