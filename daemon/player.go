@@ -471,7 +471,7 @@ func (p *AppPlayer) handlePlayerCommand(req dealer.RequestPayload) error {
 		//
 		// A context can arrive without a track in it, which would otherwise be
 		// dereferenced here; the loader then plays it from the top.
-		p.state.player.Track = nil
+		p.state.clearTrack()
 		if current := transferState.Playback.CurrentTrack; singleTrackContext(current) != nil {
 			contextSpotType := librespot.InferSpotifyIdTypeFromContext(transferState.CurrentSession.Context)
 			p.state.player.Track = librespot.ContextTrackToProvidedTrack(contextSpotType, current)

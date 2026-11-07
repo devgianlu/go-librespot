@@ -56,6 +56,15 @@ func (s *State) takeOver() {
 // Set the IsPaused flag, and also the PlaybackSpeed as well.
 // PlaybackSpeed must be 0 when paused, or Spotify Android will have subtle
 // bugs.
+// clearTrack forgets the current track together with its playback id. The
+// two travel as a pair: the official clients read the track through the
+// playback id, and a state that carries a playback id without a track makes
+// Spotify for Android crash (#434).
+func (s *State) clearTrack() {
+	s.player.Track = nil
+	s.player.PlaybackId = ""
+}
+
 func (s *State) setPaused(val bool) {
 	s.player.IsPaused = val
 	if val {
