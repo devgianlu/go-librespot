@@ -352,7 +352,7 @@ func (p *AppPlayer) loadContext(spotCtx *connectpb.Context, skipTo skipToFunc, p
 	// track is not known until the context resolves. The stream that was
 	// playing carries on until then and may still raise events, so nothing on
 	// the loop may assume Track is set.
-	p.state.player.Track = nil
+	p.state.clearTrack()
 	p.state.player.PrevTracks = nil
 	p.state.player.NextTracks = nil
 	p.state.player.Index = nil
@@ -654,7 +654,7 @@ func (p *AppPlayer) abandonTransfer() {
 	p.state.player.ContextUrl = ""
 	p.state.player.ContextMetadata = nil
 	p.state.player.ContextRestrictions = nil
-	p.state.player.Track = nil
+	p.state.clearTrack()
 	p.state.player.PrevTracks = nil
 	p.state.player.NextTracks = nil
 	p.state.player.Index = nil
