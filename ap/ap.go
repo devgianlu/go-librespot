@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -43,6 +44,10 @@ func (e *AccesspointLoginError) Error() string {
 	return fmt.Sprintf("accesspoint login failed: %s %v", e.Message.ErrorCode.String(), e.Message.ErrorDescription)
 }
 
+// ConnID identifies one connection to the accesspoint. A reconnection replaces
+// it with a connection of another ConnID.
+type ConnID uint64
+
 type Accesspoint struct {
 	log librespot.Logger
 
@@ -67,9 +72,15 @@ type Accesspoint struct {
 	lastPongAck     time.Time
 	lastPongAckLock sync.Mutex
 
-	// connMu protects conn, encConn, and welcome pointer state.
+	// connMu protects conn, encConn, connID, replaced, and welcome pointer state.
 	connMu  sync.RWMutex
+	connID  ConnID
 	welcome *pb.APWelcome
+	// replaced is closed when the connection connID is replaced.
+	replaced chan struct{}
+	// closedConn is the last connection this side closed, which recvLoop is
+	// replacing unless the accesspoint is closing.
+	closedConn atomic.Uint64
 }
 
 func NewAccesspoint(log librespot.Logger, addr librespot.GetAddressFunc, deviceId string) *Accesspoint {
@@ -110,13 +121,8 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 		conn, err := proxy.Dial(ctx_, "tcp", addr)
 		cancel()
 		if err == nil {
-			// close previous connection if any
-			if ap.conn != nil {
-				_ = ap.conn.Close()
-			}
-
 			// we assign to ap.conn after because if Dial fails we'll have a nil ap.conn which we don't want
-			ap.conn = conn
+			ap.setConn(conn)
 			ap.log.Debugf("connected to %s", addr)
 			return nil
 		} else if attempts >= 6 {
@@ -126,6 +132,20 @@ func (ap *Accesspoint) init(ctx context.Context) (err error) {
 		// Try again with a different AP.
 		ap.log.WithError(err).Warnf("failed to connect to AP %v, retrying with a different AP", addr)
 	}
+}
+
+// setConn replaces the connection. Its caller holds connMu for writing.
+func (ap *Accesspoint) setConn(conn net.Conn) {
+	if ap.conn != nil {
+		_ = ap.conn.Close()
+	}
+	if ap.replaced != nil {
+		close(ap.replaced)
+	}
+
+	ap.conn = conn
+	ap.connID++
+	ap.replaced = make(chan struct{})
 }
 
 func (ap *Accesspoint) ConnectSpotifyToken(ctx context.Context, username, token string) error {
@@ -269,27 +289,71 @@ func (ap *Accesspoint) Close() {
 }
 
 func (ap *Accesspoint) Send(ctx context.Context, pktType PacketType, payload []byte) error {
-	ap.connMu.RLock()
-	select {
-	case <-ap.done:
-		ap.connMu.RUnlock()
-		return ErrAccesspointClosed
-	default:
-	}
+	_, err := ap.SendConn(ctx, pktType, payload)
+	return err
+}
 
-	encConn := ap.encConn
-	ap.connMu.RUnlock()
-
-	if err := encConn.sendPacket(ctx, pktType, payload); err != nil {
+// SendConn is Send, and also returns the connection the packet was written to,
+// for DropConn.
+//
+// A packet written to a connection this side has closed is sent again on its
+// replacement: recvLoop takes connMu for the reconnection only once its read
+// has failed, so a packet sent right after DropConn or closeConn would
+// otherwise fail on the closed socket.
+func (ap *Accesspoint) SendConn(ctx context.Context, pktType PacketType, payload []byte) (ConnID, error) {
+	for {
+		ap.connMu.RLock()
 		select {
 		case <-ap.done:
-			return ErrAccesspointClosed
+			ap.connMu.RUnlock()
+			return 0, ErrAccesspointClosed
 		default:
-			return err
+		}
+
+		encConn, id, replaced := ap.encConn, ap.connID, ap.replaced
+		ap.connMu.RUnlock()
+
+		err := encConn.sendPacket(ctx, pktType, payload)
+		if err == nil {
+			return id, nil
+		}
+
+		select {
+		case <-ap.done:
+			return id, ErrAccesspointClosed
+		default:
+		}
+
+		if id == 0 || ConnID(ap.closedConn.Load()) != id {
+			return id, err
+		}
+
+		select {
+		case <-replaced:
+		case <-ap.done:
+			return id, ErrAccesspointClosed
+		case <-ctx.Done():
+			return id, ctx.Err()
 		}
 	}
+}
 
-	return nil
+// DropConn closes the connection id when an answer expected on it did not
+// come, so that it is replaced. It does nothing if that connection was already
+// replaced, and never waits: only a connection in progress (Connect, or
+// recvLoop's reconnection) holds connMu for writing, and it is already
+// replacing the connection.
+func (ap *Accesspoint) DropConn(id ConnID) {
+	if !ap.connMu.TryRLock() {
+		return
+	}
+	conn, current := ap.conn, ap.connID
+	ap.connMu.RUnlock()
+
+	if conn != nil && current == id {
+		ap.closedConn.Store(uint64(id))
+		_ = conn.Close()
+	}
 }
 
 // recvChanSize buffers each receiver so that recvLoop can keep draining the
@@ -355,7 +419,9 @@ loop:
 
 			switch pkt {
 			case PacketTypePing:
-				if err := ap.Send(ap.ctx, PacketTypePong, payload); err != nil {
+				// Not Send: recvLoop is what replaces a closed connection, so
+				// it must not wait for that.
+				if err := ap.encConn.sendPacket(ap.ctx, PacketTypePong, payload); err != nil {
 					ap.log.WithError(err).Errorf("failed sending Pong packet")
 					break loop
 				}
@@ -486,10 +552,11 @@ func (ap *Accesspoint) timeSinceLastPongAck() time.Duration {
 
 func (ap *Accesspoint) closeConn() {
 	ap.connMu.RLock()
-	conn := ap.conn
+	conn, id := ap.conn, ap.connID
 	ap.connMu.RUnlock()
 
 	if conn != nil {
+		ap.closedConn.Store(uint64(id))
 		_ = conn.Close()
 	}
 }

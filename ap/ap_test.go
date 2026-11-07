@@ -223,3 +223,94 @@ func TestConnectGivesUpOnASilentAccesspoint(t *testing.T) {
 		t.Fatal("the handshake with a silent accesspoint never gave up")
 	}
 }
+
+// A request that went unanswered drops the connection it was sent on. By the
+// time it gives up, that connection may already have been replaced, and the
+// replacement must survive.
+func TestDropConnClosesOnlyTheConnectionItNames(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		defer accesspoint.Close()
+
+		first := attachFakeAP(accesspoint, time.Hour, time.Hour)
+		sentOn, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+		second := attachFakeAP(accesspoint, time.Hour, time.Hour)
+		synctest.Wait()
+		if !first.isClosed() {
+			t.Fatal("the replaced connection is still open")
+		}
+
+		accesspoint.DropConn(sentOn)
+		synctest.Wait()
+		if second.isClosed() {
+			t.Fatal("dropping a replaced connection closed its replacement")
+		}
+
+		current, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+
+		accesspoint.DropConn(current)
+		synctest.Wait()
+		if !second.isClosed() {
+			t.Fatal("dropping the current connection left it open")
+		}
+	})
+}
+
+// A reconnection holds connMu through its dials and backoff, and is already
+// replacing the connection: DropConn must not wait for it, since its caller is
+// waiting for an answer, not recvLoop.
+func TestDropConnDoesNotWaitForAReconnection(t *testing.T) {
+	accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+	defer accesspoint.Close()
+
+	accesspoint.connMu.Lock()
+	defer accesspoint.connMu.Unlock()
+
+	dropped := make(chan struct{})
+	go func() {
+		accesspoint.DropConn(0)
+		close(dropped)
+	}()
+
+	select {
+	case <-dropped:
+	case <-time.After(time.Second):
+		t.Fatal("DropConn waited for a reconnection in progress")
+	}
+}
+
+// DropConn closes the socket and returns before recvLoop has noticed and
+// started the reconnection. A packet sent in between, such as the key
+// provider's retry sent right after the drop, must wait for that reconnection
+// instead of being written to the closed socket and failing. Here no
+// reconnection is possible (no APWelcome), so the accesspoint closes, and that
+// is the only way the send may end.
+func TestSendAfterDropConnWaitsForTheReplacement(t *testing.T) {
+	for i := 0; i < 300; i++ {
+		accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		attachFakeAP(accesspoint, time.Hour, time.Hour)
+		accesspoint.Receive(PacketTypeAesKey)
+
+		current, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+		accesspoint.DropConn(current)
+
+		sent := make(chan error, 1)
+		go func() {
+			_, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+			sent <- err
+		}()
+		if err := <-sent; !errors.Is(err, ErrAccesspointClosed) {
+			t.Fatalf("after %d drops, a send right after DropConn failed with %q instead of waiting for the replacement", i+1, err)
+		}
+		accesspoint.Close()
+	}
+}
