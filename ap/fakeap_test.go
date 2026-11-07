@@ -41,7 +41,10 @@ type fakeAP struct {
 	cut    atomic.Bool
 	closed chan struct{}
 
-	pending sync.WaitGroup
+	mu       sync.Mutex
+	lastAck  time.Time
+	closedAt time.Time
+	pending  sync.WaitGroup
 }
 
 // attachFakeAP gives the accesspoint a connection to a fakeAP, as a completed
@@ -64,6 +67,9 @@ func (f *fakeAP) read() {
 	for {
 		pkt, _, err := f.enc.receivePacket(context.Background())
 		if err != nil {
+			f.mu.Lock()
+			f.closedAt = time.Now()
+			f.mu.Unlock()
 			close(f.closed)
 			f.pending.Wait()
 			return
@@ -76,7 +82,11 @@ func (f *fakeAP) read() {
 		f.pending.Add(1)
 		go func() {
 			defer f.pending.Done()
-			_ = f.enc.sendPacket(context.Background(), PacketTypePongAck, nil)
+			if f.enc.sendPacket(context.Background(), PacketTypePongAck, nil) == nil && !f.cut.Load() {
+				f.mu.Lock()
+				f.lastAck = time.Now()
+				f.mu.Unlock()
+			}
 		}()
 	}
 }
@@ -92,6 +102,18 @@ func (f *fakeAP) ping(first, every time.Duration) {
 			next = every
 		}
 	}
+}
+
+func (f *fakeAP) lastAckAt() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastAck
+}
+
+func (f *fakeAP) closedAfter(t time.Time) time.Duration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closedAt.Sub(t)
 }
 
 func (f *fakeAP) isClosed() bool {

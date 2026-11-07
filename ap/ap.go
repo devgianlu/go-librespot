@@ -27,7 +27,15 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const pongAckInterval = 120 * time.Second
+// The accesspoint pings the device about every pongAckInterval, at times a
+// little later, and answers each Pong with a PongAck. pongAckMargin is the
+// only slack for that lateness: a connection that has carried no PongAck for
+// pongAckInterval+pongAckMargin, and that long since it was established, has
+// gone silent.
+const (
+	pongAckInterval = 120 * time.Second
+	pongAckMargin   = 20 * time.Second
+)
 
 // handshakeTimeout bounds the key exchange, challenge and authentication when the caller's
 // context has no deadline: an accesspoint that stops answering mid-handshake would otherwise
@@ -70,6 +78,7 @@ type Accesspoint struct {
 	recvChans       map[PacketType][]chan Packet
 	recvChansLock   sync.RWMutex
 	lastPongAck     time.Time
+	pongAckConn     ConnID
 	lastPongAckLock sync.Mutex
 
 	// connMu protects conn, encConn, connID, replaced, and welcome pointer state.
@@ -487,27 +496,29 @@ loop:
 }
 
 func (ap *Accesspoint) pongAckTicker() {
-	ticker := time.NewTicker(pongAckInterval)
+	const timeout = pongAckInterval + pongAckMargin
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 
-loop:
 	for {
 		select {
 		case <-ap.done:
-			break loop
-		case <-ticker.C:
-			timePassed := ap.timeSinceLastPongAck()
-			if timePassed > pongAckInterval {
-				ap.log.Errorf("did not receive last pong ack from accesspoint, %.0fs passed", timePassed.Seconds())
-
-				// closing the connection should make the read on the "recvLoop" fail,
-				// continue hoping for a new connection
-				ap.closeConn()
+			return
+		case <-timer.C:
+			conn, timePassed := ap.sinceLastPongAck()
+			if timePassed < timeout {
+				timer.Reset(timeout - timePassed)
 				continue
 			}
+
+			ap.log.Errorf("did not receive last pong ack from accesspoint, %.0fs passed", timePassed.Seconds())
+
+			// closing the connection should make the read on the "recvLoop" fail,
+			// continue hoping for a new connection
+			ap.DropConn(conn)
+			timer.Reset(timeout)
 		}
 	}
-
-	ticker.Stop()
 }
 
 func (ap *Accesspoint) reconnect() (err error) {
@@ -532,9 +543,12 @@ func (ap *Accesspoint) reconnect() (err error) {
 	return nil
 }
 
+// resetPongAckDeadline counts a new connection as a PongAck. Its caller holds
+// connMu.
 func (ap *Accesspoint) resetPongAckDeadline() {
 	ap.lastPongAckLock.Lock()
-	ap.lastPongAck = time.Now().Add(pongAckInterval)
+	ap.lastPongAck = time.Now()
+	ap.pongAckConn = ap.connID
 	ap.lastPongAckLock.Unlock()
 }
 
@@ -544,10 +558,10 @@ func (ap *Accesspoint) notePongAck() {
 	ap.lastPongAckLock.Unlock()
 }
 
-func (ap *Accesspoint) timeSinceLastPongAck() time.Duration {
+func (ap *Accesspoint) sinceLastPongAck() (ConnID, time.Duration) {
 	ap.lastPongAckLock.Lock()
 	defer ap.lastPongAckLock.Unlock()
-	return time.Since(ap.lastPongAck)
+	return ap.pongAckConn, time.Since(ap.lastPongAck)
 }
 
 func (ap *Accesspoint) closeConn() {

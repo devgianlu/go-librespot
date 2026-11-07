@@ -61,7 +61,7 @@ func TestPongAckTickerStopsWhenConnNil(t *testing.T) {
 			ap.pongAckTicker()
 		}()
 
-		time.Sleep(pongAckInterval + time.Nanosecond)
+		time.Sleep(pongAckInterval + pongAckMargin + time.Nanosecond)
 		synctest.Wait()
 
 		ap.Close()
@@ -313,4 +313,37 @@ func TestSendAfterDropConnWaitsForTheReplacement(t *testing.T) {
 		}
 		accesspoint.Close()
 	}
+}
+
+// The accesspoint's pings are the only traffic on an idle connection, so a
+// PongAck that does not come is the only sign that it went silent: until it is
+// dropped, every audio key and mercury request is sent into the void. It must
+// be dropped a bounded time after the last PongAck, whatever the phase of the
+// check, and never while PongAcks keep coming.
+func TestSilentConnectionIsDroppedSoonAfterItsLastPongAck(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		defer accesspoint.Close()
+
+		f := attachFakeAP(accesspoint, time.Second, pongAckInterval)
+		start := time.Now()
+		accesspoint.Receive(PacketTypeAesKey)
+
+		time.Sleep(10 * time.Minute)
+		synctest.Wait()
+		select {
+		case <-f.closed:
+			t.Fatalf("a connection whose pongs were acknowledged was dropped after %v", f.closedAfter(start))
+		default:
+		}
+
+		f.cut.Store(true)
+		lastAck := f.lastAckAt()
+
+		<-f.closed
+		if silent := f.closedAfter(lastAck); silent > pongAckInterval+pongAckMargin {
+			t.Fatalf("a silent connection was dropped %v after its last PongAck, want at most %v",
+				silent, pongAckInterval+pongAckMargin)
+		}
+	})
 }
