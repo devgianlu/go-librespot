@@ -61,7 +61,7 @@ func TestPongAckTickerStopsWhenConnNil(t *testing.T) {
 			ap.pongAckTicker()
 		}()
 
-		time.Sleep(pongAckInterval + time.Nanosecond)
+		time.Sleep(pongAckInterval + pongAckMargin + time.Nanosecond)
 		synctest.Wait()
 
 		ap.Close()
@@ -222,4 +222,128 @@ func TestConnectGivesUpOnASilentAccesspoint(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the handshake with a silent accesspoint never gave up")
 	}
+}
+
+// A request that went unanswered drops the connection it was sent on. By the
+// time it gives up, that connection may already have been replaced, and the
+// replacement must survive.
+func TestDropConnClosesOnlyTheConnectionItNames(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		defer accesspoint.Close()
+
+		first := attachFakeAP(accesspoint, time.Hour, time.Hour)
+		sentOn, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+		second := attachFakeAP(accesspoint, time.Hour, time.Hour)
+		synctest.Wait()
+		if !first.isClosed() {
+			t.Fatal("the replaced connection is still open")
+		}
+
+		accesspoint.DropConn(sentOn)
+		synctest.Wait()
+		if second.isClosed() {
+			t.Fatal("dropping a replaced connection closed its replacement")
+		}
+
+		current, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+
+		accesspoint.DropConn(current)
+		synctest.Wait()
+		if !second.isClosed() {
+			t.Fatal("dropping the current connection left it open")
+		}
+	})
+}
+
+// A reconnection holds connMu through its dials and backoff, and is already
+// replacing the connection: DropConn must not wait for it, since its caller is
+// waiting for an answer, not recvLoop.
+func TestDropConnDoesNotWaitForAReconnection(t *testing.T) {
+	accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+	defer accesspoint.Close()
+
+	accesspoint.connMu.Lock()
+	defer accesspoint.connMu.Unlock()
+
+	dropped := make(chan struct{})
+	go func() {
+		accesspoint.DropConn(0)
+		close(dropped)
+	}()
+
+	select {
+	case <-dropped:
+	case <-time.After(time.Second):
+		t.Fatal("DropConn waited for a reconnection in progress")
+	}
+}
+
+// DropConn closes the socket and returns before recvLoop has noticed and
+// started the reconnection. A packet sent in between, such as the key
+// provider's retry sent right after the drop, must wait for that reconnection
+// instead of being written to the closed socket and failing. Here no
+// reconnection is possible (no APWelcome), so the accesspoint closes, and that
+// is the only way the send may end.
+func TestSendAfterDropConnWaitsForTheReplacement(t *testing.T) {
+	for i := 0; i < 300; i++ {
+		accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		attachFakeAP(accesspoint, time.Hour, time.Hour)
+		accesspoint.Receive(PacketTypeAesKey)
+
+		current, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+		accesspoint.DropConn(current)
+
+		sent := make(chan error, 1)
+		go func() {
+			_, err := accesspoint.SendConn(context.Background(), PacketTypeRequestKey, []byte("key request"))
+			sent <- err
+		}()
+		if err := <-sent; !errors.Is(err, ErrAccesspointClosed) {
+			t.Fatalf("after %d drops, a send right after DropConn failed with %q instead of waiting for the replacement", i+1, err)
+		}
+		accesspoint.Close()
+	}
+}
+
+// The accesspoint's pings are the only traffic on an idle connection, so a
+// PongAck that does not come is the only sign that it went silent: until it is
+// dropped, every audio key and mercury request is sent into the void. It must
+// be dropped a bounded time after the last PongAck, whatever the phase of the
+// check, and never while PongAcks keep coming.
+func TestSilentConnectionIsDroppedSoonAfterItsLastPongAck(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		accesspoint := NewAccesspoint(&librespot.NullLogger{}, nil, "")
+		defer accesspoint.Close()
+
+		f := attachFakeAP(accesspoint, time.Second, pongAckInterval)
+		start := time.Now()
+		accesspoint.Receive(PacketTypeAesKey)
+
+		time.Sleep(10 * time.Minute)
+		synctest.Wait()
+		select {
+		case <-f.closed:
+			t.Fatalf("a connection whose pongs were acknowledged was dropped after %v", f.closedAfter(start))
+		default:
+		}
+
+		f.cut.Store(true)
+		lastAck := f.lastAckAt()
+
+		<-f.closed
+		if silent := f.closedAfter(lastAck); silent > pongAckInterval+pongAckMargin {
+			t.Fatalf("a silent connection was dropped %v after its last PongAck, want at most %v",
+				silent, pongAckInterval+pongAckMargin)
+		}
+	})
 }
