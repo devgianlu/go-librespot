@@ -305,3 +305,29 @@ func TestInitStateVolume(t *testing.T) {
 	require.Equal(t, uint32(player.MaxStateVolume), p.state.device.Volume,
 		"without external volume the session sets its own level once the dealer connects")
 }
+
+// A playback id only means something alongside its track: the official
+// clients read the track through it, and Spotify for Android crashes on a
+// state that has the id but no track (#434).
+func TestClearTrackDropsPlaybackIdWithTheTrack(t *testing.T) {
+	p := newTestAppPlayer(t)
+	p.state.player.Track = &connectpb.ProvidedTrack{Uri: "spotify:track:abc"}
+	p.state.player.PlaybackId = "0123456789abcdef"
+
+	p.state.clearTrack()
+
+	req := p.buildStateRequest(connectpb.PutStateReason_PLAYER_STATE_CHANGED)
+	require.Nil(t, req.Device.PlayerState.Track)
+	require.Empty(t, req.Device.PlayerState.PlaybackId, "no track, so no playback id either")
+}
+
+func TestAbandonTransferLeavesNoPlaybackId(t *testing.T) {
+	p := newTestAppPlayer(t)
+	p.state.player.Track = &connectpb.ProvidedTrack{Uri: "spotify:track:abc"}
+	p.state.player.PlaybackId = "0123456789abcdef"
+
+	p.abandonTransfer()
+
+	require.Nil(t, p.state.player.Track)
+	require.Empty(t, p.state.player.PlaybackId)
+}

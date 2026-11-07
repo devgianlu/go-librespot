@@ -65,6 +65,15 @@ func (s *State) setPaused(val bool) {
 	}
 }
 
+// clearTrack forgets the current track together with its playback id. The
+// two travel as a pair: the official clients read the track through the
+// playback id, and a state that carries a playback id without a track makes
+// Spotify for Android crash (#434).
+func (s *State) clearTrack() {
+	s.player.Track = nil
+	s.player.PlaybackId = ""
+}
+
 func (s *State) setActive(val bool) {
 	if val {
 		if s.active {
