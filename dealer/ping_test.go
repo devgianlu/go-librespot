@@ -5,6 +5,8 @@ package dealer
 import (
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"fmt"
 	"net"
 	"net/http"
 	"sync"
@@ -68,6 +70,12 @@ func (l *pipeListener) Addr() net.Addr { return &net.UnixAddr{Name: "pipe", Net:
 type fakeDealer struct {
 	pongDelay time.Duration
 
+	// requestAt, when set, is when the first connection pushes one player
+	// command to the device. replies counts the replies that came back.
+	requestAt time.Duration
+	requested atomic.Bool
+	replies   atomic.Int32
+
 	listener  *pipeListener
 	server    *http.Server
 	transport *http.Transport
@@ -123,18 +131,49 @@ func (f *fakeDealer) serveWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = conn.CloseNow() }()
 
+	if f.requestAt > 0 && f.requested.CompareAndSwap(false, true) {
+		f.handlers.Add(1)
+		go func() {
+			defer f.handlers.Done()
+			time.Sleep(f.requestAt)
+			payload := base64.StdEncoding.EncodeToString([]byte(`{"command":{"endpoint":"transfer"}}`))
+			msg := fmt.Sprintf(`{"type":"request","message_ident":%q,"key":"k1","payload":{"compressed":%q}}`, playerCommandUri, payload)
+			_ = conn.Write(context.Background(), websocket.MessageText, []byte(msg))
+		}()
+	}
+
 	for {
 		_, msg, err := conn.Read(context.Background())
 		if err != nil {
 			return
 		}
-		if string(msg) == `{"type":"ping"}` {
-			time.Sleep(f.pongDelay)
-			if err := conn.Write(context.Background(), websocket.MessageText, []byte(`{"type":"pong"}`)); err != nil {
-				return
-			}
+		if string(msg) != `{"type":"ping"}` {
+			f.replies.Add(1)
+			continue
 		}
+		// net.Pipe has no buffer: answer from another goroutine so this loop
+		// keeps reading while the device is not, as a socket buffer would.
+		f.handlers.Add(1)
+		go func() {
+			defer f.handlers.Done()
+			time.Sleep(f.pongDelay)
+			_ = conn.Write(context.Background(), websocket.MessageText, []byte(`{"type":"pong"}`))
+		}()
 	}
+}
+
+const playerCommandUri = "hm://connect-state/v1/player/command"
+
+// handleCommands answers every player command after handleFor, as the
+// player's main loop does once it has processed the command.
+func handleCommands(d *Dealer, handleFor time.Duration) {
+	reqs := d.ReceiveRequest(playerCommandUri)
+	go func() {
+		for req := range reqs {
+			time.Sleep(handleFor)
+			req.Reply(true)
+		}
+	}()
 }
 
 func (f *fakeDealer) dealer() *Dealer {
@@ -172,7 +211,12 @@ func (f *fakeDealer) close() {
 // defers it: the bubble refuses to end while a goroutine is still blocked, and
 // a deferred call also runs after t.Fatal.
 func runDealer(t *testing.T, f *fakeDealer) (stop func()) {
-	d := f.dealer()
+	stop, _ = runDealerWith(t, f)
+	return stop
+}
+
+func runDealerWith(t *testing.T, f *fakeDealer) (stop func(), d *Dealer) {
+	d = f.dealer()
 	stop = func() {
 		d.Close()
 		f.close()
@@ -183,7 +227,7 @@ func runDealer(t *testing.T, f *fakeDealer) (stop func()) {
 		t.Fatalf("connect: %v", err)
 	}
 	d.startReceiving()
-	return stop
+	return stop, d
 }
 
 // A command sent from the phone travels on the dealer connection, so a dead
@@ -226,6 +270,60 @@ func TestDealerKeepsSlowConnection(t *testing.T) {
 
 		if dials := f.dialTimes(); len(dials) != 1 {
 			t.Fatalf("a slow but answering connection was replaced: %d dials", len(dials))
+		}
+	})
+}
+
+// The dealer is read by one loop, which reads nothing while the player
+// processes a command: a transfer loads the context and the track over
+// spclient, whose requests may take up to 30 s. A pong waiting unread behind
+// that command must not cost the connection, nor the command its reply.
+func TestDealerKeepsConnectionWhileCommandIsSlow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeDealer(0)
+		f.requestAt = time.Second
+		stop, d := runDealerWith(t, f)
+		defer stop()
+		handleCommands(d, 25*time.Second)
+
+		time.Sleep(3 * time.Minute)
+		synctest.Wait()
+
+		if dials := f.dialTimes(); len(dials) != 1 {
+			t.Fatalf("a live connection was replaced while a command was processed: %d dials", len(dials))
+		}
+		if replies := f.replies.Load(); replies != 1 {
+			t.Fatalf("the slow command's reply was lost: %d replies", replies)
+		}
+	})
+}
+
+// Waiting for a slow command must not hide a dead connection: once the
+// command is answered, a connection that went silent meanwhile is replaced
+// within one ping period and one pong timeout.
+func TestDealerReplacesSilentConnectionAfterSlowCommand(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeDealer(0)
+		f.requestAt = time.Second
+		stop, d := runDealerWith(t, f)
+		defer stop()
+		const handleFor = 25 * time.Second
+		handleCommands(d, handleFor)
+
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		f.cutCurrent()
+		answeredAt := time.Now().Add(f.requestAt + handleFor - 2*time.Second)
+
+		time.Sleep(3 * time.Minute)
+		synctest.Wait()
+
+		dials := f.dialTimes()
+		if len(dials) < 2 {
+			t.Fatalf("the silent connection was never replaced (%d dial)", len(dials))
+		}
+		if took := dials[1].Sub(answeredAt); took > 25*time.Second {
+			t.Fatalf("the silent connection was replaced %s after the command was answered, want at most 25s", took)
 		}
 	})
 }
