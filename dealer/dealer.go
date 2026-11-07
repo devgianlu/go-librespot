@@ -16,7 +16,11 @@ import (
 )
 
 const (
-	pingInterval = 30 * time.Second
+	// A ping goes out every pingInterval and the connection is dropped when
+	// its pong has not come back within pongTimeout, so a connection that went
+	// silent is replaced within pingInterval+pongTimeout.
+	pingInterval = 15 * time.Second
+	pongTimeout  = 10 * time.Second
 	timeout      = 10 * time.Second
 )
 
@@ -142,23 +146,30 @@ func (d *Dealer) startReceiving() {
 func (d *Dealer) pingTicker() {
 	ticker := time.NewTicker(pingInterval)
 
+	// pongDeadline fires pongTimeout after the last ping went out on pingConn,
+	// and is nil while no ping is waiting for its pong.
+	var pongDeadline <-chan time.Time
+	var pingConn *websocket.Conn
+	var pingSent time.Time
+
 loop:
 	for {
 		select {
 		case <-d.done:
 			break loop
-		case <-ticker.C:
-			timePassed := d.timeSinceLastPong()
-			if timePassed > pingInterval+timeout {
-				d.log.Errorf("did not receive last pong from dealer, %.0fs passed", timePassed.Seconds())
+		case <-pongDeadline:
+			pongDeadline = nil
+			if !d.pongSince(pingSent) {
+				d.log.Errorf("did not receive pong from dealer within %.0fs", pongTimeout.Seconds())
 
-				// closing the connection should make the read on the "recvLoop" fail,
-				// continue hoping for a new connection
-				d.closeConn(websocket.StatusServiceRestart)
-				continue
+				// The link is presumed dead, so a close handshake would only wait
+				// for its own timeout. Closing should make the read on the
+				// "recvLoop" fail, continue hoping for a new connection.
+				_ = pingConn.CloseNow()
 			}
-
+		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(d.ctx, timeout)
+			sent := time.Now()
 			conn, err := d.writeConn(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			cancel()
 
@@ -176,6 +187,9 @@ loop:
 				d.closeConnRef(conn, websocket.StatusServiceRestart)
 				continue
 			}
+
+			pingConn, pingSent = conn, sent
+			pongDeadline = time.After(pongTimeout)
 		}
 	}
 
@@ -306,16 +320,18 @@ func (d *Dealer) reconnect() error {
 	return nil
 }
 
+// resetPongDeadline counts a new connection as an answer to the pings sent on
+// the previous one.
 func (d *Dealer) resetPongDeadline() {
 	d.lastPongLock.Lock()
-	d.lastPong = time.Now().Add(pingInterval)
+	d.lastPong = time.Now()
 	d.lastPongLock.Unlock()
 }
 
-func (d *Dealer) timeSinceLastPong() time.Duration {
+func (d *Dealer) pongSince(t time.Time) bool {
 	d.lastPongLock.Lock()
 	defer d.lastPongLock.Unlock()
-	return time.Since(d.lastPong)
+	return !d.lastPong.Before(t)
 }
 
 func (d *Dealer) closeConn(status websocket.StatusCode) {
