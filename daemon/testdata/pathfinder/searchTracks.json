@@ -1,0 +1,147 @@
+{
+ "searchV2": {
+  "tracksV2": {
+   "items": [
+    {
+     "item": {
+      "__typename": "TrackResponseWrapper",
+      "data": {
+       "__typename": "Track",
+       "albumOfTrack": {
+        "coverArt": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab67616d00001e028ac778cc7d88779f74d33311",
+           "width": 300
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d000048518ac778cc7d88779f74d33311",
+           "width": 64
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
+           "width": 640
+          }
+         ]
+        },
+        "name": "Homework",
+        "uri": "spotify:album:5uRdvUR7xCnHmUW8n64n9y"
+       },
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Daft Punk"
+          },
+          "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+         }
+        ]
+       },
+       "duration": {
+        "totalMilliseconds": 429533
+       },
+       "name": "Around the World",
+       "uri": "spotify:track:1pKYYY0dkg23sQQXi0Q5zN"
+      }
+     }
+    },
+    {
+     "item": {
+      "__typename": "TrackResponseWrapper",
+      "data": {
+       "__typename": "Track",
+       "albumOfTrack": {
+        "coverArt": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab67616d00001e021e81bff9807a9e629fce5ade",
+           "width": 300
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d000048511e81bff9807a9e629fce5ade",
+           "width": 64
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d0000b2731e81bff9807a9e629fce5ade",
+           "width": 640
+          }
+         ]
+        },
+        "name": "Discovery",
+        "uri": "spotify:album:2noRn2Aes5aoNVsU6iWThc"
+       },
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Daft Punk"
+          },
+          "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+         }
+        ]
+       },
+       "duration": {
+        "totalMilliseconds": 232666
+       },
+       "name": "Something About Us",
+       "uri": "spotify:track:1NeLwFETswx8Fzxl2AFl91"
+      }
+     }
+    },
+    {
+     "item": {
+      "__typename": "TrackResponseWrapper",
+      "data": {
+       "__typename": "Track",
+       "albumOfTrack": {
+        "coverArt": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab67616d00001e029b9b36b0e22870b9f542d937",
+           "width": 300
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d000048519b9b36b0e22870b9f542d937",
+           "width": 64
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d0000b2739b9b36b0e22870b9f542d937",
+           "width": 640
+          }
+         ]
+        },
+        "name": "Random Access Memories",
+        "uri": "spotify:album:4m2880jivSbbyEGAKfITCa"
+       },
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Daft Punk"
+          },
+          "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+         },
+         {
+          "profile": {
+           "name": "Julian Casablancas"
+          },
+          "uri": "spotify:artist:1rAv1GhTQ2rmG94p9lU3rB"
+         }
+        ]
+       },
+       "duration": {
+        "totalMilliseconds": 337560
+       },
+       "name": "Instant Crush (feat. Julian Casablancas)",
+       "uri": "spotify:track:2cGxRwrMyEAp8dEbuZaVv6"
+      }
+     }
+    }
+   ],
+   "pagingInfo": {
+    "nextOffset": 20
+   },
+   "totalCount": 35
+  }
+ }
+}

@@ -1,0 +1,102 @@
+{
+ "searchV2": {
+  "playlists": {
+   "items": [
+    {
+     "__typename": "PlaylistResponseWrapper",
+     "data": {
+      "__typename": "Playlist",
+      "description": "Best hits of this awesome band!",
+      "images": {
+       "items": [
+        {
+         "sources": [
+          {
+           "url": "https://image-cdn-fa.spotifycdn.com/image/ab67706c0000d72cbb071380835cf25eafa2f681",
+           "width": null
+          }
+         ]
+        }
+       ]
+      },
+      "name": "Daft Punk Greatest Hits",
+      "ownerV2": {
+       "__typename": "UserResponseWrapper",
+       "data": {
+        "__typename": "User",
+        "name": "User 1",
+        "uri": "spotify:user:user1",
+        "username": "user1"
+       }
+      },
+      "uri": "spotify:playlist:2jTy5QwqWJ1ZUv2XeJPYbn"
+     }
+    },
+    {
+     "__typename": "PlaylistResponseWrapper",
+     "data": {
+      "__typename": "Playlist",
+      "description": "This is Daft Punk. The essential tracks, all in one playlist.",
+      "images": {
+       "items": [
+        {
+         "sources": [
+          {
+           "url": "https://pickasso.spotifycdn.com/image/ab67c0de0000deef/dt/v1/img/thisisv3/4tZwfgrHOc3mvqYlEYSvVi/en",
+           "width": null
+          }
+         ]
+        }
+       ]
+      },
+      "name": "This Is Daft Punk",
+      "ownerV2": {
+       "__typename": "UserResponseWrapper",
+       "data": {
+        "__typename": "User",
+        "name": "Spotify",
+        "uri": "spotify:user:spotify",
+        "username": "spotify"
+       }
+      },
+      "uri": "spotify:playlist:37i9dQZF1DZ06evO2CNgSk"
+     }
+    },
+    {
+     "__typename": "PlaylistResponseWrapper",
+     "data": {
+      "__typename": "Playlist",
+      "description": "Some of the biggest french touch classics! Cover: Daft Punk",
+      "images": {
+       "items": [
+        {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab67706f000000024381593a82554c7b005b1271",
+           "width": null
+          }
+         ]
+        }
+       ]
+      },
+      "name": "La French Touch",
+      "ownerV2": {
+       "__typename": "UserResponseWrapper",
+       "data": {
+        "__typename": "User",
+        "name": "Spotify",
+        "uri": "spotify:user:spotify",
+        "username": "spotify"
+       }
+      },
+      "uri": "spotify:playlist:37i9dQZF1DX9cbNxuNYT3d"
+     }
+    }
+   ],
+   "pagingInfo": {
+    "nextOffset": 30
+   },
+   "totalCount": 192
+  }
+ }
+}

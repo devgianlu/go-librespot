@@ -1,0 +1,120 @@
+{
+ "searchV2": {
+  "episodes": {
+   "items": [
+    {
+     "__typename": "EpisodeResponseWrapper",
+     "data": {
+      "__typename": "Episode",
+      "podcastV2": {
+       "__typename": "PodcastResponseWrapper",
+       "data": {
+        "__typename": "Podcast",
+        "coverArt": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab6765630000f68d1b92f6f284a264453adc8003",
+           "width": 64
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67656300005f1f1b92f6f284a264453adc8003",
+           "width": 300
+          },
+          {
+           "url": "https://i.scdn.co/image/ab6765630000ba8a1b92f6f284a264453adc8003",
+           "width": 640
+          }
+         ]
+        },
+        "name": "Fip Tape",
+        "publisher": {
+         "name": "FIP"
+        },
+        "uri": "spotify:show:643Xm3QDeHLR3PXMAYZidG"
+       }
+      },
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab6765630000f68da1128918c1e0ef8284ab6369",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67656300005f1fa1128918c1e0ef8284ab6369",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab6765630000ba8aa1128918c1e0ef8284ab6369",
+         "width": 640
+        }
+       ]
+      },
+      "duration": {
+       "totalMilliseconds": 7410573
+      },
+      "name": "La mixtape de Daft Punk",
+      "uri": "spotify:episode:0r2a0n8MkS1tiwCN0vg2mV"
+     }
+    },
+    {
+     "__typename": "EpisodeResponseWrapper",
+     "data": {
+      "__typename": "Episode",
+      "podcastV2": {
+       "__typename": "PodcastResponseWrapper",
+       "data": {
+        "__typename": "Podcast",
+        "coverArt": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab6765630000f68d269370acb8a2520aab00793e",
+           "width": 64
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67656300005f1f269370acb8a2520aab00793e",
+           "width": 300
+          },
+          {
+           "url": "https://i.scdn.co/image/ab6765630000ba8a269370acb8a2520aab00793e",
+           "width": 640
+          }
+         ]
+        },
+        "name": "Le goût de M",
+        "publisher": {
+         "name": "Le Monde"
+        },
+        "uri": "spotify:show:4Id9J1SVtgcqnGICbdfvvn"
+       }
+      },
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab6765630000f68d42187e7bf4ed2bdbd273e4ad",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67656300005f1f42187e7bf4ed2bdbd273e4ad",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab6765630000ba8a42187e7bf4ed2bdbd273e4ad",
+         "width": 640
+        }
+       ]
+      },
+      "duration": {
+       "totalMilliseconds": 2962991
+      },
+      "name": "#164 Pedro Winter, producteur, DJ et compositeur : « Les Daft Punk m’ont appris la patience, à ne pas brûler les étapes »",
+      "uri": "spotify:episode:1w5AzpWPKVhVAQOXthDmSU"
+     }
+    }
+   ],
+   "pagingInfo": {
+    "nextOffset": 30
+   },
+   "totalCount": 1000
+  }
+ }
+}
