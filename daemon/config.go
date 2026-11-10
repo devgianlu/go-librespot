@@ -61,6 +61,8 @@ type Config struct {
 
 	Metadata MetadataConfig
 
+	Search SearchConfig
+
 	Credentials CredentialsConfig
 }
 
@@ -80,6 +82,14 @@ type MetadataConfig struct {
 	ContextSweep bool
 	// MaxTracks caps how many tracks of a context are enumerated and swept.
 	MaxTracks int
+}
+
+// SearchConfig configures the experimental /search endpoints. They query
+// pathfinder, the internal GraphQL service the official clients search with,
+// whose persisted queries Spotify changes at will, so they are opt-in.
+type SearchConfig struct {
+	// Enabled turns on GET /search/*. Off, nothing is sent to Spotify.
+	Enabled bool
 }
 
 // CacheConfig configures the on-disk cache for downloaded (encrypted) audio

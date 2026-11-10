@@ -152,7 +152,7 @@ type ApiDeviceAuth struct {
 	Url string `json:"url"`
 }
 
-// ApiLibraryAlbum An album saved in the user's library
+// ApiLibraryAlbum An album saved in the user's library, or found by a search
 type ApiLibraryAlbum struct {
 	// ArtistNames Names of the album artists
 	ArtistNames []string `json:"artist_names"`
@@ -184,7 +184,7 @@ type ApiLibraryAlbums struct {
 	Total int `json:"total"`
 }
 
-// ApiLibraryArtist An artist the user follows
+// ApiLibraryArtist An artist the user follows, or one found by a search
 type ApiLibraryArtist struct {
 	// ImageUrl Portrait image URL, null when unknown
 	ImageUrl *string `json:"image_url"`
@@ -348,6 +348,149 @@ type ApiRepeatTrack struct {
 type ApiRoot struct {
 	// PlaybackReady Whether the daemon is fully bootstrapped and ready to accept /player/play
 	PlaybackReady bool `json:"playback_ready"`
+}
+
+// ApiSearchAlbums A page of the albums found by a search
+type ApiSearchAlbums struct {
+	Items []ApiLibraryAlbum `json:"items"`
+
+	// Limit Maximum number of results requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned result
+	Offset int `json:"offset"`
+
+	// Total Number of results as Spotify estimates it, raised to reach into the next page while there is one, and at most 1000; on the last page, the offset plus the results Spotify returned there
+	Total int `json:"total"`
+}
+
+// ApiSearchArtists A page of the artists found by a search
+type ApiSearchArtists struct {
+	Items []ApiLibraryArtist `json:"items"`
+
+	// Limit Maximum number of results requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned result
+	Offset int `json:"offset"`
+
+	// Total Number of results as Spotify estimates it, raised to reach into the next page while there is one, and at most 1000; on the last page, the offset plus the results Spotify returned there
+	Total int `json:"total"`
+}
+
+// ApiSearchPlaylist A playlist found by a search
+type ApiSearchPlaylist struct {
+	// Description Playlist description, empty when it has none
+	Description string `json:"description"`
+
+	// ImageUrl Cover image URL, null when unknown
+	ImageUrl *string `json:"image_url"`
+
+	// Name Playlist name
+	Name string `json:"name"`
+
+	// OwnerUsername Username of the playlist owner, "spotify" for editorial playlists
+	OwnerUsername string `json:"owner_username"`
+
+	// Uri Playlist URI
+	Uri string `json:"uri"`
+}
+
+// ApiSearchPlaylists A page of the playlists found by a search
+type ApiSearchPlaylists struct {
+	Items []ApiSearchPlaylist `json:"items"`
+
+	// Limit Maximum number of results requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned result
+	Offset int `json:"offset"`
+
+	// Total Number of results as Spotify estimates it, raised to reach into the next page while there is one, and at most 1000; on the last page, the offset plus the results Spotify returned there
+	Total int `json:"total"`
+}
+
+// ApiSearchShow A podcast show found by a search
+type ApiSearchShow struct {
+	// ImageUrl Cover image URL, null when unknown
+	ImageUrl *string `json:"image_url"`
+
+	// Name Show name
+	Name string `json:"name"`
+
+	// Publisher Name of the show's publisher
+	Publisher string `json:"publisher"`
+
+	// Uri Show URI
+	Uri string `json:"uri"`
+}
+
+// ApiSearchShows A page of the shows found by a search
+type ApiSearchShows struct {
+	Items []ApiSearchShow `json:"items"`
+
+	// Limit Maximum number of results requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned result
+	Offset int `json:"offset"`
+
+	// Total Number of results as Spotify estimates it, raised to reach into the next page while there is one, and at most 1000; on the last page, the offset plus the results Spotify returned there
+	Total int `json:"total"`
+}
+
+// ApiSearchSuggestions What Spotify suggests for a query being typed: complete queries, and results by type, each list in Spotify's order
+type ApiSearchSuggestions struct {
+	Albums    []ApiLibraryAlbum   `json:"albums"`
+	Artists   []ApiLibraryArtist  `json:"artists"`
+	Episodes  []ApiSearchTrack    `json:"episodes"`
+	Playlists []ApiSearchPlaylist `json:"playlists"`
+
+	// Queries Complete queries, to search for with the endpoints above
+	Queries []string         `json:"queries"`
+	Shows   []ApiSearchShow  `json:"shows"`
+	Tracks  []ApiSearchTrack `json:"tracks"`
+}
+
+// ApiSearchTrack A track or podcast episode found by a search. As in track, an episode names its show in artist_names, album_name and album_uri.
+type ApiSearchTrack struct {
+	// AlbumCoverUrl Album or episode cover URL, null when unknown
+	AlbumCoverUrl *string `json:"album_cover_url"`
+
+	// AlbumName Album name, or the show name for an episode
+	AlbumName string `json:"album_name"`
+
+	// AlbumUri Album URI, or the show URI for an episode
+	AlbumUri string `json:"album_uri"`
+
+	// ArtistNames Names of the artists, or of the show for an episode
+	ArtistNames []string `json:"artist_names"`
+
+	// ArtistUris Artist URIs, in the order of artist_names; empty for episodes
+	ArtistUris []string `json:"artist_uris"`
+
+	// Duration Duration in milliseconds
+	Duration int `json:"duration"`
+
+	// Name Name
+	Name string `json:"name"`
+
+	// Uri Track or episode URI
+	Uri string `json:"uri"`
+}
+
+// ApiSearchTracks A page of the tracks or episodes found by a search
+type ApiSearchTracks struct {
+	Items []ApiSearchTrack `json:"items"`
+
+	// Limit Maximum number of results requested
+	Limit int `json:"limit"`
+
+	// Offset Index of the first returned result
+	Offset int `json:"offset"`
+
+	// Total Number of results as Spotify estimates it, raised to reach into the next page while there is one, and at most 1000; on the last page, the offset plus the results Spotify returned there
+	Total int `json:"total"`
 }
 
 // ApiSeek A seek payload
@@ -564,6 +707,87 @@ type PlaylistContainsParams struct {
 	Uris []string `form:"uris" json:"uris"`
 }
 
+// GetSearchAlbumsParams defines parameters for GetSearchAlbums.
+type GetSearchAlbumsParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Offset Index of the first result to return; offset plus limit may not exceed 1000
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of results to return, from 1 to 50
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSearchArtistsParams defines parameters for GetSearchArtists.
+type GetSearchArtistsParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Offset Index of the first result to return; offset plus limit may not exceed 1000
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of results to return, from 1 to 50
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSearchEpisodesParams defines parameters for GetSearchEpisodes.
+type GetSearchEpisodesParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Offset Index of the first result to return; offset plus limit may not exceed 1000
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of results to return, from 1 to 50
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSearchPlaylistsParams defines parameters for GetSearchPlaylists.
+type GetSearchPlaylistsParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Offset Index of the first result to return; offset plus limit may not exceed 1000
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of results to return, from 1 to 50
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSearchShowsParams defines parameters for GetSearchShows.
+type GetSearchShowsParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Offset Index of the first result to return; offset plus limit may not exceed 1000
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of results to return, from 1 to 50
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSearchSuggestionsParams defines parameters for GetSearchSuggestions.
+type GetSearchSuggestionsParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Limit Maximum number of suggestions to return, from 1 to 30
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetSearchTracksParams defines parameters for GetSearchTracks.
+type GetSearchTracksParams struct {
+	// Q The search query, 1 to 200 characters once trimmed
+	Q string `form:"q" json:"q"`
+
+	// Offset Index of the first result to return; offset plus limit may not exceed 1000
+	Offset int `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Limit Maximum number of results to return, from 1 to 50
+	Limit int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // ConnectCommandJSONRequestBody defines body for ConnectCommand for application/json ContentType.
 type ConnectCommandJSONRequestBody = ApiConnectCommand
 
@@ -701,6 +925,27 @@ type ServerInterface interface {
 
 	// (POST /player/volume)
 	PlayerSetVolume(w http.ResponseWriter, r *http.Request)
+
+	// (GET /search/albums)
+	GetSearchAlbums(w http.ResponseWriter, r *http.Request, params GetSearchAlbumsParams)
+
+	// (GET /search/artists)
+	GetSearchArtists(w http.ResponseWriter, r *http.Request, params GetSearchArtistsParams)
+
+	// (GET /search/episodes)
+	GetSearchEpisodes(w http.ResponseWriter, r *http.Request, params GetSearchEpisodesParams)
+
+	// (GET /search/playlists)
+	GetSearchPlaylists(w http.ResponseWriter, r *http.Request, params GetSearchPlaylistsParams)
+
+	// (GET /search/shows)
+	GetSearchShows(w http.ResponseWriter, r *http.Request, params GetSearchShowsParams)
+
+	// (GET /search/suggestions)
+	GetSearchSuggestions(w http.ResponseWriter, r *http.Request, params GetSearchSuggestionsParams)
+
+	// (GET /search/tracks)
+	GetSearchTracks(w http.ResponseWriter, r *http.Request, params GetSearchTracksParams)
 
 	// (POST /set_device_name)
 	SetDeviceName(w http.ResponseWriter, r *http.Request)
@@ -1279,6 +1524,348 @@ func (siw *ServerInterfaceWrapper) PlayerSetVolume(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// GetSearchAlbums operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchAlbums(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchAlbumsParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchAlbums(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSearchArtists operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchArtists(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchArtistsParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchArtists(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSearchEpisodes operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchEpisodes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchEpisodesParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchEpisodes(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSearchPlaylists operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchPlaylists(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchPlaylistsParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchPlaylists(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSearchShows operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchShows(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchShowsParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchShows(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSearchSuggestions operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchSuggestions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchSuggestionsParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchSuggestions(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetSearchTracks operation middleware
+func (siw *ServerInterfaceWrapper) GetSearchTracks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSearchTracksParams
+
+	// ------------- Required query parameter "q" -------------
+
+	if paramValue := r.URL.Query().Get("q"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		return
+	}
+
+	err = runtime.BindQueryParameter("form", true, true, "q", r.URL.Query(), &params.Q)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSearchTracks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetDeviceName operation middleware
 func (siw *ServerInterfaceWrapper) SetDeviceName(w http.ResponseWriter, r *http.Request) {
 
@@ -1471,6 +2058,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/player/stop", wrapper.PlayerStop)
 	m.HandleFunc("GET "+options.BaseURL+"/player/volume", wrapper.PlayerGetVolume)
 	m.HandleFunc("POST "+options.BaseURL+"/player/volume", wrapper.PlayerSetVolume)
+	m.HandleFunc("GET "+options.BaseURL+"/search/albums", wrapper.GetSearchAlbums)
+	m.HandleFunc("GET "+options.BaseURL+"/search/artists", wrapper.GetSearchArtists)
+	m.HandleFunc("GET "+options.BaseURL+"/search/episodes", wrapper.GetSearchEpisodes)
+	m.HandleFunc("GET "+options.BaseURL+"/search/playlists", wrapper.GetSearchPlaylists)
+	m.HandleFunc("GET "+options.BaseURL+"/search/shows", wrapper.GetSearchShows)
+	m.HandleFunc("GET "+options.BaseURL+"/search/suggestions", wrapper.GetSearchSuggestions)
+	m.HandleFunc("GET "+options.BaseURL+"/search/tracks", wrapper.GetSearchTracks)
 	m.HandleFunc("POST "+options.BaseURL+"/set_device_name", wrapper.SetDeviceName)
 	m.HandleFunc("GET "+options.BaseURL+"/status", wrapper.GetStatus)
 	m.HandleFunc("POST "+options.BaseURL+"/token", wrapper.GetToken)
