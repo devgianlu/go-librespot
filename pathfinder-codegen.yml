@@ -1,0 +1,11 @@
+# oapi-codegen configuration for pathfinder's response models. Run through `go generate ./...`.
+package: pathfinder
+output: pathfinder/models_gen.go
+generate:
+  models: true
+output-options:
+  # The spec describes responses only and has no paths: keep every schema.
+  skip-prune: true
+  # Every field is optional and a missing one reads as its zero value; the
+  # spec keeps a pointer where absent and zero differ.
+  prefer-skip-optional-pointer: true
