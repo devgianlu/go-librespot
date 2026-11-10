@@ -50,6 +50,8 @@ type Spclient struct {
 	clientToken string
 	deviceId    string
 
+	pathfinderUrl *url.URL
+
 	accessToken librespot.GetLogin5TokenFunc
 }
 
@@ -57,6 +59,11 @@ func NewSpclient(ctx context.Context, log librespot.Logger, client *http.Client,
 	baseUrl, err := url.Parse(fmt.Sprintf("https://%s/", addr(ctx)))
 	if err != nil {
 		return nil, fmt.Errorf("invalid spclient base url: %w", err)
+	}
+
+	pathfinderUrl, err := url.Parse(pathfinderQueryUrl)
+	if err != nil {
+		panic("invalid pathfinder URL")
 	}
 
 	return &Spclient{
@@ -70,10 +77,11 @@ func NewSpclient(ctx context.Context, log librespot.Logger, client *http.Client,
 				return http.ErrUseLastResponse
 			},
 		},
-		baseUrl:     baseUrl,
-		clientToken: clientToken,
-		deviceId:    deviceId,
-		accessToken: accessToken,
+		baseUrl:       baseUrl,
+		clientToken:   clientToken,
+		deviceId:      deviceId,
+		pathfinderUrl: pathfinderUrl,
+		accessToken:   accessToken,
 	}, nil
 }
 
@@ -322,13 +330,19 @@ func (c *Spclient) PutConnectStateRaw(ctx context.Context, spotConnId string, re
 	return &cluster, nil
 }
 
-// RateLimitedError reports a connect-state 429; RetryAfter is the advised cooldown.
+// RateLimitedError reports a 429 from an spclient service; RetryAfter is the
+// advised cooldown.
 type RateLimitedError struct {
 	RetryAfter time.Duration
 	err        error
 }
 
-func (e *RateLimitedError) Error() string { return e.err.Error() }
+func (e *RateLimitedError) Error() string {
+	if e.err == nil {
+		return fmt.Sprintf("rate limited, retry after %s", e.RetryAfter)
+	}
+	return e.err.Error()
+}
 func (e *RateLimitedError) Unwrap() error { return e.err }
 
 // parseRetryAfter reads a Retry-After header (seconds or HTTP-date), with a default fallback.

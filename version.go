@@ -56,3 +56,24 @@ func SystemInfoString() string {
 func UserAgent() string {
 	return fmt.Sprintf("go-librespot/%s Go/%s", VersionNumberString(), runtime.Version())
 }
+
+// SpotifyLikeUserAgent names the desktop client go-librespot presents to the
+// access point (whose client ID it also logs in to login5 with), then
+// go-librespot itself, for the services that refuse UserAgent().
+func SpotifyLikeUserAgent() string {
+	return fmt.Sprintf("Spotify/%d %s/0 (go-librespot/%s)", SpotifyVersionCode, userAgentOs(), VersionNumberString())
+}
+
+// userAgentOs names the OS the way the desktop client's User-Agent does.
+func userAgentOs() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "OSX"
+	case "linux":
+		return "Linux"
+	case "windows":
+		return "Win32"
+	default:
+		return runtime.GOOS
+	}
+}
