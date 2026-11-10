@@ -1,0 +1,123 @@
+{
+ "searchV2": {
+  "albumsV2": {
+   "items": [
+    {
+     "__typename": "AlbumResponseWrapper",
+     "data": {
+      "__typename": "Album",
+      "artists": {
+       "items": [
+        {
+         "profile": {
+          "name": "Daft Punk"
+         },
+         "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+        }
+       ]
+      },
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab67616d00001e028ac778cc7d88779f74d33311",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67616d000048518ac778cc7d88779f74d33311",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
+         "width": 640
+        }
+       ]
+      },
+      "date": {
+       "year": 1997
+      },
+      "name": "Homework",
+      "uri": "spotify:album:5uRdvUR7xCnHmUW8n64n9y"
+     }
+    },
+    {
+     "__typename": "AlbumResponseWrapper",
+     "data": {
+      "__typename": "Album",
+      "artists": {
+       "items": [
+        {
+         "profile": {
+          "name": "Daft Punk"
+         },
+         "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+        }
+       ]
+      },
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab67616d00001e021e81bff9807a9e629fce5ade",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67616d000048511e81bff9807a9e629fce5ade",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67616d0000b2731e81bff9807a9e629fce5ade",
+         "width": 640
+        }
+       ]
+      },
+      "date": {
+       "year": 2001
+      },
+      "name": "Discovery",
+      "uri": "spotify:album:2noRn2Aes5aoNVsU6iWThc"
+     }
+    },
+    {
+     "__typename": "AlbumResponseWrapper",
+     "data": {
+      "__typename": "Album",
+      "artists": {
+       "items": [
+        {
+         "profile": {
+          "name": "Daft Punk"
+         },
+         "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+        }
+       ]
+      },
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab67616d00001e029b9b36b0e22870b9f542d937",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67616d000048519b9b36b0e22870b9f542d937",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67616d0000b2739b9b36b0e22870b9f542d937",
+         "width": 640
+        }
+       ]
+      },
+      "date": {
+       "year": 2013
+      },
+      "name": "Random Access Memories",
+      "uri": "spotify:album:4m2880jivSbbyEGAKfITCa"
+     }
+    }
+   ],
+   "pagingInfo": {
+    "nextOffset": 30
+   },
+   "totalCount": 190
+  }
+ }
+}

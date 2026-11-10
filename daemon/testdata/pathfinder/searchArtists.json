@@ -1,0 +1,96 @@
+{
+ "searchV2": {
+  "artists": {
+   "items": [
+    {
+     "__typename": "ArtistResponseWrapper",
+     "data": {
+      "__typename": "Artist",
+      "profile": {
+       "name": "Daft Punk"
+      },
+      "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi",
+      "visuals": {
+       "avatarImage": {
+        "sources": [
+         {
+          "url": "https://i.scdn.co/image/ab6761610000e5ebd3aa7cc0e419b6c459b08e8e",
+          "width": 640
+         },
+         {
+          "url": "https://i.scdn.co/image/ab6761610000f178d3aa7cc0e419b6c459b08e8e",
+          "width": 160
+         },
+         {
+          "url": "https://i.scdn.co/image/ab67616100005174d3aa7cc0e419b6c459b08e8e",
+          "width": 320
+         }
+        ]
+       }
+      }
+     }
+    },
+    {
+     "__typename": "ArtistResponseWrapper",
+     "data": {
+      "__typename": "Artist",
+      "profile": {
+       "name": "Phoenix"
+      },
+      "uri": "spotify:artist:1xU878Z1QtBldR7ru9owdU",
+      "visuals": {
+       "avatarImage": {
+        "sources": [
+         {
+          "url": "https://i.scdn.co/image/ab6761610000e5eb722051daeb10119e2e039724",
+          "width": 640
+         },
+         {
+          "url": "https://i.scdn.co/image/ab6761610000f178722051daeb10119e2e039724",
+          "width": 160
+         },
+         {
+          "url": "https://i.scdn.co/image/ab67616100005174722051daeb10119e2e039724",
+          "width": 320
+         }
+        ]
+       }
+      }
+     }
+    },
+    {
+     "__typename": "ArtistResponseWrapper",
+     "data": {
+      "__typename": "Artist",
+      "profile": {
+       "name": "Justice"
+      },
+      "uri": "spotify:artist:1gR0gsQYfi6joyO1dlp76N",
+      "visuals": {
+       "avatarImage": {
+        "sources": [
+         {
+          "url": "https://i.scdn.co/image/ab6761610000e5eb31f6a05c867dce1ef426c2e0",
+          "width": 640
+         },
+         {
+          "url": "https://i.scdn.co/image/ab6761610000f17831f6a05c867dce1ef426c2e0",
+          "width": 160
+         },
+         {
+          "url": "https://i.scdn.co/image/ab6761610000517431f6a05c867dce1ef426c2e0",
+          "width": 320
+         }
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "pagingInfo": {
+    "nextOffset": 30
+   },
+   "totalCount": 114
+  }
+ }
+}
