@@ -1,0 +1,339 @@
+openapi: 3.0.3
+info:
+  title: Spotify pathfinder (partial)
+  version: '1'
+  description: >-
+    Response models of pathfinder, Spotify's internal GraphQL service
+    (POST https://api-partner.spotify.com/pathfinder/v2/query), for the
+    persisted queries go-librespot sends. Spotify publishes no schema: these
+    were reversed from its answers, and only describe the fields go-librespot
+    reads. Every object may carry more fields, and any field may be missing or
+    null. Go models are generated from this file into pathfinder/; run
+    `go generate ./...` after changing it.
+paths: {}
+components:
+  schemas:
+    # The data object of every search operation: searchTracks, searchAlbums,
+    # searchArtists, searchPlaylists, searchPodcasts, searchFullEpisodes and
+    # searchSuggestions.
+    SearchData:
+      type: object
+      properties:
+        searchV2:
+          description: Absent when the answer is not a search result
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchResultV2'
+    SearchResultV2:
+      description: >-
+        One GraphQL type for every search operation; each operation selects
+        the field holding its results.
+      type: object
+      properties:
+        tracksV2:
+          description: Results of searchTracks
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchHitPage'
+        albumsV2:
+          description: Results of searchAlbums
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchPage'
+        artists:
+          description: Results of searchArtists
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchPage'
+        playlists:
+          description: Results of searchPlaylists
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchPage'
+        podcasts:
+          description: Results of searchPodcasts
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchPage'
+        episodes:
+          description: Results of searchFullEpisodes
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/SearchPage'
+        topResultsV2:
+          description: Results of searchSuggestions
+          x-go-type-skip-optional-pointer: false
+          allOf:
+            - $ref: '#/components/schemas/TopResults'
+    PagingInfo:
+      type: object
+      properties:
+        nextOffset:
+          description: Offset of the next page, null on the last one
+          type: integer
+          nullable: true
+          x-go-type-skip-optional-pointer: false
+    SearchPage:
+      description: >-
+        One page of results. totalCount is an estimate: only
+        pagingInfo.nextOffset tells whether another page exists.
+      type: object
+      properties:
+        totalCount:
+          type: integer
+        pagingInfo:
+          $ref: '#/components/schemas/PagingInfo'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityWrapper'
+    SearchHitPage:
+      description: A page of results whose items are hits, as in tracksV2
+      type: object
+      properties:
+        totalCount:
+          type: integer
+        pagingInfo:
+          $ref: '#/components/schemas/PagingInfo'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchHit'
+    TopResults:
+      type: object
+      properties:
+        itemsV2:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchHit'
+    SearchHit:
+      description: >-
+        A result together with what matched (TopResultHit in topResultsV2).
+      type: object
+      properties:
+        item:
+          $ref: '#/components/schemas/EntityWrapper'
+    EntityWrapper:
+      description: >-
+        A response wrapper (TrackResponseWrapper, AlbumResponseWrapper…). Its
+        data is an entity, an error type such as GenericError, NotFound or
+        RestrictedContent, or null. In searchSuggestions a
+        SearchAutoCompleteEntity wrapper holds an AutoCompleteEntity instead.
+      type: object
+      properties:
+        __typename:
+          x-go-name: Typename
+          type: string
+        data:
+          description: Null when Spotify has nothing to show
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/Entity'
+    AutoCompleteEntity:
+      description: A suggested complete query, in searchSuggestions
+      type: object
+      properties:
+        text:
+          type: string
+    # The members' __typename carries no x-go-name: oapi-codegen's union
+    # helpers set the discriminator field under its default Go name.
+    Entity:
+      description: A search result, told apart by its GraphQL type
+      oneOf:
+        - $ref: '#/components/schemas/Track'
+        - $ref: '#/components/schemas/Album'
+        - $ref: '#/components/schemas/Artist'
+        - $ref: '#/components/schemas/Playlist'
+        - $ref: '#/components/schemas/Podcast'
+        - $ref: '#/components/schemas/Episode'
+      discriminator:
+        propertyName: __typename
+        mapping:
+          Track: '#/components/schemas/Track'
+          Album: '#/components/schemas/Album'
+          Artist: '#/components/schemas/Artist'
+          Playlist: '#/components/schemas/Playlist'
+          Podcast: '#/components/schemas/Podcast'
+          Episode: '#/components/schemas/Episode'
+    Track:
+      type: object
+      required: [ __typename ]
+      properties:
+        __typename:
+          type: string
+        uri:
+          type: string
+        name:
+          type: string
+        duration:
+          $ref: '#/components/schemas/Duration'
+        albumOfTrack:
+          $ref: '#/components/schemas/AlbumOfTrack'
+        artists:
+          $ref: '#/components/schemas/ArtistRefs'
+    AlbumOfTrack:
+      type: object
+      properties:
+        uri:
+          type: string
+        name:
+          type: string
+        coverArt:
+          $ref: '#/components/schemas/ImageSet'
+    Album:
+      type: object
+      required: [ __typename ]
+      properties:
+        __typename:
+          type: string
+        uri:
+          type: string
+        name:
+          type: string
+        artists:
+          $ref: '#/components/schemas/ArtistRefs'
+        coverArt:
+          $ref: '#/components/schemas/ImageSet'
+        date:
+          $ref: '#/components/schemas/AlbumDate'
+    AlbumDate:
+      description: An album's release date, of which search gives the year alone
+      type: object
+      properties:
+        year:
+          type: integer
+    Artist:
+      type: object
+      required: [ __typename ]
+      properties:
+        __typename:
+          type: string
+        uri:
+          type: string
+        profile:
+          $ref: '#/components/schemas/ArtistProfile'
+        visuals:
+          $ref: '#/components/schemas/ArtistVisuals'
+    ArtistVisuals:
+      type: object
+      properties:
+        avatarImage:
+          $ref: '#/components/schemas/ImageSet'
+    ArtistProfile:
+      type: object
+      properties:
+        name:
+          type: string
+    ArtistRefs:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtistRef'
+    ArtistRef:
+      type: object
+      properties:
+        uri:
+          type: string
+        profile:
+          $ref: '#/components/schemas/ArtistProfile'
+    Playlist:
+      type: object
+      required: [ __typename ]
+      properties:
+        __typename:
+          type: string
+        uri:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        images:
+          $ref: '#/components/schemas/PlaylistImages'
+        ownerV2:
+          $ref: '#/components/schemas/UserWrapper'
+    PlaylistImages:
+      type: object
+      properties:
+        items:
+          description: The playlist's image, in its first item
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageSet'
+    UserWrapper:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+    Podcast:
+      description: A show
+      type: object
+      required: [ __typename ]
+      properties:
+        __typename:
+          type: string
+        uri:
+          type: string
+        name:
+          type: string
+        coverArt:
+          $ref: '#/components/schemas/ImageSet'
+        publisher:
+          $ref: '#/components/schemas/Publisher'
+    Publisher:
+      type: object
+      properties:
+        name:
+          type: string
+    PodcastWrapper:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Podcast'
+    Episode:
+      type: object
+      required: [ __typename ]
+      properties:
+        __typename:
+          type: string
+        uri:
+          type: string
+        name:
+          type: string
+        coverArt:
+          $ref: '#/components/schemas/ImageSet'
+        duration:
+          $ref: '#/components/schemas/Duration'
+        podcastV2:
+          $ref: '#/components/schemas/PodcastWrapper'
+    User:
+      description: A playlist's owner
+      type: object
+      properties:
+        username:
+          type: string
+    ImageSet:
+      type: object
+      properties:
+        sources:
+          description: The image in several sizes
+          type: array
+          items:
+            $ref: '#/components/schemas/ImageSource'
+    ImageSource:
+      type: object
+      properties:
+        url:
+          type: string
+        width:
+          description: Width in pixels, null when unknown
+          type: integer
+          nullable: true
+          x-go-type-skip-optional-pointer: false
+    Duration:
+      type: object
+      properties:
+        totalMilliseconds:
+          type: integer
