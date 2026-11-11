@@ -1,0 +1,99 @@
+{
+ "searchV2": {
+  "podcasts": {
+   "items": [
+    {
+     "__typename": "PodcastResponseWrapper",
+     "data": {
+      "__typename": "Podcast",
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab6765630000f68d8506600d4bed18d909237221",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67656300005f1f8506600d4bed18d909237221",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab6765630000ba8a8506600d4bed18d909237221",
+         "width": 640
+        }
+       ]
+      },
+      "name": "Daft Punk, le secret des robots",
+      "publisher": {
+       "name": "Amazon Originals"
+      },
+      "uri": "spotify:show:0wxzoqBV4cE4F0i2hbBw4k"
+     }
+    },
+    {
+     "__typename": "PodcastResponseWrapper",
+     "data": {
+      "__typename": "Podcast",
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab6765630000f68d60e4cfd1c155b3527a9a0d7b",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67656300005f1f60e4cfd1c155b3527a9a0d7b",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab6765630000ba8a60e4cfd1c155b3527a9a0d7b",
+         "width": 640
+        }
+       ]
+      },
+      "name": "DAFT PUNK sur NRJ",
+      "publisher": {
+       "name": "NRJ France"
+      },
+      "uri": "spotify:show:5sunx6io6NFjRgqpJp9vQX"
+     }
+    },
+    {
+     "__typename": "PodcastResponseWrapper",
+     "data": {
+      "__typename": "Podcast",
+      "coverArt": {
+       "sources": [
+        {
+         "url": "https://i.scdn.co/image/ab6765630000f68d3ec8303cb7f03f403bf3590f",
+         "width": 64
+        },
+        {
+         "url": "https://i.scdn.co/image/ab67656300005f1f3ec8303cb7f03f403bf3590f",
+         "width": 300
+        },
+        {
+         "url": "https://i.scdn.co/image/ab6765630000ba8a3ec8303cb7f03f403bf3590f",
+         "width": 640
+        }
+       ]
+      },
+      "name": "Daft Punk - Aerodynamite (Blaster 'Late Night' Edit)",
+      "publisher": {
+       "name": "Blaster"
+      },
+      "uri": "spotify:show:5fLkT950iryZSh9sucHspD"
+     }
+    },
+    {
+     "__typename": "PodcastResponseWrapper",
+     "data": {
+      "__typename": "GenericError"
+     }
+    }
+   ],
+   "pagingInfo": {
+    "nextOffset": 30
+   },
+   "totalCount": 145
+  }
+ }
+}

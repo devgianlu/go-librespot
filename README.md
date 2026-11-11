@@ -245,6 +245,22 @@ metadata:
   max_tracks: 800 # Maximum number of tracks of a context to enumerate and sweep; the metadata cache grows to fit it
 ```
 
+### Search (experimental)
+
+Optionally, the daemon can search Spotify's catalog: `GET /search/tracks`, `/search/albums`, `/search/artists`,
+`/search/playlists`, `/search/shows` and `/search/episodes` return a page of one type each, and
+`GET /search/suggestions` completes a query being typed. Results carry their Spotify URIs, as elsewhere in the API.
+
+The searches go through pathfinder, the internal GraphQL service the official clients search with, using the session's
+own token rather than the rate-limited public Web API. Pathfinder only runs persisted queries, named by a hash that
+Spotify changes whenever it rebuilds one; until go-librespot is updated, that search then fails and the log names its
+operation. This is why search is experimental and disabled by default.
+
+```yaml
+search:
+  enabled: false # Answer the /search endpoints; disabled, nothing is sent to Spotify
+```
+
 ### Volume synchronization
 
 Various configurations for volume control are available:

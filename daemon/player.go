@@ -942,6 +942,24 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		})
 
 		return nil, errReplyDeferred
+	case ApiRequestTypeSearchTracks, ApiRequestTypeSearchAlbums, ApiRequestTypeSearchArtists,
+		ApiRequestTypeSearchPlaylists, ApiRequestTypeSearchShows, ApiRequestTypeSearchEpisodes,
+		ApiRequestTypeSearchSuggestions:
+		// Opt-in: pathfinder is an internal service whose persisted queries
+		// Spotify changes at will.
+		if !p.app.cfg.Search.Enabled {
+			return nil, ErrNotFound
+		}
+
+		// A search touches no player state either.
+		data := req.Data.(ApiRequestDataSearch)
+		reply := apiReply(req)
+		query, imageUrl := p.sess.Spclient().PathfinderQuery, newSearchImageUrlFunc(p.app.cfg.ImageSize)
+		p.goDetached(searchTimeout, func(ctx context.Context) {
+			reply.done(runSearch(ctx, query, imageUrl, req.Type, data))
+		})
+
+		return nil, errReplyDeferred
 	case ApiRequestTypeSetLiked:
 		data := req.Data.(ApiSetLiked)
 		reply := apiReply(req)

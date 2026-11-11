@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -146,6 +149,13 @@ const (
 	ApiRequestTypeConnectDevices      ApiRequestType = "connect_devices"
 	ApiRequestTypeConnectTransfer     ApiRequestType = "connect_transfer"
 	ApiRequestTypeConnectCommand      ApiRequestType = "connect_command"
+	ApiRequestTypeSearchTracks        ApiRequestType = "search_tracks"
+	ApiRequestTypeSearchAlbums        ApiRequestType = "search_albums"
+	ApiRequestTypeSearchArtists       ApiRequestType = "search_artists"
+	ApiRequestTypeSearchPlaylists     ApiRequestType = "search_playlists"
+	ApiRequestTypeSearchShows         ApiRequestType = "search_shows"
+	ApiRequestTypeSearchEpisodes      ApiRequestType = "search_episodes"
+	ApiRequestTypeSearchSuggestions   ApiRequestType = "search_suggestions"
 )
 
 // ApiRequestDataContextTracks carries the uri query parameter of the context
@@ -157,6 +167,14 @@ type ApiRequestDataContextTracks struct {
 // ApiRequestDataLibraryPage carries the paging query parameters of the
 // library listing requests.
 type ApiRequestDataLibraryPage struct {
+	Offset int
+	Limit  int
+}
+
+// ApiRequestDataSearch carries the query parameters of a search; suggestions
+// have no offset.
+type ApiRequestDataSearch struct {
+	Query  string
 	Offset int
 	Limit  int
 }
@@ -510,6 +528,10 @@ func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		case errors.Is(resp.err, ErrTooManyRequests):
+			var rateLimit *spclient.RateLimitedError
+			if errors.As(resp.err, &rateLimit) {
+				w.Header().Set("Retry-After", strconv.Itoa(max(1, int(math.Ceil(rateLimit.RetryAfter.Seconds())))))
+			}
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
 		case errors.Is(resp.err, ErrSuperseded), errors.Is(resp.err, ErrLoaderBusy), errors.Is(resp.err, spclient.ErrPlaylistConflict):
@@ -645,6 +667,63 @@ func (s *ConcreteApiServer) GetLibraryAlbums(w http.ResponseWriter, r *http.Requ
 
 func (s *ConcreteApiServer) GetLibraryArtists(w http.ResponseWriter, r *http.Request, params GetLibraryArtistsParams) {
 	s.handleLibraryPage(w, r, ApiRequestTypeLibraryArtists, params.Offset, params.Limit)
+}
+
+// Bounds of the search endpoints, as the spec states them.
+const (
+	searchMaxQueryLength          = 200
+	searchDefaultLimit            = 20
+	searchMaxLimit                = 50
+	searchSuggestionsDefaultLimit = 10
+	searchSuggestionsMaxLimit     = 30
+)
+
+// handleSearch forwards a search whose query is 1 to searchMaxQueryLength
+// characters once trimmed, with the offset and limit in range and within the
+// results pathfinder pages through.
+func (s *ConcreteApiServer) handleSearch(w http.ResponseWriter, r *http.Request, typ ApiRequestType, q string, offset, limit, defaultLimit, maxLimit int) {
+	query := strings.TrimSpace(q)
+	n := utf8.RuneCountInString(query)
+
+	// The generated params cannot tell an absent limit from limit=0.
+	if !r.URL.Query().Has("limit") {
+		limit = defaultLimit
+	}
+
+	if n == 0 || n > searchMaxQueryLength || offset < 0 || limit < 1 || limit > maxLimit || offset+limit > searchMaxResults {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: typ, Data: ApiRequestDataSearch{Query: query, Offset: offset, Limit: limit}}, w)
+}
+
+func (s *ConcreteApiServer) GetSearchTracks(w http.ResponseWriter, r *http.Request, params GetSearchTracksParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchTracks, params.Q, params.Offset, params.Limit, searchDefaultLimit, searchMaxLimit)
+}
+
+func (s *ConcreteApiServer) GetSearchAlbums(w http.ResponseWriter, r *http.Request, params GetSearchAlbumsParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchAlbums, params.Q, params.Offset, params.Limit, searchDefaultLimit, searchMaxLimit)
+}
+
+func (s *ConcreteApiServer) GetSearchArtists(w http.ResponseWriter, r *http.Request, params GetSearchArtistsParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchArtists, params.Q, params.Offset, params.Limit, searchDefaultLimit, searchMaxLimit)
+}
+
+func (s *ConcreteApiServer) GetSearchPlaylists(w http.ResponseWriter, r *http.Request, params GetSearchPlaylistsParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchPlaylists, params.Q, params.Offset, params.Limit, searchDefaultLimit, searchMaxLimit)
+}
+
+func (s *ConcreteApiServer) GetSearchShows(w http.ResponseWriter, r *http.Request, params GetSearchShowsParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchShows, params.Q, params.Offset, params.Limit, searchDefaultLimit, searchMaxLimit)
+}
+
+func (s *ConcreteApiServer) GetSearchEpisodes(w http.ResponseWriter, r *http.Request, params GetSearchEpisodesParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchEpisodes, params.Q, params.Offset, params.Limit, searchDefaultLimit, searchMaxLimit)
+}
+
+func (s *ConcreteApiServer) GetSearchSuggestions(w http.ResponseWriter, r *http.Request, params GetSearchSuggestionsParams) {
+	s.handleSearch(w, r, ApiRequestTypeSearchSuggestions, params.Q, 0, params.Limit, searchSuggestionsDefaultLimit, searchSuggestionsMaxLimit)
 }
 
 // maxLibraryUris caps how many items one library request may name.
@@ -958,6 +1037,7 @@ func (s *ConcreteApiServer) serve() {
 		AllowedOrigins:      []string{s.allowOrigin},
 		AllowPrivateNetwork: true,
 		AllowCredentials:    true,
+		ExposedHeaders:      []string{"Retry-After"},
 	})
 
 	var err error

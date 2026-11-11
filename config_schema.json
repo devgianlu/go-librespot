@@ -388,6 +388,17 @@
               "minimum": 1
             }
           }
+        },
+        "search": {
+          "type": "object",
+          "description": "Experimental catalog search behind the GET /search/* endpoints, through pathfinder, an internal Spotify service whose queries change without notice",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether to answer the /search endpoints. Disabled, nothing is sent to Spotify",
+              "default": false
+            }
+          }
         }
       },
       "required": [

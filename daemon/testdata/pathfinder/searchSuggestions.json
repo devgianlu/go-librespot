@@ -1,0 +1,153 @@
+{
+ "searchV2": {
+  "topResultsV2": {
+   "itemsV2": [
+    {
+     "__typename": "TopResultHit",
+     "item": {
+      "__typename": "SearchAutoCompleteEntity",
+      "data": {
+       "text": "daft punk",
+       "uri": "spotify:search:daft+punk"
+      }
+     }
+    },
+    {
+     "__typename": "TopResultHit",
+     "item": {
+      "__typename": "SearchAutoCompleteEntity",
+      "data": {
+       "text": "daft punk tron",
+       "uri": "spotify:search:daft+punk+tron"
+      }
+     }
+    },
+    {
+     "__typename": "TopResultHit",
+     "item": {
+      "__typename": "SearchAutoCompleteEntity",
+      "data": {
+       "text": "daft punk veridis quo",
+       "uri": "spotify:search:daft+punk+veridis+quo"
+      }
+     }
+    },
+    {
+     "__typename": "TopResultHit",
+     "item": {
+      "__typename": "AlbumResponseWrapper",
+      "data": {
+       "__typename": "Album",
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Daft Punk"
+          },
+          "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+         }
+        ]
+       },
+       "coverArt": {
+        "sources": [
+         {
+          "url": "https://i.scdn.co/image/ab67616d00001e028ac778cc7d88779f74d33311",
+          "width": 300
+         },
+         {
+          "url": "https://i.scdn.co/image/ab67616d000048518ac778cc7d88779f74d33311",
+          "width": 64
+         },
+         {
+          "url": "https://i.scdn.co/image/ab67616d0000b2738ac778cc7d88779f74d33311",
+          "width": 640
+         }
+        ]
+       },
+       "date": {
+        "year": 1997
+       },
+       "name": "Homework",
+       "uri": "spotify:album:5uRdvUR7xCnHmUW8n64n9y"
+      }
+     }
+    },
+    {
+     "__typename": "TopResultHit",
+     "item": {
+      "__typename": "ArtistResponseWrapper",
+      "data": {
+       "__typename": "Artist",
+       "profile": {
+        "name": "Daft Punk"
+       },
+       "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi",
+       "visuals": {
+        "avatarImage": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab6761610000e5ebd3aa7cc0e419b6c459b08e8e",
+           "width": 640
+          },
+          {
+           "url": "https://i.scdn.co/image/ab6761610000f178d3aa7cc0e419b6c459b08e8e",
+           "width": 160
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616100005174d3aa7cc0e419b6c459b08e8e",
+           "width": 320
+          }
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "__typename": "TopResultHit",
+     "item": {
+      "__typename": "TrackResponseWrapper",
+      "data": {
+       "__typename": "Track",
+       "albumOfTrack": {
+        "coverArt": {
+         "sources": [
+          {
+           "url": "https://i.scdn.co/image/ab67616d00001e021e81bff9807a9e629fce5ade",
+           "width": 300
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d000048511e81bff9807a9e629fce5ade",
+           "width": 64
+          },
+          {
+           "url": "https://i.scdn.co/image/ab67616d0000b2731e81bff9807a9e629fce5ade",
+           "width": 640
+          }
+         ]
+        },
+        "name": "Discovery",
+        "uri": "spotify:album:2noRn2Aes5aoNVsU6iWThc"
+       },
+       "artists": {
+        "items": [
+         {
+          "profile": {
+           "name": "Daft Punk"
+          },
+          "uri": "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"
+         }
+        ]
+       },
+       "duration": {
+        "totalMilliseconds": 232666
+       },
+       "name": "Something About Us",
+       "uri": "spotify:track:1NeLwFETswx8Fzxl2AFl91"
+      }
+     }
+    }
+   ]
+  }
+ }
+}

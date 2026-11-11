@@ -92,6 +92,10 @@ type cliConfig struct {
 		MaxTracks    int  `koanf:"max_tracks"`
 	} `koanf:"metadata"`
 
+	Search struct {
+		Enabled bool `koanf:"enabled"`
+	} `koanf:"search"`
+
 	Credentials struct {
 		Type        string `koanf:"type"`
 		Interactive struct {
@@ -165,6 +169,7 @@ func (c *cliConfig) toDaemonConfig() *daemon.Config {
 	dc.Metadata.Enabled = c.Metadata.Enabled
 	dc.Metadata.ContextSweep = c.Metadata.ContextSweep
 	dc.Metadata.MaxTracks = c.Metadata.MaxTracks
+	dc.Search.Enabled = c.Search.Enabled
 	dc.Credentials.Type = c.Credentials.Type
 	dc.Credentials.Interactive.CallbackPort = c.Credentials.Interactive.CallbackPort
 	dc.Credentials.SpotifyToken.Username = c.Credentials.SpotifyToken.Username
@@ -231,6 +236,8 @@ func loadCLIConfig(cfg *cliConfig) error {
 		"metadata.enabled":       false,
 		"metadata.context_sweep": false,
 		"metadata.max_tracks":    800,
+
+		"search.enabled": false,
 
 		"zeroconf_backend": "builtin",
 
