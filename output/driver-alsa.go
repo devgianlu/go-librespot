@@ -466,7 +466,6 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 			out.pcmHandle = nil
 			if errCode := C.snd_pcm_close(pcmHandle); errCode < 0 {
 				out.err <- out.alsaError("snd_pcm_close", errCode)
-				out.lock.Unlock()
 			}
 			out.lock.Unlock()
 			return
