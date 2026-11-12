@@ -364,6 +364,17 @@ func floatLeToS32Le(floats []float32) []C.int32_t {
 	return ints
 }
 
+// closePcmAfterError closes the PCM handle when outputLoop stops on an error,
+// and marks the output closed. Close() returns early for a closed output, so
+// without this the handle stays open and the device stays busy, for this
+// process and for anything else that wants it, until the process exits.
+// Must be called with out.lock held.
+func (out *alsaOutput) closePcmAfterError(pcmHandle *C.snd_pcm_t) {
+	_ = C.snd_pcm_close(pcmHandle)
+	out.pcmHandle = nil
+	out.closed = true
+}
+
 func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 	floats := make([]float32, out.channels*out.periodSize)
 
@@ -430,8 +441,8 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 				shorts := floatLeToS16Le(floats)
 				data = unsafe.Pointer(&shorts[0])
 			default:
+				out.closePcmAfterError(pcmHandle)
 				out.err <- fmt.Errorf("unsupported PCM format: %s", pcmFormatName(out.pcmFormat))
-				out.closed = true
 				out.lock.Unlock()
 				return
 			}
@@ -442,8 +453,8 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 				if errCode < 0 {
 					// Failed to recover from this error. Close the output and
 					// report the error.
+					out.closePcmAfterError(pcmHandle)
 					out.err <- out.alsaError("snd_pcm_recover", C.int(errCode))
-					out.closed = true
 					out.lock.Unlock()
 					return
 				}
@@ -461,8 +472,8 @@ func (out *alsaOutput) outputLoop(pcmHandle *C.snd_pcm_t) {
 			return
 		} else if err != nil {
 			// Got some other error. Close the output and report the error.
+			out.closePcmAfterError(pcmHandle)
 			out.err <- err
-			out.closed = true
 			out.lock.Unlock()
 			return
 		}
