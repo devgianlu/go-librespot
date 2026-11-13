@@ -68,15 +68,22 @@ func InferSpotifyIdTypeFromContextUri(uri string) SpotifyIdType {
 	}
 }
 
+// WebApiTrackListUri is the uri the Web API now gives the list of items it
+// plays for a request naming "uris" rather than a "context_uri"; it used to
+// give none. It names no context that could be resolved: the items come
+// inline, as they do without it.
+const WebApiTrackListUri = "spotify:webapi"
+
 // InferSpotifyIdTypeFromContext is InferSpotifyIdTypeFromContextUri for a whole
-// context, which also covers the one kind that has no uri: a bare list of
-// items. The Web API plays one for a request naming "uris" rather than a
-// "context_uri", and a device playing it transfers it the same way. Such a list
-// takes its type from the first item whose uri names a track or an episode; on
-// a transfer the items carry only gids, and are taken to be tracks.
+// context, which also covers the one kind that has no uri of its own: a bare
+// list of items. The Web API plays one for a request naming "uris" rather than
+// a "context_uri", with no uri or with WebApiTrackListUri, and a device playing
+// it transfers it the same way. Such a list takes its type from the first item
+// whose uri names a track or an episode; on a transfer the items carry only
+// gids, and are taken to be tracks.
 func InferSpotifyIdTypeFromContext(ctx *connectpb.Context) SpotifyIdType {
-	if ctx.GetUri() != "" {
-		return InferSpotifyIdTypeFromContextUri(ctx.GetUri())
+	if uri := ctx.GetUri(); uri != "" && uri != WebApiTrackListUri {
+		return InferSpotifyIdTypeFromContextUri(uri)
 	}
 
 	hasItems := false

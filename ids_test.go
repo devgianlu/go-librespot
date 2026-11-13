@@ -75,11 +75,16 @@ func TestInferSpotifyIdTypeEpisodeContexts(t *testing.T) {
 
 // These used to be reported as tracks, which meant their ids were base62
 // decoded as track gids and failed confusingly later on.
-// A context with no uri is a bare list of items, what the Web API plays for
-// "uris": its items decide, and gids alone are tracks.
+// A context with no uri, or with the Web API's, is a bare list of items, what
+// the Web API plays for "uris": its items decide, and gids alone are tracks.
 func TestInferSpotifyIdTypeFromContext(t *testing.T) {
 	page := func(tracks ...*connectpb.ContextTrack) *connectpb.Context {
 		return &connectpb.Context{Pages: []*connectpb.ContextPage{{Tracks: tracks}}}
+	}
+	webApi := func(tracks ...*connectpb.ContextTrack) *connectpb.Context {
+		ctx := page(tracks...)
+		ctx.Uri = librespot.WebApiTrackListUri
+		return ctx
 	}
 	gid := []byte{0x34, 0x95, 0x09, 0xf4, 0xc5, 0x1f, 0x47, 0x46, 0x87, 0xb6, 0x81, 0xfc, 0x9b, 0xe9, 0x3e, 0x27}
 
@@ -94,7 +99,11 @@ func TestInferSpotifyIdTypeFromContext(t *testing.T) {
 		{"bare episodes", page(&connectpb.ContextTrack{Uri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}), librespot.SpotifyIdTypeEpisode},
 		{"first recognised item", page(&connectpb.ContextTrack{Uri: "spotify:local:a:b:c:1"}, &connectpb.ContextTrack{Uri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}), librespot.SpotifyIdTypeEpisode},
 		{"bare gids", page(&connectpb.ContextTrack{Gid: gid}), librespot.SpotifyIdTypeTrack},
+		{"web api tracks", webApi(&connectpb.ContextTrack{Uri: "spotify:track:1BdI8NEvZx61tnkbuAxC5x"}), librespot.SpotifyIdTypeTrack},
+		{"web api episodes", webApi(&connectpb.ContextTrack{Uri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}), librespot.SpotifyIdTypeEpisode},
+		{"web api gids", webApi(&connectpb.ContextTrack{Gid: gid}), librespot.SpotifyIdTypeTrack},
 		{"no uri, no items", &connectpb.Context{Pages: []*connectpb.ContextPage{{}}}, librespot.SpotifyIdTypeUnknown},
+		{"web api, no items", &connectpb.Context{Uri: librespot.WebApiTrackListUri}, librespot.SpotifyIdTypeUnknown},
 		{"nothing", &connectpb.Context{}, librespot.SpotifyIdTypeUnknown},
 	}
 
