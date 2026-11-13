@@ -553,11 +553,15 @@ func (p *AppPlayer) prefetchWindowMetadata() {
 // started playing, so every track in it is known to /status (next_track) before
 // the user skips anywhere. Opt-in via metadata.context_sweep; skipped when this
 // context was already swept. Runs on the Run goroutine.
+//
+// A list of items played with no context of its own, as the Web API plays
+// "uris" (with no uri or with WebApiTrackListUri), has nothing to enumerate:
+// its uri names no context that could be resolved.
 func (p *AppPlayer) scheduleContextMetaPrefetch(contextUri string) {
 	if p.meta == nil || !p.app.cfg.Metadata.ContextSweep {
 		return
 	}
-	if contextUri == "" || contextUri == p.lastFullMetaContext {
+	if contextUri == "" || contextUri == librespot.WebApiTrackListUri || contextUri == p.lastFullMetaContext {
 		return
 	}
 
