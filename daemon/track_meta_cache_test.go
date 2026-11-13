@@ -405,6 +405,20 @@ func TestContextSweepRequiresItsOwnOptIn(t *testing.T) {
 	require.Empty(t, p.lastFullMetaContext, "no context sweep without metadata.context_sweep")
 }
 
+// A list of items played with no context of its own, as the Web API plays
+// "uris", is not swept: its uri names no context to enumerate.
+func TestContextSweepSkipsBareTrackLists(t *testing.T) {
+	p := newMetaTestPlayer(t, echoMetadata, func(context.Context, string) (tracks.ContextResolver, error) {
+		return nil, errors.New("not a context")
+	})
+	p.app.cfg.Metadata.ContextSweep = true
+
+	for _, uri := range []string{"", librespot.WebApiTrackListUri} {
+		p.scheduleContextMetaPrefetch(uri)
+		require.Empty(t, p.lastFullMetaContext, "no context sweep for %q", uri)
+	}
+}
+
 func TestMetaMaxTracksDefault(t *testing.T) {
 	p := &AppPlayer{app: &App{cfg: &Config{}}}
 	require.Equal(t, defaultMetaMaxTracks, p.metaMaxTracks())
