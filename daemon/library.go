@@ -236,6 +236,28 @@ func removeFromPlaylist(ctx context.Context, spc *spclient.Spclient, username, p
 	}
 }
 
+// removeFromLibrary takes a playlist out of the user's library by removing
+// its entry from the rootlist. That is how Spotify deletes a playlist the
+// user owns, and unfollows one of someone else's: the playlist itself stays
+// for its followers and can be added back. The change names the rootlist's
+// revision; if the rootlist moves on in between, it is read again and the
+// removal retried once.
+func removeFromLibrary(ctx context.Context, spc *spclient.Spclient, username, playlistUri string) error {
+	for attempt := 0; ; attempt++ {
+		revision, uris, err := spc.RootlistContents(ctx, username)
+		if err == nil {
+			var index int
+			if index, err = itemPosition(uris, playlistUri, nil); err != nil {
+				return err
+			}
+			err = spc.RootlistRemove(ctx, username, revision, playlistUri, index)
+		}
+		if !errors.Is(err, spclient.ErrPlaylistConflict) || attempt > 0 {
+			return err
+		}
+	}
+}
+
 // playlistContains tells for each of uris whether the playlist holds it.
 func playlistContains(ctx context.Context, spc *spclient.Spclient, playlistUri string, uris []string) ([]ApiPlaylistContainsState, error) {
 	id, err := librespot.SpotifyIdFromUri(playlistUri)

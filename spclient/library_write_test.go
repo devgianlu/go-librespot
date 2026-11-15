@@ -230,3 +230,33 @@ func (suite *RequestSuite) TestCollectionPageReadsPage() {
 	suite.Equal("tok", req.GetPaginationToken())
 	suite.Equal(int32(300), req.GetLimit())
 }
+
+func (suite *RequestSuite) TestRootlistContentsReadsTheUsersRootlist() {
+	suite.handler = func(_ int, w http.ResponseWriter) {
+		_, _ = w.Write(playlistPage([]byte{4}, 0, false, "spotify:start-group:1:Mixes", "spotify:playlist:a", "spotify:end-group:1"))
+	}
+
+	revision, uris, err := suite.spclient.RootlistContents(suite.T().Context(), "user")
+	suite.Require().NoError(err)
+	suite.Equal([]byte{4}, revision)
+	suite.Equal([]string{"spotify:start-group:1:Mixes", "spotify:playlist:a", "spotify:end-group:1"}, uris, "folder markers are entries too")
+	suite.Equal("/playlist/v2/user/user/rootlist", suite.requests()[0].path)
+}
+
+func (suite *RequestSuite) TestRootlistRemoveSendsAnIndexRangeToTheRootlist() {
+	err := suite.spclient.RootlistRemove(suite.T().Context(), "user", []byte{9}, "spotify:playlist:a", 2)
+	suite.Require().NoError(err)
+
+	got := suite.requests()[0]
+	suite.Equal("POST", got.method)
+	suite.Equal("/playlist/v2/user/user/rootlist/changes", got.path)
+
+	var changes playlist4pb.ListChanges
+	suite.Require().NoError(proto.Unmarshal(got.body, &changes))
+	suite.Equal([]byte{9}, changes.GetBaseRevision())
+	op := changes.GetDeltas()[0].GetOps()[0]
+	suite.Equal(playlist4pb.Op_REM, op.GetKind())
+	suite.Equal(int32(2), op.GetRem().GetFromIndex())
+	suite.Equal(int32(1), op.GetRem().GetLength())
+	suite.Equal("spotify:playlist:a", op.GetRem().GetItems()[0].GetUri())
+}
