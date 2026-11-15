@@ -992,6 +992,20 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		})
 
 		return nil, errReplyDeferred
+	case ApiRequestTypePlaylistRemove:
+		data := req.Data.(ApiPlaylistRemove)
+		reply := apiReply(req)
+		spc, username := p.sess.Spclient(), p.sess.Username()
+		p.goDetached(libraryRequestTimeout, func(ctx context.Context) {
+			if err := removeFromLibrary(ctx, spc, username, data.PlaylistUri); err != nil {
+				reply.done(nil, libraryError("failed removing playlist from library", err))
+				return
+			}
+
+			reply.done(nil, nil)
+		})
+
+		return nil, errReplyDeferred
 	case ApiRequestTypePlaylistContains:
 		data := req.Data.(ApiRequestDataPlaylistContains)
 		reply := apiReply(req)
