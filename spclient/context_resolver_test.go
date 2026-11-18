@@ -31,16 +31,19 @@ func TestNewContextResolverBareUris(t *testing.T) {
 
 // The Web API now names such a list with a uri of its own, which it cannot
 // resolve. The tracks are still inline, so there is nothing to resolve.
+// It may follow that uri with an id, which names no context either.
 func TestNewContextResolverWebApiUris(t *testing.T) {
-	spotCtx := &connectpb.Context{Uri: librespot.WebApiTrackListUri, Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{
-		{Uri: "spotify:track:1BdI8NEvZx61tnkbuAxC5x"},
-		{Uri: "spotify:track:4u615SPuJfGtPaEUSKwuK4"},
-	}}}}
+	for _, uri := range []string{librespot.WebApiTrackListUri, librespot.WebApiTrackListUri + ":2rTTCnsdFHFb5KvCEsY2lb"} {
+		spotCtx := &connectpb.Context{Uri: uri, Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{
+			{Uri: "spotify:track:1BdI8NEvZx61tnkbuAxC5x"},
+			{Uri: "spotify:track:4u615SPuJfGtPaEUSKwuK4"},
+		}}}}
 
-	r, err := NewContextResolver(context.Background(), &librespot.NullLogger{}, nil, spotCtx)
-	require.NoError(t, err)
-	require.Equal(t, librespot.SpotifyIdTypeTrack, r.Type())
-	require.Equal(t, librespot.WebApiTrackListUri, r.Uri())
+		r, err := NewContextResolver(context.Background(), &librespot.NullLogger{}, nil, spotCtx)
+		require.NoError(t, err, uri)
+		require.Equal(t, librespot.SpotifyIdTypeTrack, r.Type(), uri)
+		require.Equal(t, uri, r.Uri())
+	}
 }
 
 func TestHasResolvablePages(t *testing.T) {
