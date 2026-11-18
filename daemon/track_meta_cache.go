@@ -685,7 +685,7 @@ func (p *AppPlayer) apiNextTrack() *ApiTrack {
 	if media == nil {
 		return nil
 	}
-	return p.newApiResponseStatusMedia(media, 0)
+	return p.newApiResponseStatusMediaAs(next[0].Uri, media, 0)
 }
 
 // contextTracksResponse describes a context listing from what the caches hold:
@@ -701,7 +701,7 @@ func (p *AppPlayer) contextTracksResponse(contextUri string, uris []string, read
 	for _, uri := range uris {
 		entry := ApiContextTrackItem{Uri: uri}
 		if media := p.meta.cache.get(uri); media != nil && p.prodInfo != nil {
-			entry.Track = p.newApiResponseStatusMedia(media, 0)
+			entry.Track = p.newApiResponseStatusMediaAs(uri, media, 0)
 			resp.Cached++
 		}
 		resp.Tracks = append(resp.Tracks, entry)

@@ -258,9 +258,11 @@ func getBestImageIdForSize(images []*metadatapb.Image, size string) []byte {
 }
 
 func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position int64) *ApiTrack {
-	media := stream.Media
-
-	resp := p.newApiResponseStatusMedia(media, position)
+	var requested string
+	if stream.RequestedId.Type() != "" {
+		requested = stream.RequestedId.Uri()
+	}
+	resp := p.newApiResponseStatusMediaAs(requested, stream.Media, position)
 
 	// The file is what actually got decoded, so report from it rather than from
 	// the requested bitrate: they differ whenever the preferred format was not
@@ -285,6 +287,22 @@ func (p *AppPlayer) newApiResponseStatusTrack(stream *player.Stream, position in
 		resp.BitDepth = &bitDepth
 	}
 
+	return resp
+}
+
+// newApiResponseStatusMediaAs describes media under the uri it was asked for.
+//
+// Spotify relinks a track that is not available in the user's country to an
+// alternative with the same recording but another id, and the media then
+// carries the alternative's gid (see the player's getUnrestrictedTrack). The
+// context, the queue and the user's library still name the track by the id
+// they hold, so reporting the alternative would leave a client unable to find
+// the playing track among them. An empty uri keeps the media's own.
+func (p *AppPlayer) newApiResponseStatusMediaAs(uri string, media *librespot.Media, position int64) *ApiTrack {
+	resp := p.newApiResponseStatusMedia(media, position)
+	if uri != "" {
+		resp.Uri = uri
+	}
 	return resp
 }
 
