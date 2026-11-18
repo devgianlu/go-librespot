@@ -163,15 +163,8 @@ func (out *toolboxOutput) bufferSamples(buffer C.AudioQueueBufferRef) {
 		return
 	}
 	data := make([]float32, out.bufferSize)
-	n, err := out.reader.Read(data)
+	n := out.readSamples(data)
 	if out.closing.Load() {
-		return
-	}
-	if err != nil {
-		select {
-		case out.err <- fmt.Errorf("error reading samples: %w", err):
-		default:
-		}
 		return
 	}
 
@@ -182,6 +175,28 @@ func (out *toolboxOutput) bufferSamples(buffer C.AudioQueueBufferRef) {
 	if status != C.noErr && !out.closing.Load() {
 		log.Errorf("error queuing samples for output: %v", status)
 	}
+}
+
+// readSamples fills data from the reader and returns how many samples to
+// enqueue. The queue owns only a few buffers and hands each back solely
+// through this callback, so every buffer has to be enqueued again: one left
+// out is gone for good, and with too few left playback stutters. An empty
+// read, as at a switch to the next track, or a failed one therefore plays
+// a buffer of silence, since the queue rejects an empty buffer. Samples read
+// along with an error, like the last ones before io.EOF, still play.
+func (out *toolboxOutput) readSamples(data []float32) int {
+	n, err := out.reader.Read(data)
+	if err != nil {
+		select {
+		case out.err <- fmt.Errorf("error reading samples: %w", err):
+		default:
+		}
+	}
+	if n <= 0 {
+		clear(data)
+		return len(data)
+	}
+	return n
 }
 
 //export audioCallback
