@@ -40,8 +40,8 @@ func main() {
 	logger.Infof("running go-librespot %s", librespot.VersionNumberString())
 
 	store := NewFileStateStore(
-		filepath.Join(cfg.ConfigDir, "state.json"),
-		filepath.Join(cfg.ConfigDir, "credentials.json"),
+		filepath.Join(cfg.StateDir, "state.json"),
+		filepath.Join(cfg.StateDir, "credentials.json"),
 		logEntry,
 	)
 
