@@ -561,7 +561,7 @@ func (p *AppPlayer) scheduleContextMetaPrefetch(contextUri string) {
 	if p.meta == nil || !p.app.cfg.Metadata.ContextSweep {
 		return
 	}
-	if contextUri == "" || contextUri == librespot.WebApiTrackListUri || contextUri == p.lastFullMetaContext {
+	if contextUri == "" || librespot.IsWebApiTrackListUri(contextUri) || contextUri == p.lastFullMetaContext {
 		return
 	}
 

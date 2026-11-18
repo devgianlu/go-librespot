@@ -104,6 +104,7 @@ func TestInferSpotifyIdTypeFromContext(t *testing.T) {
 		{"web api gids", webApi(&connectpb.ContextTrack{Gid: gid}), librespot.SpotifyIdTypeTrack},
 		{"no uri, no items", &connectpb.Context{Pages: []*connectpb.ContextPage{{}}}, librespot.SpotifyIdTypeUnknown},
 		{"web api, no items", &connectpb.Context{Uri: librespot.WebApiTrackListUri}, librespot.SpotifyIdTypeUnknown},
+		{"web api with an id", &connectpb.Context{Uri: librespot.WebApiTrackListUri + ":2rTTCnsdFHFb5KvCEsY2lb", Pages: []*connectpb.ContextPage{{Tracks: []*connectpb.ContextTrack{{Uri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}}}}}, librespot.SpotifyIdTypeEpisode},
 		{"nothing", &connectpb.Context{}, librespot.SpotifyIdTypeUnknown},
 	}
 
