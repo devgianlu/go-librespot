@@ -3,7 +3,9 @@
 package output
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"sync/atomic"
@@ -138,5 +140,68 @@ func TestAudioToolboxErrorDeliveryDoesNotBlock(t *testing.T) {
 	}
 	if got := <-out.Error(); got.Error() != "first: -1" {
 		t.Fatalf("first error was lost: %v", got)
+	}
+}
+
+type toolboxScriptedReader struct {
+	n   int
+	err error
+}
+
+func (r toolboxScriptedReader) Read(samples []float32) (int, error) {
+	for i := range samples[:r.n] {
+		samples[i] = 0.5
+	}
+	return r.n, r.err
+}
+
+// The queue hands each of its few buffers back only through the callback,
+// so a read must never leave one out: an empty or failed read has to play
+// silence instead, or playback stutters once buffers are lost.
+func TestAudioToolboxEveryReadFillsTheBuffer(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		reader  toolboxScriptedReader
+		want    int
+		silence bool
+		failed  bool
+	}{
+		{"full", toolboxScriptedReader{n: 8}, 8, false, false},
+		{"partial", toolboxScriptedReader{n: 3}, 3, false, false},
+		{"empty at a track switch", toolboxScriptedReader{n: 0}, 8, true, false},
+		{"failed", toolboxScriptedReader{n: 0, err: errors.New("boom")}, 8, true, true},
+		{"last samples before EOF", toolboxScriptedReader{n: 5, err: io.EOF}, 5, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := &toolboxOutput{reader: tc.reader, err: make(chan error, 1)}
+			data := make([]float32, 8)
+			for i := range data {
+				data[i] = 1 // stale samples from the buffer's last use
+			}
+			got := out.readSamples(data)
+			if got != tc.want {
+				t.Fatalf("enqueues %d samples, want %d", got, tc.want)
+			}
+			for i, v := range data[:got] {
+				if want := float32(0.5); tc.silence {
+					want = 0
+					if v != want {
+						t.Fatalf("sample %d = %v, want silence", i, v)
+					}
+				} else if v != want {
+					t.Fatalf("sample %d = %v, want the read sample", i, v)
+				}
+			}
+			select {
+			case err := <-out.Error():
+				if !tc.failed {
+					t.Fatalf("unexpected error %v", err)
+				}
+			default:
+				if tc.failed {
+					t.Fatal("the read error was not reported")
+				}
+			}
+		})
 	}
 }
