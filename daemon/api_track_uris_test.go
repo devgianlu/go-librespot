@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	librespot "github.com/devgianlu/go-librespot"
+	"github.com/devgianlu/go-librespot/player"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -70,4 +71,26 @@ func TestApiTrackToleratesIncompleteMetadata(t *testing.T) {
 func TestGidUriToleratesMalformedGids(t *testing.T) {
 	require.Equal(t, "", gidUri(librespot.SpotifyIdTypeAlbum, nil))
 	require.Equal(t, "", gidUri(librespot.SpotifyIdTypeAlbum, []byte{1, 2, 3}))
+}
+
+// A track unavailable in the user's country plays as a relinked alternative
+// whose metadata carries another gid. Everywhere the API describes it, it keeps
+// the uri the context and the library name it by, so a client can find the
+// playing track in the list it shows.
+func TestApiTrackKeepsTheUriOfARelinkedTrack(t *testing.T) {
+	p := newMetaTestPlayer(t, echoMetadata, nil)
+	requested, alternative := trackUri(0x01), librespot.SpotifyIdFromGid(librespot.SpotifyIdTypeTrack, gid(0x02))
+	relinked := librespot.NewMediaFromTrack(metaTrack(alternative.Id(), "Relinked"))
+
+	id, err := librespot.SpotifyIdFromUri(requested)
+	require.NoError(t, err)
+	stream := &player.Stream{RequestedId: *id, Media: relinked}
+	require.Equal(t, requested, p.newApiResponseStatusTrack(stream, 0).Uri, "status and metadata events")
+
+	p.app.metaCache.putStream(requested, relinked)
+	list := p.contextTracksResponse("spotify:playlist:37i9dQZF1EQpj7X7UK8OOF", []string{requested}, true)
+	require.Equal(t, requested, list.Tracks[0].Track.Uri, "context tracks")
+
+	require.Equal(t, alternative.Uri(), p.newApiResponseStatusMediaAs("", relinked, 0).Uri, "without a requested uri the media's own stays")
+	require.Equal(t, alternative.Uri(), p.newApiResponseStatusTrack(&player.Stream{Media: relinked}, 0).Uri, "a stream without a requested id")
 }

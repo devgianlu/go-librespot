@@ -24,7 +24,7 @@ func (p *AppPlayer) apiQueue() *ApiQueue {
 		// Entries without metadata, such as local files, have a null track.
 		e := ApiQueueEntry{Uri: k.uri, Uid: nonEmpty(k.uid), Provider: QueueEntryProvider(k.provider)}
 		if k.media != nil {
-			e.Track = p.newApiResponseStatusMedia(k.media, position)
+			e.Track = p.newApiResponseStatusMediaAs(k.uri, k.media, position)
 		}
 		return e
 	}
