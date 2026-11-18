@@ -20,7 +20,7 @@ go test -count=1 -tags "test_unit test_integration" \
 
 # Keep the mode line, drop every generated file.
 head -n 1 "$PROFILE" > "$FILTERED"
-grep -v -E '/proto/|\.pb\.go:|/mock_[A-Za-z]+\.go:|/api_gen\.go:' "$PROFILE" | tail -n +2 >> "$FILTERED"
+grep -v -E '/proto/|\.pb\.go:|/mock_[A-Za-z]+\.go:|_gen\.go:' "$PROFILE" | tail -n +2 >> "$FILTERED"
 
 # Per-package coverage, weighted by statement count. Averaging the per-function
 # percentages instead would count a one-line helper the same as a 200 statement

@@ -386,7 +386,7 @@ components:
             $ref: '#/components/schemas/libraryPlaylist'
     libraryAlbum:
       x-go-name: ApiLibraryAlbum
-      description: An album saved in the user's library
+      description: An album saved in the user's library, or found by a search
       type: object
       required: [ uri, name, artist_names, year, image_url ]
       properties:
@@ -429,7 +429,7 @@ components:
             $ref: '#/components/schemas/libraryAlbum'
     libraryArtist:
       x-go-name: ApiLibraryArtist
-      description: An artist the user follows
+      description: An artist the user follows, or one found by a search
       type: object
       required: [ uri, name, image_url ]
       properties:
@@ -462,6 +462,240 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/libraryArtist'
+    searchTrack:
+      x-go-name: ApiSearchTrack
+      description: >-
+        A track or podcast episode found by a search. As in track, an episode
+        names its show in artist_names, album_name and album_uri.
+      type: object
+      required:
+        - uri
+        - name
+        - artist_names
+        - artist_uris
+        - album_name
+        - album_uri
+        - album_cover_url
+        - duration
+      properties:
+        uri:
+          description: Track or episode URI
+          type: string
+        name:
+          description: Name
+          type: string
+        artist_names:
+          description: Names of the artists, or of the show for an episode
+          type: array
+          items:
+            type: string
+        artist_uris:
+          description: >-
+            Artist URIs, in the order of artist_names; empty for episodes
+          type: array
+          items:
+            type: string
+        album_name:
+          description: Album name, or the show name for an episode
+          type: string
+        album_uri:
+          description: Album URI, or the show URI for an episode
+          type: string
+        album_cover_url:
+          description: Album or episode cover URL, null when unknown
+          type: string
+          nullable: true
+        duration:
+          description: Duration in milliseconds
+          type: integer
+    searchTracks:
+      x-go-name: ApiSearchTracks
+      description: A page of the tracks or episodes found by a search
+      type: object
+      required: [ total, offset, limit, items ]
+      properties:
+        total:
+          description: >-
+            Number of results as Spotify estimates it, raised to reach into the
+            next page while there is one, and at most 1000; on the last page,
+            the offset plus the results Spotify returned there
+          type: integer
+        offset:
+          description: Index of the first returned result
+          type: integer
+        limit:
+          description: Maximum number of results requested
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchTrack'
+    searchAlbums:
+      x-go-name: ApiSearchAlbums
+      description: A page of the albums found by a search
+      type: object
+      required: [ total, offset, limit, items ]
+      properties:
+        total:
+          description: >-
+            Number of results as Spotify estimates it, raised to reach into the
+            next page while there is one, and at most 1000; on the last page,
+            the offset plus the results Spotify returned there
+          type: integer
+        offset:
+          description: Index of the first returned result
+          type: integer
+        limit:
+          description: Maximum number of results requested
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/libraryAlbum'
+    searchArtists:
+      x-go-name: ApiSearchArtists
+      description: A page of the artists found by a search
+      type: object
+      required: [ total, offset, limit, items ]
+      properties:
+        total:
+          description: >-
+            Number of results as Spotify estimates it, raised to reach into the
+            next page while there is one, and at most 1000; on the last page,
+            the offset plus the results Spotify returned there
+          type: integer
+        offset:
+          description: Index of the first returned result
+          type: integer
+        limit:
+          description: Maximum number of results requested
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/libraryArtist'
+    searchPlaylist:
+      x-go-name: ApiSearchPlaylist
+      description: A playlist found by a search
+      type: object
+      required: [ uri, name, description, owner_username, image_url ]
+      properties:
+        uri:
+          description: Playlist URI
+          type: string
+        name:
+          description: Playlist name
+          type: string
+        description:
+          description: Playlist description, empty when it has none
+          type: string
+        owner_username:
+          description: Username of the playlist owner, "spotify" for editorial playlists
+          type: string
+        image_url:
+          description: Cover image URL, null when unknown
+          type: string
+          nullable: true
+    searchPlaylists:
+      x-go-name: ApiSearchPlaylists
+      description: A page of the playlists found by a search
+      type: object
+      required: [ total, offset, limit, items ]
+      properties:
+        total:
+          description: >-
+            Number of results as Spotify estimates it, raised to reach into the
+            next page while there is one, and at most 1000; on the last page,
+            the offset plus the results Spotify returned there
+          type: integer
+        offset:
+          description: Index of the first returned result
+          type: integer
+        limit:
+          description: Maximum number of results requested
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchPlaylist'
+    searchShow:
+      x-go-name: ApiSearchShow
+      description: A podcast show found by a search
+      type: object
+      required: [ uri, name, publisher, image_url ]
+      properties:
+        uri:
+          description: Show URI
+          type: string
+        name:
+          description: Show name
+          type: string
+        publisher:
+          description: Name of the show's publisher
+          type: string
+        image_url:
+          description: Cover image URL, null when unknown
+          type: string
+          nullable: true
+    searchShows:
+      x-go-name: ApiSearchShows
+      description: A page of the shows found by a search
+      type: object
+      required: [ total, offset, limit, items ]
+      properties:
+        total:
+          description: >-
+            Number of results as Spotify estimates it, raised to reach into the
+            next page while there is one, and at most 1000; on the last page,
+            the offset plus the results Spotify returned there
+          type: integer
+        offset:
+          description: Index of the first returned result
+          type: integer
+        limit:
+          description: Maximum number of results requested
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchShow'
+    searchSuggestions:
+      x-go-name: ApiSearchSuggestions
+      description: >-
+        What Spotify suggests for a query being typed: complete queries, and
+        results by type, each list in Spotify's order
+      type: object
+      required: [ queries, tracks, albums, artists, playlists, shows, episodes ]
+      properties:
+        queries:
+          description: Complete queries, to search for with the endpoints above
+          type: array
+          items:
+            type: string
+        tracks:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchTrack'
+        albums:
+          type: array
+          items:
+            $ref: '#/components/schemas/libraryAlbum'
+        artists:
+          type: array
+          items:
+            $ref: '#/components/schemas/libraryArtist'
+        playlists:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchPlaylist'
+        shows:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchShow'
+        episodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/searchTrack'
     likedState:
       x-go-name: ApiLikedState
       description: Whether a track is in the user's Liked Songs
@@ -1242,6 +1476,420 @@ paths:
           description: The user may not read the playlist
         404:
           description: The playlist does not exist
+  /search/tracks:
+    get:
+      operationId: getSearchTracks
+      description: >-
+        Search Spotify's catalog for tracks, most relevant first, through
+        pathfinder, the internal service the official clients search with.
+        Spotify matches loosely, so most queries find something; none is a 200
+        with total 0. Only the first 1000 results can be paged through, and
+        total is an estimate until the last page. A page may hold fewer items
+        than limit before the last one, and an item may come back on two pages.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Index of the first result to return; offset plus limit may not
+            exceed 1000
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return, from 1 to 50
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchTracks'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the offset or limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
+  /search/albums:
+    get:
+      operationId: getSearchAlbums
+      description: >-
+        Search Spotify's catalog for albums, most relevant first, through
+        pathfinder, the internal service the official clients search with.
+        Spotify matches loosely, so most queries find something; none is a 200
+        with total 0. Only the first 1000 results can be paged through, and
+        total is an estimate until the last page. A page may hold fewer items
+        than limit before the last one, and an item may come back on two pages.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Index of the first result to return; offset plus limit may not
+            exceed 1000
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return, from 1 to 50
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchAlbums'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the offset or limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
+  /search/artists:
+    get:
+      operationId: getSearchArtists
+      description: >-
+        Search Spotify's catalog for artists, most relevant first, through
+        pathfinder, the internal service the official clients search with.
+        Spotify matches loosely, so most queries find something; none is a 200
+        with total 0. Only the first 1000 results can be paged through, and
+        total is an estimate until the last page. A page may hold fewer items
+        than limit before the last one, and an item may come back on two pages.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Index of the first result to return; offset plus limit may not
+            exceed 1000
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return, from 1 to 50
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchArtists'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the offset or limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
+  /search/playlists:
+    get:
+      operationId: getSearchPlaylists
+      description: >-
+        Search Spotify's catalog for playlists, most relevant first, through
+        pathfinder, the internal service the official clients search with.
+        Spotify matches loosely, so most queries find something; none is a 200
+        with total 0. Only the first 1000 results can be paged through, and
+        total is an estimate until the last page. A page may hold fewer items
+        than limit before the last one, and an item may come back on two pages.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Index of the first result to return; offset plus limit may not
+            exceed 1000
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return, from 1 to 50
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchPlaylists'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the offset or limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
+  /search/shows:
+    get:
+      operationId: getSearchShows
+      description: >-
+        Search Spotify's catalog for podcast shows, most relevant first, through
+        pathfinder, the internal service the official clients search with.
+        Spotify matches loosely, so most queries find something; none is a 200
+        with total 0. Only the first 1000 results can be paged through, and
+        total is an estimate until the last page. A page may hold fewer items
+        than limit before the last one, and an item may come back on two pages.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Index of the first result to return; offset plus limit may not
+            exceed 1000
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return, from 1 to 50
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchShows'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the offset or limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
+  /search/episodes:
+    get:
+      operationId: getSearchEpisodes
+      description: >-
+        Search Spotify's catalog for podcast episodes, most relevant first, through
+        pathfinder, the internal service the official clients search with.
+        Spotify matches loosely, so most queries find something; none is a 200
+        with total 0. Only the first 1000 results can be paged through, and
+        total is an estimate until the last page. A page may hold fewer items
+        than limit before the last one, and an item may come back on two pages.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: offset
+          in: query
+          required: false
+          description: >-
+            Index of the first result to return; offset plus limit may not
+            exceed 1000
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          x-go-type-skip-optional-pointer: true
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of results to return, from 1 to 50
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchTracks'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the offset or limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
+  /search/suggestions:
+    get:
+      operationId: getSearchSuggestions
+      description: >-
+        Suggest complete queries and first results for a query being typed,
+        through pathfinder, as the official clients do under their search
+        field. limit bounds the queries and the results together. A request
+        runs to its end even when the client gives up on it, so debounce typing.
+
+        Experimental, see Search in the README. Requires search.enabled;
+        responds 404 otherwise.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: The search query, 1 to 200 characters once trimmed
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of suggestions to return, from 1 to 30
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 30
+            default: 10
+          x-go-type-skip-optional-pointer: true
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/searchSuggestions'
+        204:
+          description: No active session
+        400:
+          description: The query is empty or too long, or the limit is out of range
+        404:
+          description: Search is disabled
+        429:
+          description: Spotify rate limited the search
+          headers:
+            Retry-After:
+              description: Seconds to wait before searching again
+              schema:
+                type: integer
   /player/play:
     post:
       operationId: playerPlay

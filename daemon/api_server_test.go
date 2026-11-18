@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,6 +162,13 @@ var endpointMethods = map[string][]string{
 	"/library/playlists/add_tracks":   {http.MethodPost},
 	"/library/playlists/remove_track": {http.MethodPost},
 	"/library/playlists/contains":     {http.MethodGet},
+	"/search/tracks":                  {http.MethodGet},
+	"/search/albums":                  {http.MethodGet},
+	"/search/artists":                 {http.MethodGet},
+	"/search/playlists":               {http.MethodGet},
+	"/search/shows":                   {http.MethodGet},
+	"/search/episodes":                {http.MethodGet},
+	"/search/suggestions":             {http.MethodGet},
 }
 
 func TestApiRejectsWrongMethod(t *testing.T) {
@@ -704,6 +712,97 @@ func TestApiLibraryAlbumsAndArtists(t *testing.T) {
 			ts.requireNoRequest()
 		})
 	}
+}
+
+func TestApiSearch(t *testing.T) {
+	for path, typ := range map[string]ApiRequestType{
+		"/search/tracks":    ApiRequestTypeSearchTracks,
+		"/search/albums":    ApiRequestTypeSearchAlbums,
+		"/search/artists":   ApiRequestTypeSearchArtists,
+		"/search/playlists": ApiRequestTypeSearchPlaylists,
+		"/search/shows":     ApiRequestTypeSearchShows,
+		"/search/episodes":  ApiRequestTypeSearchEpisodes,
+	} {
+		t.Run(path, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodGet, path+"?q=%20daft%20punk%20&offset=5&limit=10", nil)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			req := ts.request()
+			require.Equal(t, typ, req.Type)
+			require.Equal(t, ApiRequestDataSearch{Query: "daft punk", Offset: 5, Limit: 10}, req.Data)
+
+			resp = ts.do(http.MethodGet, path+"?q=x", nil)
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, ApiRequestDataSearch{Query: "x", Limit: searchDefaultLimit}, ts.request().Data)
+		})
+	}
+
+	t.Run("suggestions", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodGet, "/search/suggestions?q=daft%20p&limit=30", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		req := ts.request()
+		require.Equal(t, ApiRequestTypeSearchSuggestions, req.Type)
+		require.Equal(t, ApiRequestDataSearch{Query: "daft p", Limit: 30}, req.Data)
+
+		resp = ts.do(http.MethodGet, "/search/suggestions?q=daft", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, ApiRequestDataSearch{Query: "daft", Limit: searchSuggestionsDefaultLimit}, ts.request().Data)
+	})
+
+	longest := strings.Repeat("é", searchMaxQueryLength)
+	for _, path := range []string{
+		"/search/tracks", "/search/tracks?q=", "/search/tracks?q=%20%20", "/search/tracks?q=" + longest + "x",
+		"/search/tracks?q=x&limit=0", "/search/tracks?q=x&limit=51", "/search/tracks?q=x&offset=-1",
+		"/search/tracks?q=x&limit=abc", "/search/tracks?q=x&offset=951&limit=50",
+		"/search/suggestions?q=x&limit=31", "/search/suggestions?q=",
+	} {
+		t.Run("rejects "+path, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodGet, path, nil)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+
+	t.Run("accepts the last page pathfinder serves", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodGet, "/search/tracks?q=x&offset=950&limit=50", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, ApiRequestDataSearch{Query: "x", Offset: 950, Limit: 50}, ts.request().Data)
+	})
+
+	t.Run("accepts the longest query", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodGet, "/search/albums?q="+longest, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, longest, ts.request().Data.(ApiRequestDataSearch).Query)
+	})
+
+	t.Run("rate limited, with the advised wait", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return nil, fmt.Errorf("%w: %w", ErrTooManyRequests, &spclient.RateLimitedError{RetryAfter: 2500 * time.Millisecond})
+		})
+
+		resp := ts.do(http.MethodGet, "/search/tracks?q=x", nil)
+		require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		require.Equal(t, "3", resp.Header.Get("Retry-After"))
+	})
+
+	t.Run("serialises an empty page", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return &ApiSearchAlbums{Total: 0, Offset: 0, Limit: 20, Items: []ApiLibraryAlbum{}}, nil
+		})
+
+		resp := ts.do(http.MethodGet, "/search/albums?q=x", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.JSONEq(t, `{"total":0,"offset":0,"limit":20,"items":[]}`, body(t, resp))
+	})
 }
 
 func TestApiGetLiked(t *testing.T) {
