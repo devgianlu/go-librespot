@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -22,8 +23,27 @@ func (e KeyProviderError) Error() string {
 	return fmt.Sprintf("failed retrieving aes key with code %d", e.Code)
 }
 
+// A live accesspoint answers a key request within a round trip, so a request
+// left unanswered for keyRequestTimeout was most likely sent on a connection
+// that went silent: that connection is dropped and the request sent again on
+// the one that replaces it, which keyRetryTimeout leaves time to establish.
+const (
+	keyRequestTimeout = 5 * time.Second
+	keyRetryTimeout   = 15 * time.Second
+)
+
+var errKeyRequestTimeout = fmt.Errorf("aes key request timed out: %w", context.DeadlineExceeded)
+
+// accesspoint is what KeyProvider needs of *ap.Accesspoint.
+type accesspoint interface {
+	Done() <-chan struct{}
+	Receive(types ...ap.PacketType) <-chan ap.Packet
+	SendConn(ctx context.Context, pktType ap.PacketType, payload []byte) (ap.ConnID, error)
+	DropConn(id ap.ConnID)
+}
+
 type KeyProvider struct {
-	ap  *ap.Accesspoint
+	ap  accesspoint
 	log librespot.Logger
 
 	recvLoopOnce sync.Once
@@ -35,6 +55,8 @@ type keyRequest struct {
 	gid    []byte
 	fileId []byte
 	resp   chan keyResponse
+	// sent receives the connection the request was written to.
+	sent chan ap.ConnID
 }
 
 type keyResponse struct {
@@ -42,7 +64,7 @@ type keyResponse struct {
 	err error
 }
 
-func NewAudioKeyProvider(log librespot.Logger, ap *ap.Accesspoint) *KeyProvider {
+func NewAudioKeyProvider(log librespot.Logger, ap accesspoint) *KeyProvider {
 	p := &KeyProvider{log: log, ap: ap}
 	p.reqChan = make(chan keyRequest)
 	return p
@@ -111,12 +133,14 @@ func (p *KeyProvider) recvLoop() {
 			// so one caller's cancellation must not abort the others. Request
 			// applies the caller's deadline to the response wait instead, and
 			// Send already fails once the accesspoint is closed.
-			if err := p.ap.Send(context.Background(), ap.PacketTypeRequestKey, buf.Bytes()); err != nil {
+			conn, err := p.ap.SendConn(context.Background(), ap.PacketTypeRequestKey, buf.Bytes())
+			if err != nil {
 				delete(reqs, reqSeq)
 				req.resp <- keyResponse{err: fmt.Errorf("failed sending key request for file %s, gid: %s: %w",
 					hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid), err)}
 				continue
 			}
+			req.sent <- conn
 
 			p.log.Debugf("requested aes key for file %s, gid: %s", hex.EncodeToString(req.fileId), librespot.GidToBase62(req.gid))
 		}
@@ -124,23 +148,46 @@ func (p *KeyProvider) recvLoop() {
 }
 
 func (p *KeyProvider) Request(ctx context.Context, gid []byte, fileId []byte) ([]byte, error) {
+	key, err := p.request(ctx, gid, fileId, keyRequestTimeout)
+	if errors.Is(err, errKeyRequestTimeout) {
+		p.log.Warnf("no aes key for file %s after %.0fs, retrying on a new accesspoint connection",
+			hex.EncodeToString(fileId), keyRequestTimeout.Seconds())
+		key, err = p.request(ctx, gid, fileId, keyRetryTimeout)
+	}
+
+	return key, err
+}
+
+// request sends one key request, which gets its own sequence number and so
+// can only be answered by the answer to that request.
+func (p *KeyProvider) request(ctx context.Context, gid []byte, fileId []byte, timeout time.Duration) ([]byte, error) {
 	done := p.ap.Done()
 
 	p.startReceiving()
 
-	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse, 1)}
+	req := keyRequest{gid: gid, fileId: fileId, resp: make(chan keyResponse, 1), sent: make(chan ap.ConnID, 1)}
 	select {
 	case <-done:
 		return nil, ap.ErrAccesspointClosed
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case p.reqChan <- req:
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 
 	var resp keyResponse
 	select {
 	case resp = <-req.resp:
+	case <-timer.C:
+		select {
+		case conn := <-req.sent:
+			p.ap.DropConn(conn)
+		default:
+			// Still being written, which waits for a reconnection in progress.
+		}
+		return nil, errKeyRequestTimeout
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-done:
