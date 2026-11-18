@@ -16,7 +16,11 @@ import (
 )
 
 const (
-	pingInterval = 30 * time.Second
+	// A ping goes out every pingInterval and the connection is dropped when
+	// its pong has not come back within pongTimeout, so a connection that went
+	// silent is replaced within pingInterval+pongTimeout.
+	pingInterval = 15 * time.Second
+	pongTimeout  = 10 * time.Second
 	timeout      = 10 * time.Second
 )
 
@@ -40,6 +44,12 @@ type Dealer struct {
 	recvLoopOnce sync.Once
 	lastPong     time.Time
 	lastPongLock sync.Mutex
+
+	// readerBusy is set while recvLoop hands a message or a request over to
+	// its receiver, during which it reads nothing, and readerFreeSince is when
+	// it last went back to reading. Both are guarded by lastPongLock.
+	readerBusy      bool
+	readerFreeSince time.Time
 
 	// connMu protects conn pointer state.
 	connMu sync.RWMutex
@@ -142,23 +152,36 @@ func (d *Dealer) startReceiving() {
 func (d *Dealer) pingTicker() {
 	ticker := time.NewTicker(pingInterval)
 
+	// pongDeadline fires pongTimeout after the last ping went out on pingConn,
+	// and is nil while no ping is waiting for its pong.
+	var pongDeadline <-chan time.Time
+	var pingConn *websocket.Conn
+	var pingSent time.Time
+
 loop:
 	for {
 		select {
 		case <-d.done:
 			break loop
-		case <-ticker.C:
-			timePassed := d.timeSinceLastPong()
-			if timePassed > pingInterval+timeout {
-				d.log.Errorf("did not receive last pong from dealer, %.0fs passed", timePassed.Seconds())
-
-				// closing the connection should make the read on the "recvLoop" fail,
-				// continue hoping for a new connection
-				d.closeConn(websocket.StatusServiceRestart)
+		case <-pongDeadline:
+			pongDeadline = nil
+			answered, wait := d.pongWait(pingSent)
+			if answered {
+				continue
+			} else if wait > 0 {
+				pongDeadline = time.After(wait)
 				continue
 			}
 
+			d.log.Errorf("did not receive pong from dealer within %.0fs", pongTimeout.Seconds())
+
+			// The link is presumed dead, so a close handshake would only wait
+			// for its own timeout. Closing should make the read on the
+			// "recvLoop" fail, continue hoping for a new connection.
+			_ = pingConn.CloseNow()
+		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(d.ctx, timeout)
+			sent := time.Now()
 			conn, err := d.writeConn(ctx, websocket.MessageText, []byte("{\"type\":\"ping\"}"))
 			cancel()
 
@@ -175,6 +198,13 @@ loop:
 				// continue hoping for a new connection
 				d.closeConnRef(conn, websocket.StatusServiceRestart)
 				continue
+			}
+
+			// While a ping is still waiting for its pong, keep timing that one:
+			// a later ping would push back the deadline of a dead connection.
+			if answered, _ := d.pongWait(pingSent); pongDeadline == nil || answered {
+				pingConn, pingSent = conn, sent
+				pongDeadline = time.After(pongTimeout)
 			}
 		}
 	}
@@ -218,10 +248,14 @@ loop:
 
 			switch message.Type {
 			case "message":
+				d.setReaderBusy(true)
 				d.handleMessage(&message)
+				d.setReaderBusy(false)
 				break
 			case "request":
+				d.setReaderBusy(true)
 				d.handleRequest(&message)
+				d.setReaderBusy(false)
 				break
 			case "ping":
 				// we never receive ping messages
@@ -306,16 +340,48 @@ func (d *Dealer) reconnect() error {
 	return nil
 }
 
+// resetPongDeadline counts a new connection as an answer to the pings sent on
+// the previous one.
 func (d *Dealer) resetPongDeadline() {
 	d.lastPongLock.Lock()
-	d.lastPong = time.Now().Add(pingInterval)
+	d.lastPong = time.Now()
 	d.lastPongLock.Unlock()
 }
 
-func (d *Dealer) timeSinceLastPong() time.Duration {
+func (d *Dealer) setReaderBusy(busy bool) {
+	d.lastPongLock.Lock()
+	d.readerBusy = busy
+	if !busy {
+		d.readerFreeSince = time.Now()
+	}
+	d.lastPongLock.Unlock()
+}
+
+// pongWait reports whether the ping sent at sent was answered and, if not,
+// how much longer to wait for its pong: zero or less means it is overdue.
+//
+// A pong is seen only once recvLoop reads it, and recvLoop reads nothing
+// while a receiver takes a message or a request, which lasts as long as the
+// player takes to process a command (a transfer makes spclient requests of up
+// to 30 s). So the pong's time runs only while recvLoop is reading: from the
+// ping, or from when recvLoop went back to reading if that is later. Closing
+// the connection sooner would gain nothing, as recvLoop cannot reconnect
+// before the receiver lets it go, and it would lose the command's reply.
+func (d *Dealer) pongWait(sent time.Time) (answered bool, wait time.Duration) {
 	d.lastPongLock.Lock()
 	defer d.lastPongLock.Unlock()
-	return time.Since(d.lastPong)
+
+	if !d.lastPong.Before(sent) {
+		return true, 0
+	} else if d.readerBusy {
+		return false, pongTimeout
+	}
+
+	from := sent
+	if d.readerFreeSince.After(from) {
+		from = d.readerFreeSince
+	}
+	return false, time.Until(from.Add(pongTimeout))
 }
 
 func (d *Dealer) closeConn(status websocket.StatusCode) {
