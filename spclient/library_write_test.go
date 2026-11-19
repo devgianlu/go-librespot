@@ -260,3 +260,52 @@ func (suite *RequestSuite) TestRootlistRemoveSendsAnIndexRangeToTheRootlist() {
 	suite.Equal(int32(1), op.GetRem().GetLength())
 	suite.Equal("spotify:playlist:a", op.GetRem().GetItems()[0].GetUri())
 }
+
+func (suite *RequestSuite) TestPlaylistCreateSendsTheNameAndReturnsTheUri() {
+	suite.handler = func(_ int, w http.ResponseWriter) {
+		body, _ := proto.Marshal(&playlist4pb.CreateListReply{Uri: proto.String("spotify:playlist:new"), Revision: []byte{1}})
+		_, _ = w.Write(body)
+	}
+
+	uri, err := suite.spclient.PlaylistCreate(suite.T().Context(), "Road Trip")
+	suite.Require().NoError(err)
+	suite.Equal("spotify:playlist:new", uri)
+
+	got := suite.requests()
+	suite.Require().Len(got, 1, "creating is not retried")
+	suite.Equal("POST", got[0].method)
+	suite.Equal("/playlist/v2/playlist", got[0].path)
+
+	var req playlist4pb.OpList
+	suite.Require().NoError(proto.Unmarshal(got[0].body, &req))
+	suite.Require().Len(req.GetOps(), 1)
+	op := req.GetOps()[0]
+	suite.Equal(playlist4pb.Op_UPDATE_LIST_ATTRIBUTES, op.GetKind(), "the name is set by an operation")
+	suite.Equal("Road Trip", op.GetUpdateListAttributes().GetNewAttributes().GetValues().GetName())
+}
+
+func (suite *RequestSuite) TestPlaylistCreateReportsAStatus() {
+	suite.handler = func(_ int, w http.ResponseWriter) { w.WriteHeader(http.StatusForbidden) }
+
+	_, err := suite.spclient.PlaylistCreate(suite.T().Context(), "Road Trip")
+	var status *spclient.StatusError
+	suite.Require().ErrorAs(err, &status)
+	suite.Equal(http.StatusForbidden, status.StatusCode)
+}
+
+func (suite *RequestSuite) TestRootlistAddFirstPutsThePlaylistOnTop() {
+	err := suite.spclient.RootlistAddFirst(suite.T().Context(), "user", []byte{9}, "spotify:playlist:new")
+	suite.Require().NoError(err)
+
+	got := suite.requests()[0]
+	suite.Equal("/playlist/v2/user/user/rootlist/changes", got.path)
+
+	var changes playlist4pb.ListChanges
+	suite.Require().NoError(proto.Unmarshal(got.body, &changes))
+	suite.Equal([]byte{9}, changes.GetBaseRevision())
+	op := changes.GetDeltas()[0].GetOps()[0]
+	suite.Equal(playlist4pb.Op_ADD, op.GetKind())
+	suite.Equal(int32(0), op.GetAdd().GetFromIndex())
+	suite.True(op.GetAdd().GetAddFirst())
+	suite.Equal("spotify:playlist:new", op.GetAdd().GetItems()[0].GetUri())
+}

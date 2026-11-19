@@ -165,12 +165,22 @@ func (c *Spclient) CollectionContains(ctx context.Context, username, set string,
 // PlaylistRevision returns the current revision of a playlist, which a change
 // has to be based on.
 func (c *Spclient) PlaylistRevision(ctx context.Context, playlist librespot.SpotifyId) ([]byte, error) {
+	return c.listRevision(ctx, playlistPath(playlist))
+}
+
+// RootlistRevision returns the current revision of the user's rootlist, which
+// a change has to be based on.
+func (c *Spclient) RootlistRevision(ctx context.Context, username string) ([]byte, error) {
+	return c.listRevision(ctx, rootlistPath(username))
+}
+
+func (c *Spclient) listRevision(ctx context.Context, path string) ([]byte, error) {
 	query := url.Values{}
 	query.Set("decorate", "revision")
 	query.Set("from", "0")
 	query.Set("length", "1")
 
-	content, err := c.getList(ctx, playlistPath(playlist), query)
+	content, err := c.getList(ctx, path, query)
 	if err != nil {
 		return nil, err
 	}
@@ -339,4 +349,66 @@ func (c *Spclient) listChange(ctx context.Context, path, username string, revisi
 	default:
 		return &StatusError{Op: "playlist changes", StatusCode: resp.StatusCode}
 	}
+}
+
+// PlaylistCreate creates an empty playlist named name, owned by the user the
+// session belongs to, and returns its URI. The playlist is not in the user's library yet: add it to
+// the rootlist with RootlistAddFirst.
+func (c *Spclient) PlaylistCreate(ctx context.Context, name string) (string, error) {
+	// The service builds the new playlist from a list of operations, the
+	// first naming it, as Spotify's own clients send; the attributes of a
+	// ListUpdateRequest are ignored and leave the playlist without a name.
+	body, err := proto.Marshal(&playlist4pb.OpList{Ops: []*playlist4pb.Op{{
+		Kind: playlist4pb.Op_UPDATE_LIST_ATTRIBUTES.Enum(),
+		UpdateListAttributes: &playlist4pb.UpdateListAttributes{
+			NewAttributes: &playlist4pb.ListAttributesPartialState{
+				Values: &playlist4pb.ListAttributes{Name: proto.String(name)},
+			},
+		},
+	}}})
+	if err != nil {
+		return "", fmt.Errorf("failed marshalling OpList: %w", err)
+	}
+
+	// Not idempotent: resent after the server created the playlist but its
+	// answer got lost, a second playlist would be created.
+	resp, err := c.RequestOnce(ctx, "POST", "/playlist/v2/playlist", nil, nil, body)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", &StatusError{Op: "playlist create", StatusCode: resp.StatusCode}
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var reply playlist4pb.CreateListReply
+	if err := proto.Unmarshal(respBytes, &reply); err != nil {
+		return "", fmt.Errorf("failed unmarshalling CreateListReply: %w", err)
+	}
+	if reply.GetUri() == "" {
+		return "", errors.New("playlist create answered no uri")
+	}
+
+	return reply.GetUri(), nil
+}
+
+// RootlistAddFirst puts uri at the top of the user's rootlist, where Spotify
+// shows a new playlist, as a change based on revision. It returns
+// ErrPlaylistConflict when the rootlist moved on since.
+func (c *Spclient) RootlistAddFirst(ctx context.Context, username string, revision []byte, uri string) error {
+	return c.listChange(ctx, rootlistPath(username), username, revision, &playlist4pb.Op{
+		Kind: playlist4pb.Op_ADD.Enum(),
+		Add: &playlist4pb.Add{
+			FromIndex: proto.Int32(0),
+			Items:     []*playlist4pb.Item{{Uri: proto.String(uri)}},
+			AddFirst:  proto.Bool(true),
+		},
+	})
 }
