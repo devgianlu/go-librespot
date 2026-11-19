@@ -327,6 +327,18 @@ type ApiPlaylistContainsState struct {
 	Uri string `json:"uri"`
 }
 
+// ApiPlaylistCreate A create playlist payload
+type ApiPlaylistCreate struct {
+	// Name Name of the new playlist
+	Name string `json:"name"`
+}
+
+// ApiPlaylistCreated The playlist just created
+type ApiPlaylistCreated struct {
+	// Uri URI of the new playlist
+	Uri string `json:"uri"`
+}
+
 // ApiPlaylistRemove A remove playlist from library payload
 type ApiPlaylistRemove struct {
 	// PlaylistUri URI of the playlist to take out of the library
@@ -625,6 +637,9 @@ type SetLikedJSONRequestBody = ApiSetLiked
 // PlaylistAddTracksJSONRequestBody defines body for PlaylistAddTracks for application/json ContentType.
 type PlaylistAddTracksJSONRequestBody = ApiPlaylistAddTracks
 
+// PlaylistCreateJSONRequestBody defines body for PlaylistCreate for application/json ContentType.
+type PlaylistCreateJSONRequestBody = ApiPlaylistCreate
+
 // PlaylistRemoveJSONRequestBody defines body for PlaylistRemove for application/json ContentType.
 type PlaylistRemoveJSONRequestBody = ApiPlaylistRemove
 
@@ -708,6 +723,9 @@ type ServerInterface interface {
 
 	// (GET /library/playlists/contains)
 	PlaylistContains(w http.ResponseWriter, r *http.Request, params PlaylistContainsParams)
+
+	// (POST /library/playlists/create)
+	PlaylistCreate(w http.ResponseWriter, r *http.Request)
 
 	// (POST /library/playlists/remove)
 	PlaylistRemove(w http.ResponseWriter, r *http.Request)
@@ -1107,6 +1125,20 @@ func (siw *ServerInterfaceWrapper) PlaylistContains(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PlaylistContains(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PlaylistCreate operation middleware
+func (siw *ServerInterfaceWrapper) PlaylistCreate(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PlaylistCreate(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1544,6 +1576,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("GET "+options.BaseURL+"/library/playlists", wrapper.GetLibraryPlaylists)
 	m.HandleFunc("POST "+options.BaseURL+"/library/playlists/add_tracks", wrapper.PlaylistAddTracks)
 	m.HandleFunc("GET "+options.BaseURL+"/library/playlists/contains", wrapper.PlaylistContains)
+	m.HandleFunc("POST "+options.BaseURL+"/library/playlists/create", wrapper.PlaylistCreate)
 	m.HandleFunc("POST "+options.BaseURL+"/library/playlists/remove", wrapper.PlaylistRemove)
 	m.HandleFunc("POST "+options.BaseURL+"/library/playlists/remove_track", wrapper.PlaylistRemoveTrack)
 	m.HandleFunc("POST "+options.BaseURL+"/player/add_to_queue", wrapper.PlayerAddToQueue)
