@@ -867,6 +867,9 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 		})
 
 		return nil, errReplyDeferred
+	case ApiRequestTypeUpdateList:
+		p.updateList(req.Data.(ApiUpdateList).Uris, apiReply(req))
+		return nil, errReplyDeferred
 	case ApiRequestTypeGetVolume:
 		return &ApiVolume{
 			Max:   p.app.cfg.VolumeSteps,

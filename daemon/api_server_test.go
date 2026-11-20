@@ -20,6 +20,7 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/player"
 	"github.com/devgianlu/go-librespot/spclient"
+	"github.com/devgianlu/go-librespot/tracks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,6 +141,7 @@ var endpointMethods = map[string][]string{
 	"/token":                          {http.MethodPost},
 	"/set_device_name":                {http.MethodPost},
 	"/player/play":                    {http.MethodPost},
+	"/player/update_list":             {http.MethodPost},
 	"/player/resume":                  {http.MethodPost},
 	"/player/pause":                   {http.MethodPost},
 	"/player/playpause":               {http.MethodPost},
@@ -484,6 +486,42 @@ func TestApiPlay(t *testing.T) {
 			ts := newTestServer(t, okReply)
 
 			resp := ts.do(http.MethodPost, "/player/play", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+}
+
+func TestApiUpdateList(t *testing.T) {
+	t.Run("decodes the uris", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		uris := []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}
+		resp := ts.do(http.MethodPost, "/player/update_list", map[string]any{"uris": uris})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypeUpdateList, req.Type)
+		require.Equal(t, ApiUpdateList{Uris: uris}, req.Data)
+	})
+
+	t.Run("answers 409 when no list plays", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) { return nil, tracks.ErrNotATrackList })
+
+		resp := ts.do(http.MethodPost, "/player/update_list", map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}})
+		require.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+
+	for name, payload := range map[string]any{
+		"missing uris":     map[string]any{},
+		"empty uris":       map[string]any{"uris": []string{}},
+		"an album in uris": map[string]any{"uris": []string{"spotify:album:4aawyAB9vmqN3uQ7FjRGTy"}},
+		"no body":          nil,
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/player/update_list", payload)
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			ts.requireNoRequest()
 		})
