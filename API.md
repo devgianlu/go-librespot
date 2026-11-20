@@ -51,7 +51,8 @@ The websocket endpoint is available at `/events`. The following events are emitt
     - `uri`: The track URI
     - `play_origin`: Who started the playback
     - `stage`: Where it failed: `load` (the track could not be loaded), `playback` (the output failed mid-track; a
-      `stopped` event follows) or `session` (the connection to Spotify was lost for good)
+      `stopped` event follows), `resume` (resuming a paused track failed, e.g. because the output device is busy; the
+      track stays paused) or `session` (the connection to Spotify was lost for good)
     - `kind`: What kind of failure it was: `restricted`, `unsupported`, `rate_limited`, `rejected`, `server`,
       `timeout`, `network` or `unknown`
     - `unplayable`: Whether the track itself cannot be played (restricted, in no supported format, or its audio key

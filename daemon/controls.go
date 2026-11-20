@@ -1228,11 +1228,17 @@ func (p *AppPlayer) play() error {
 	seekPos := p.state.trackPosition()
 	seekPos = max(0, min(seekPos, int64(p.primaryStream.Media.Duration())))
 	if err := p.player.SeekMs(seekPos); err != nil {
-		return fmt.Errorf("failed seeking before play: %w", err)
+		err = fmt.Errorf("failed seeking before play: %w", err)
+		p.emitPlaybackError(playbackErrorStageResume, p.state.player.Track.GetUri(), err)
+		return err
 	}
 
+	// Resuming opens the output again, which fails when another program holds
+	// the device. Nothing else tells API clients that the resume didn't happen.
 	if err := p.player.Play(); err != nil {
-		return fmt.Errorf("failed starting playback: %w", err)
+		err = fmt.Errorf("failed starting playback: %w", err)
+		p.emitPlaybackError(playbackErrorStageResume, p.state.player.Track.GetUri(), err)
+		return err
 	}
 
 	streamPos := p.player.PositionMs()
