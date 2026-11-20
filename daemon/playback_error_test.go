@@ -90,3 +90,21 @@ func TestACancelledLoadReportsNoPlaybackError(t *testing.T) {
 
 	require.Empty(t, apiEvents(p))
 }
+
+// A resume the player can't carry out is reported, and the track stays paused.
+func TestAFailedResumeReportsAPlaybackError(t *testing.T) {
+	p := newTestAppPlayer(t)
+	playingTrack(t, p, "spotify:track:4uLU6hMCjMI75M1A2tKUQC", "uid0")
+	p.state.setPaused(true)
+
+	require.Error(t, p.play())
+
+	emitted := p.app.server.(*recordingApiServer).emitted
+	require.Len(t, emitted, 1)
+	require.Equal(t, ApiEventTypePlaybackError, emitted[0].Type)
+
+	data := emitted[0].Data.(ApiEventDataPlaybackError)
+	require.Equal(t, playbackErrorStageResume, data.Stage)
+	require.Equal(t, "spotify:track:4uLU6hMCjMI75M1A2tKUQC", data.Uri)
+	require.True(t, p.state.player.IsPaused)
+}
