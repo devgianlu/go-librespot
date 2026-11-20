@@ -142,6 +142,8 @@ const (
 	ApiRequestTypeGetLiked            ApiRequestType = "get_liked"
 	ApiRequestTypePlaylistAddTracks   ApiRequestType = "playlist_add_tracks"
 	ApiRequestTypePlaylistRemoveTrack ApiRequestType = "playlist_remove_track"
+	ApiRequestTypePlaylistRemove      ApiRequestType = "playlist_remove"
+	ApiRequestTypePlaylistCreate      ApiRequestType = "playlist_create"
 	ApiRequestTypePlaylistContains    ApiRequestType = "playlist_contains"
 	ApiRequestTypeConnectDevices      ApiRequestType = "connect_devices"
 	ApiRequestTypeConnectTransfer     ApiRequestType = "connect_transfer"
@@ -741,6 +743,30 @@ func (s *ConcreteApiServer) PlaylistRemoveTrack(w http.ResponseWriter, r *http.R
 	}
 
 	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistRemoveTrack, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlaylistCreate(w http.ResponseWriter, r *http.Request) {
+	var data ApiPlaylistCreate
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if data.Name = strings.TrimSpace(data.Name); data.Name == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistCreate, Data: data}, w)
+}
+
+func (s *ConcreteApiServer) PlaylistRemove(w http.ResponseWriter, r *http.Request) {
+	var data ApiPlaylistRemove
+	if err := jsonDecode(r, &data); err != nil || !validPlaylistUri(data.PlaylistUri) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypePlaylistRemove, Data: data}, w)
 }
 
 // ApiRequestDataPlaylistContains carries the query of a contains request.

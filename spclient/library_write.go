@@ -165,16 +165,34 @@ func (c *Spclient) CollectionContains(ctx context.Context, username, set string,
 // PlaylistRevision returns the current revision of a playlist, which a change
 // has to be based on.
 func (c *Spclient) PlaylistRevision(ctx context.Context, playlist librespot.SpotifyId) ([]byte, error) {
+	return c.listRevision(ctx, playlistPath(playlist))
+}
+
+// RootlistRevision returns the current revision of the user's rootlist, which
+// a change has to be based on.
+func (c *Spclient) RootlistRevision(ctx context.Context, username string) ([]byte, error) {
+	return c.listRevision(ctx, rootlistPath(username))
+}
+
+func (c *Spclient) listRevision(ctx context.Context, path string) ([]byte, error) {
 	query := url.Values{}
 	query.Set("decorate", "revision")
 	query.Set("from", "0")
 	query.Set("length", "1")
 
-	content, err := c.getPlaylist(ctx, playlist, query)
+	content, err := c.getList(ctx, path, query)
 	if err != nil {
 		return nil, err
 	}
 	return content.GetRevision(), nil
+}
+
+func playlistPath(playlist librespot.SpotifyId) string {
+	return fmt.Sprintf("/playlist/v2/playlist/%s", playlist.Base62())
+}
+
+func rootlistPath(username string) string {
+	return fmt.Sprintf("/playlist/v2/user/%s/rootlist", url.PathEscape(username))
 }
 
 // playlistContentsPageSize is how many items PlaylistContents reads per page.
@@ -187,6 +205,20 @@ const playlistMaxPages = 50
 // so items can be found by position. It reports ErrPlaylistConflict when the
 // playlist changes between two pages.
 func (c *Spclient) PlaylistContents(ctx context.Context, playlist librespot.SpotifyId) ([]byte, []string, error) {
+	return c.listContents(ctx, playlistPath(playlist))
+}
+
+// RootlistContents returns the revision of the user's rootlist and its entry
+// URIs in order, folder markers included, so entries can be found by
+// position. It reports ErrPlaylistConflict when the rootlist changes between
+// two pages.
+func (c *Spclient) RootlistContents(ctx context.Context, username string) ([]byte, []string, error) {
+	return c.listContents(ctx, rootlistPath(username))
+}
+
+// listContents reads the revision and item URIs of the list at path, a
+// playlist or a rootlist, page by page.
+func (c *Spclient) listContents(ctx context.Context, path string) ([]byte, []string, error) {
 	var revision []byte
 	var uris []string
 	for page := 0; page < playlistMaxPages; page++ {
@@ -195,7 +227,7 @@ func (c *Spclient) PlaylistContents(ctx context.Context, playlist librespot.Spot
 		query.Set("from", strconv.Itoa(len(uris)))
 		query.Set("length", strconv.Itoa(playlistContentsPageSize))
 
-		content, err := c.getPlaylist(ctx, playlist, query)
+		content, err := c.getList(ctx, path, query)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -216,8 +248,8 @@ func (c *Spclient) PlaylistContents(ctx context.Context, playlist librespot.Spot
 	return nil, nil, fmt.Errorf("playlist still truncated after %d pages", playlistMaxPages)
 }
 
-func (c *Spclient) getPlaylist(ctx context.Context, playlist librespot.SpotifyId, query url.Values) (*playlist4pb.SelectedListContent, error) {
-	resp, err := c.Request(ctx, "GET", fmt.Sprintf("/playlist/v2/playlist/%s", playlist.Base62()), query, nil, nil)
+func (c *Spclient) getList(ctx context.Context, path string, query url.Values) (*playlist4pb.SelectedListContent, error) {
+	resp, err := c.Request(ctx, "GET", path, query, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -243,18 +275,30 @@ func (c *Spclient) getPlaylist(ctx context.Context, playlist librespot.SpotifyId
 // PlaylistRemove removes the one item at position, which must be uri, as a
 // change based on revision. It returns ErrPlaylistConflict when the playlist
 // moved on since.
-//
-// The removal is by index range. Rem.items_as_key would make the items the
-// key instead and remove every entry of uri, duplicates included.
 func (c *Spclient) PlaylistRemove(ctx context.Context, playlist librespot.SpotifyId, username string, revision []byte, uri string, position int) error {
-	return c.playlistChange(ctx, playlist, username, revision, &playlist4pb.Op{
+	return c.listChange(ctx, playlistPath(playlist), username, revision, removeOp(uri, position))
+}
+
+// RootlistRemove removes the one entry at position, which must be uri, from
+// the user's rootlist, as a change based on revision. This takes a playlist
+// out of the user's library; the playlist itself stays. It returns
+// ErrPlaylistConflict when the rootlist moved on since.
+func (c *Spclient) RootlistRemove(ctx context.Context, username string, revision []byte, uri string, position int) error {
+	return c.listChange(ctx, rootlistPath(username), username, revision, removeOp(uri, position))
+}
+
+// removeOp removes the one item at position, which must be uri, by index
+// range. Rem.items_as_key would make the items the key instead and remove
+// every entry of uri, duplicates included.
+func removeOp(uri string, position int) *playlist4pb.Op {
+	return &playlist4pb.Op{
 		Kind: playlist4pb.Op_REM.Enum(),
 		Rem: &playlist4pb.Rem{
 			FromIndex: proto.Int32(int32(position)),
 			Length:    proto.Int32(1),
 			Items:     []*playlist4pb.Item{{Uri: proto.String(uri)}},
 		},
-	})
+	}
 }
 
 // PlaylistAppend appends uris to the end of a playlist, as a change based on
@@ -265,15 +309,15 @@ func (c *Spclient) PlaylistAppend(ctx context.Context, playlist librespot.Spotif
 		items = append(items, &playlist4pb.Item{Uri: proto.String(uri)})
 	}
 
-	return c.playlistChange(ctx, playlist, username, revision, &playlist4pb.Op{
+	return c.listChange(ctx, playlistPath(playlist), username, revision, &playlist4pb.Op{
 		Kind: playlist4pb.Op_ADD.Enum(),
 		Add:  &playlist4pb.Add{Items: items, AddLast: proto.Bool(true)},
 	})
 }
 
-// playlistChange sends one operation as a change to a playlist based on
-// revision.
-func (c *Spclient) playlistChange(ctx context.Context, playlist librespot.SpotifyId, username string, revision []byte, op *playlist4pb.Op) error {
+// listChange sends one operation as a change to the list at path, a playlist
+// or a rootlist, based on revision.
+func (c *Spclient) listChange(ctx context.Context, path, username string, revision []byte, op *playlist4pb.Op) error {
 	body, err := proto.Marshal(&playlist4pb.ListChanges{
 		BaseRevision: revision,
 		Deltas: []*playlist4pb.Delta{{
@@ -290,7 +334,7 @@ func (c *Spclient) playlistChange(ctx context.Context, playlist librespot.Spotif
 
 	// A change is not idempotent: resent after the server applied it but its
 	// answer got lost, an append would land twice.
-	resp, err := c.RequestOnce(ctx, "POST", fmt.Sprintf("/playlist/v2/playlist/%s/changes", playlist.Base62()), nil, nil, body)
+	resp, err := c.RequestOnce(ctx, "POST", path+"/changes", nil, nil, body)
 	if err != nil {
 		return err
 	}
@@ -305,4 +349,66 @@ func (c *Spclient) playlistChange(ctx context.Context, playlist librespot.Spotif
 	default:
 		return &StatusError{Op: "playlist changes", StatusCode: resp.StatusCode}
 	}
+}
+
+// PlaylistCreate creates an empty playlist named name, owned by the user the
+// session belongs to, and returns its URI. The playlist is not in the user's library yet: add it to
+// the rootlist with RootlistAddFirst.
+func (c *Spclient) PlaylistCreate(ctx context.Context, name string) (string, error) {
+	// The service builds the new playlist from a list of operations, the
+	// first naming it, as Spotify's own clients send; the attributes of a
+	// ListUpdateRequest are ignored and leave the playlist without a name.
+	body, err := proto.Marshal(&playlist4pb.OpList{Ops: []*playlist4pb.Op{{
+		Kind: playlist4pb.Op_UPDATE_LIST_ATTRIBUTES.Enum(),
+		UpdateListAttributes: &playlist4pb.UpdateListAttributes{
+			NewAttributes: &playlist4pb.ListAttributesPartialState{
+				Values: &playlist4pb.ListAttributes{Name: proto.String(name)},
+			},
+		},
+	}}})
+	if err != nil {
+		return "", fmt.Errorf("failed marshalling OpList: %w", err)
+	}
+
+	// Not idempotent: resent after the server created the playlist but its
+	// answer got lost, a second playlist would be created.
+	resp, err := c.RequestOnce(ctx, "POST", "/playlist/v2/playlist", nil, nil, body)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", &StatusError{Op: "playlist create", StatusCode: resp.StatusCode}
+	}
+
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed reading response body: %w", err)
+	}
+
+	var reply playlist4pb.CreateListReply
+	if err := proto.Unmarshal(respBytes, &reply); err != nil {
+		return "", fmt.Errorf("failed unmarshalling CreateListReply: %w", err)
+	}
+	if reply.GetUri() == "" {
+		return "", errors.New("playlist create answered no uri")
+	}
+
+	return reply.GetUri(), nil
+}
+
+// RootlistAddFirst puts uri at the top of the user's rootlist, where Spotify
+// shows a new playlist, as a change based on revision. It returns
+// ErrPlaylistConflict when the rootlist moved on since.
+func (c *Spclient) RootlistAddFirst(ctx context.Context, username string, revision []byte, uri string) error {
+	return c.listChange(ctx, rootlistPath(username), username, revision, &playlist4pb.Op{
+		Kind: playlist4pb.Op_ADD.Enum(),
+		Add: &playlist4pb.Add{
+			FromIndex: proto.Int32(0),
+			Items:     []*playlist4pb.Item{{Uri: proto.String(uri)}},
+			AddFirst:  proto.Bool(true),
+		},
+	})
 }

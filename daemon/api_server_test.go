@@ -160,6 +160,8 @@ var endpointMethods = map[string][]string{
 	"/library/liked":                  {http.MethodGet, http.MethodPost},
 	"/library/playlists/add_tracks":   {http.MethodPost},
 	"/library/playlists/remove_track": {http.MethodPost},
+	"/library/playlists/remove":       {http.MethodPost},
+	"/library/playlists/create":       {http.MethodPost},
 	"/library/playlists/contains":     {http.MethodGet},
 }
 
@@ -845,6 +847,64 @@ func TestApiPlaylistRemoveTrack(t *testing.T) {
 			"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "uri": "spotify:track:4uLU6hMCjMI75M1A2tKUQC", "position": 3,
 		})
 		require.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+}
+
+func TestApiPlaylistCreate(t *testing.T) {
+	t.Run("forwards the trimmed name and answers the uri", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return &ApiPlaylistCreated{Uri: "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"}, nil
+		})
+
+		resp := ts.do(http.MethodPost, "/library/playlists/create", map[string]any{"name": "  Road Trip "})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.JSONEq(t, `{"uri":"spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"}`, body(t, resp))
+		require.Equal(t, "Road Trip", ts.request().Data.(ApiPlaylistCreate).Name)
+	})
+
+	for name, payload := range map[string]any{
+		"an empty name": map[string]any{"name": " "},
+		"no name":       map[string]any{},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/library/playlists/create", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+}
+
+func TestApiPlaylistRemove(t *testing.T) {
+	t.Run("forwards the playlist", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/library/playlists/remove", map[string]any{"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", ts.request().Data.(ApiPlaylistRemove).PlaylistUri)
+	})
+
+	for name, payload := range map[string]any{
+		"album":   map[string]any{"playlist_uri": "spotify:album:37i9dQZF1DXcBWIGoYBM5M"},
+		"missing": map[string]any{},
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/library/playlists/remove", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+
+	t.Run("maps a playlist outside the library to 404", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) {
+			return nil, fmt.Errorf("failed removing playlist from library: %w", ErrNotFound)
+		})
+
+		resp := ts.do(http.MethodPost, "/library/playlists/remove", map[string]any{"playlist_uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"})
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 

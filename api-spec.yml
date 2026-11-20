@@ -499,6 +499,33 @@ components:
         liked:
           description: True to add the tracks to Liked Songs, false to remove them
           type: boolean
+    playlistCreate:
+      x-go-name: ApiPlaylistCreate
+      description: A create playlist payload
+      type: object
+      required: [ name ]
+      properties:
+        name:
+          description: Name of the new playlist
+          type: string
+    playlistCreated:
+      x-go-name: ApiPlaylistCreated
+      description: The playlist just created
+      type: object
+      required: [ uri ]
+      properties:
+        uri:
+          description: URI of the new playlist
+          type: string
+    playlistRemove:
+      x-go-name: ApiPlaylistRemove
+      description: A remove playlist from library payload
+      type: object
+      required: [ playlist_uri ]
+      properties:
+        playlist_uri:
+          description: URI of the playlist to take out of the library
+          type: string
     playlistRemoveTrack:
       x-go-name: ApiPlaylistRemoveTrack
       description: A remove from playlist payload
@@ -1204,6 +1231,61 @@ paths:
           description: >-
             The item at position is no longer uri, or the playlist kept
             changing; list the playlist again
+  /library/playlists/create:
+    post:
+      operationId: playlistCreate
+      description: >-
+        Create an empty playlist owned by the user and add it to the top of
+        the user's library, where Spotify shows a new playlist. Adding it to
+        the library is based on the library's current revision and retried
+        once if it changed in between.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/playlistCreate'
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/playlistCreated'
+        204:
+          description: No active session
+        400:
+          description: The name is empty
+        409:
+          description: >-
+            The library kept changing; the playlist was created but is not in
+            the library
+  /library/playlists/remove:
+    post:
+      operationId: playlistRemove
+      description: >-
+        Take a playlist out of the user's library. This is how Spotify deletes
+        a playlist the user owns, and unfollows one of someone else's: the
+        playlist itself stays for anyone who follows it and can be added back
+        to the library. The change is based on the library's current revision
+        and retried once if it changed in between.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/playlistRemove'
+      responses:
+        200:
+          description: Successful response
+        204:
+          description: No active session
+        400:
+          description: The playlist_uri is not valid
+        404:
+          description: The playlist is not in the user's library
+        409:
+          description: The library kept changing; list the playlists again
   /library/playlists/contains:
     get:
       operationId: playlistContains
