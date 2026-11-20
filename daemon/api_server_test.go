@@ -450,11 +450,35 @@ func TestApiPlay(t *testing.T) {
 		require.EqualValues(t, 0, ts.request().Data.(ApiPlay).Position)
 	})
 
+	t.Run("decodes a list of uris", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/play", map[string]any{
+			"uris":        []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"},
+			"skip_to_uri": "spotify:episode:512ojhOuo1ktJprKbVcKyQ",
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, ApiPlay{
+			Uris:      []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"},
+			SkipToUri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ",
+		}, ts.request().Data)
+	})
+
+	tooMany := make([]string, maxPlayUris+1)
+	for i := range tooMany {
+		tooMany[i] = "spotify:track:4uLU6hMCjMI75M1A2tKUQC"
+	}
+
 	for name, payload := range map[string]any{
-		"missing uri":  map[string]any{"paused": true},
-		"empty uri":    map[string]any{"uri": ""},
-		"no body":      nil,
-		"invalid json": "{not json",
+		"missing uri":          map[string]any{"paused": true},
+		"empty uri":            map[string]any{"uri": ""},
+		"both uri and uris":    map[string]any{"uri": "spotify:playlist:xxx", "uris": []string{"spotify:track:xxx"}},
+		"empty uris":           map[string]any{"uris": []string{}},
+		"an album in uris":     map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:album:4aawyAB9vmqN3uQ7FjRGTy"}},
+		"an invalid uri":       map[string]any{"uris": []string{"not a uri"}},
+		"more than 10000 uris": map[string]any{"uris": tooMany},
+		"no body":              nil,
+		"invalid json":         "{not json",
 	} {
 		t.Run("rejects "+name, func(t *testing.T) {
 			ts := newTestServer(t, okReply)

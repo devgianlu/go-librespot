@@ -766,6 +766,27 @@ func validItemUris(uris []string, types ...librespot.SpotifyIdType) bool {
 	return true
 }
 
+// maxPlayUris caps how many items a list played by /player/play may hold,
+// as many as a playlist can.
+const maxPlayUris = 10000
+
+// validPlayUris reports whether uris holds 1 to maxPlayUris track or episode
+// URIs.
+func validPlayUris(uris []string) bool {
+	if len(uris) == 0 || len(uris) > maxPlayUris {
+		return false
+	}
+
+	for _, uri := range uris {
+		id, err := librespot.SpotifyIdFromUri(uri)
+		if err != nil || (id.Type() != librespot.SpotifyIdTypeTrack && id.Type() != librespot.SpotifyIdTypeEpisode) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (s *ConcreteApiServer) GetLiked(w http.ResponseWriter, _ *http.Request, params GetLikedParams) {
 	if !validItemUris(params.Uris, librespot.SpotifyIdTypeTrack) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -902,7 +923,12 @@ func (s *ConcreteApiServer) PlayerPlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(data.Uri) == 0 {
+	// Either a context or a list of items plays, never both.
+	if (len(data.Uri) == 0) == (data.Uris == nil) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if data.Uris != nil && !validPlayUris(data.Uris) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

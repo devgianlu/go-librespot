@@ -985,15 +985,26 @@ components:
           format: date-time
     play:
       x-go-name: ApiPlay
-      description: An initiate playback payload
+      description: >-
+        An initiate playback payload, naming either a context to play (uri) or
+        the tracks to play as a list of their own (uris)
       type: object
-      required: [ uri ]
       properties:
         uri:
           description: Spotify URI to start playing
           type: string
+          x-go-type-skip-optional-pointer: true
+        uris:
+          description: >-
+            Track or episode URIs to play in this order, 1 to 10000, instead of
+            a context. They play as a list without a context of its own, as the
+            Web API plays a list of uris.
+          type: array
+          items:
+            type: string
+          x-go-type-skip-optional-pointer: true
         skip_to_uri:
-          description: Spotify URI to skip to (when playing playlists)
+          description: Spotify URI to skip to (when playing playlists or a list of uris)
           type: string
           x-go-type-skip-optional-pointer: true
         paused:
@@ -1991,7 +2002,9 @@ paths:
         200:
           description: Successful response
         400:
-          description: The uri is missing or empty
+          description: >-
+            Neither or both of uri and uris are given, or uris holds more than
+            10000 items or one that is no track or episode URI
   /player/resume:
     post:
       operationId: playerResume
