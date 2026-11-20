@@ -17,6 +17,7 @@ import (
 const (
 	playbackErrorStageLoad     = "load"
 	playbackErrorStagePlayback = "playback"
+	playbackErrorStageResume   = "resume"
 	playbackErrorStageSession  = "session"
 )
 
