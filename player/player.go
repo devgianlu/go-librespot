@@ -247,10 +247,22 @@ func NewPlayer(opts *Options) (*Player, error) {
 	return p, nil
 }
 
+func (s *SwitchingAudioSource) setOutput(out output.Output) {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	if out == nil {
+		s.cancelDrain()
+	}
+	s.drainOutput = nil
+	if drainer, ok := out.(interface{ Drain() }); ok {
+		s.drainOutput = drainer.Drain
+	}
+}
+
 func (p *Player) manageLoop() {
 	// currently available output device
 	var out output.Output
-	outErr := make(<-chan error)
+	var outErr <-chan error
 
 	// initial volume is 1
 	volume := float32(1)
@@ -263,6 +275,13 @@ func (p *Player) manageLoop() {
 
 	// init main source
 	source := NewSwitchingAudioSource(p.crossfadeSamples)
+
+	closeOutput := func() {
+		source.setOutput(nil)
+		_ = out.Close()
+		out = nil
+		outErr = nil
+	}
 
 loop:
 	for {
@@ -286,6 +305,7 @@ loop:
 						break
 					}
 
+					source.setOutput(out)
 					outErr = out.Error()
 					p.log.Debugf("created new output device")
 				}
@@ -303,6 +323,7 @@ loop:
 
 				source.SetPrimary(data.source)
 				if data.paused {
+					source.setPaused(true)
 					if err := out.Pause(); err != nil {
 						cmd.resp <- err
 						break
@@ -325,7 +346,12 @@ loop:
 				}
 			case playerCmdPlay:
 				if out != nil {
-					if err := out.Resume(); err != nil {
+					var err error
+					if !source.setPaused(false) {
+						err = out.Resume()
+					}
+					if err != nil {
+						source.setPaused(paused)
 						cmd.resp <- err
 					} else {
 						paused = false
@@ -338,7 +364,9 @@ loop:
 				}
 			case playerCmdPause:
 				if out != nil {
+					source.setPaused(true)
 					if err := out.Pause(); err != nil {
+						source.setPaused(paused)
 						cmd.resp <- err
 					} else {
 						paused = true
@@ -351,9 +379,7 @@ loop:
 				}
 			case playerCmdStop:
 				if out != nil {
-					_ = out.Close()
-					out = nil
-					outErr = make(<-chan error)
+					closeOutput()
 
 					p.log.Tracef("closed output device because of stop command")
 				}
@@ -413,31 +439,33 @@ loop:
 				// output is constructed, so two live outputs would corrupt the
 				// stream. A sub-second gap from the discarded buffer is expected.
 				_ = out.Drop()
+				// At terminal EOF the old buffer is now gone. Keep its end
+				// notification and avoid starting the new device on an empty source.
 				_ = out.Close()
-				out = nil
-				outErr = make(<-chan error)
+				out, outErr = nil, nil
+				atEnd := source.setPaused(paused)
 
 				newOut, err := p.newOutput(source, volume, device)
 				if err != nil {
 					// The old device is already gone; playback stays silent until
 					// an output is reopened. Surface the failure to the caller.
+					source.setOutput(nil)
 					p.log.WithError(err).Warnf("failed reopening output on %q", device)
 					cmd.resp <- err
 					break
 				}
 
 				out = newOut
+				source.setOutput(out)
 				outErr = out.Error()
 
 				if paused {
 					err = out.Pause()
-				} else {
+				} else if !atEnd {
 					err = out.Resume()
 				}
 				if err != nil {
-					_ = out.Close()
-					out = nil
-					outErr = make(<-chan error)
+					closeOutput()
 					cmd.resp <- err
 					break
 				}
@@ -455,9 +483,7 @@ loop:
 			}
 
 			// the current output device has exited, clean it up
-			_ = out.Close()
-			out = nil
-			outErr = make(<-chan error)
+			closeOutput()
 
 			p.log.Tracef("cleared closed output device")
 
@@ -470,12 +496,10 @@ loop:
 
 	close(p.closed)
 
-	_ = source.Close()
-
 	if out != nil {
-		_ = out.Close()
-		out = nil
+		closeOutput()
 	}
+	_ = source.Close()
 }
 
 func (p *Player) HasBeenPlayingFor() time.Duration {
