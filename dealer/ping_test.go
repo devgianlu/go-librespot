@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -69,6 +70,7 @@ func (l *pipeListener) Addr() net.Addr { return &net.UnixAddr{Name: "pipe", Net:
 // pongDelay, reached over in-memory connections that the test can cut.
 type fakeDealer struct {
 	pongDelay time.Duration
+	log       errorLog
 
 	// requestAt, when set, is when the first connection pushes one player
 	// command to the device. replies counts the replies that came back.
@@ -176,9 +178,37 @@ func handleCommands(d *Dealer, handleFor time.Duration) {
 	}()
 }
 
+// errorLog keeps what the dealer logs at the error level.
+type errorLog struct {
+	librespot.NullLogger
+	mu    sync.Mutex
+	lines []string
+}
+
+func (l *errorLog) Errorf(format string, args ...interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, fmt.Sprintf(format, args...))
+}
+
+// count returns how many lines logged at the error level start with prefix.
+func (l *errorLog) count(prefix string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	n := 0
+	for _, line := range l.lines {
+		if strings.HasPrefix(line, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+const stuckWarning = "did not receive last pong from dealer"
+
 func (f *fakeDealer) dealer() *Dealer {
 	return NewDealer(
-		&librespot.NullLogger{},
+		&f.log,
 		&http.Client{Transport: f.transport},
 		func(context.Context) string { return "dealer.test:443" },
 		func(context.Context, bool) (string, error) { return "token", nil },
@@ -294,6 +324,41 @@ func TestDealerKeepsConnectionWhileCommandIsSlow(t *testing.T) {
 		}
 		if replies := f.replies.Load(); replies != 1 {
 			t.Fatalf("the slow command's reply was lost: %d replies", replies)
+		}
+		if n := f.log.count(stuckWarning); n != 0 {
+			t.Fatalf("a command answered in 25 s was reported as stuck %d times", n)
+		}
+	})
+}
+
+// A receiver that never lets recvLoop go (a player loop stuck on a command)
+// leaves the dealer unable to read or reconnect, and nothing but the log can
+// tell: the missing pong is reported, at most once per stuckWarnInterval.
+func TestDealerWarnsWhileReceiverIsStuck(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newFakeDealer(0)
+		f.requestAt = time.Second
+		stop, d := runDealerWith(t, f)
+		defer stop()
+		const handleFor = 9 * time.Minute
+		handleCommands(d, handleFor)
+
+		time.Sleep(10 * time.Minute)
+		synctest.Wait()
+
+		// The first warning comes stuckAfter past the first ping sent while
+		// the receiver is held, then one every stuckWarnInterval until it
+		// returns.
+		held := f.requestAt + handleFor
+		want := int((held-pingInterval-stuckAfter)/stuckWarnInterval) + 1
+		if n := f.log.count(stuckWarning); n != want {
+			t.Fatalf("a receiver held for %s was reported %d times, want %d", handleFor, n, want)
+		}
+		if dials := f.dialTimes(); len(dials) != 1 {
+			t.Fatalf("the connection was replaced while the receiver held recvLoop: %d dials", len(dials))
+		}
+		if replies := f.replies.Load(); replies != 1 {
+			t.Fatalf("the command's reply was lost once the receiver returned: %d replies", replies)
 		}
 	})
 }
