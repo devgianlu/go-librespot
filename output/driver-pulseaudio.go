@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/jfreymuth/pulse"
@@ -28,7 +29,12 @@ func newPulseAudioOutput(opts *NewOutputOptions) (*pulseAudioOutput, error) {
 	// The device name is shown by PulseAudio volume controls (usually built
 	// into a desktop environment), so we might want to use device_name here.
 	// We could also maybe change the application icon name by device_type.
-	clientopts := []pulse.ClientOption{pulse.ClientApplicationName("go-librespot"), pulse.ClientApplicationIconName("speaker")}
+	clientopts := []pulse.ClientOption{
+		pulse.ClientApplicationName("go-librespot"),
+		pulse.ClientApplicationIconName("speaker"),
+		// A drain can legitimately outlast the default one-second RPC timeout.
+		pulse.ClientTimeout(10 * time.Second),
+	}
 
 	if opts.RuntimeSocket != "" {
 		clientopts = append(clientopts, pulse.ClientServerString(opts.RuntimeSocket))
@@ -131,24 +137,7 @@ func (out *pulseAudioOutput) float32Reader(buf []float32) (int, error) {
 }
 
 func (out *pulseAudioOutput) Pause() error {
-	if out.stream.Running() {
-		// Stop() will stop new samples from being requested, but will continue
-		// to play whatever is in the buffer.
-		out.stream.Stop()
-
-		// To really stop playback *now*, we have to also flush everything
-		// that's in the buffer.
-		err := out.client.RawRequest(&proto.FlushPlaybackStream{
-			StreamIndex: out.stream.StreamIndex(),
-		}, nil)
-		if err != nil {
-			return fmt.Errorf("Pause: could not flush playback: %e", err)
-		}
-	} else {
-		// Nothing to do: we're already paused.
-	}
-
-	return nil
+	return out.Drop()
 }
 
 func (out *pulseAudioOutput) Resume() error {
@@ -160,21 +149,23 @@ func (out *pulseAudioOutput) Resume() error {
 }
 
 func (out *pulseAudioOutput) Drop() error {
-	if out.stream.Running() {
-		// Stop and flush the buffer. We do not restart here: the caller
-		// resumes once the new source is set. Restarting raced with the
-		// source switch and clipped the start of the track (#292).
-		out.stream.Stop()
-		err := out.client.RawRequest(&proto.FlushPlaybackStream{
-			StreamIndex: out.stream.StreamIndex(),
-		}, nil)
-		if err != nil {
-			return fmt.Errorf("Drop: could not flush playback: %e", err)
-		}
-	} else {
-		// Already stopped, e.g. flushed in Pause().
+	// The reader may already be idle at EOF with audio still queued on
+	// the server. Explicit transport commands discard that audio immediately.
+	out.stream.Stop()
+	if err := out.client.RawRequest(&proto.FlushPlaybackStream{StreamIndex: out.stream.StreamIndex()}, nil); err != nil {
+		return fmt.Errorf("flush PulseAudio playback: %w", err)
 	}
 	return nil
+}
+
+// Drain waits for the samples submitted before EOF to play. The pulse
+// reader can already be idle here, in which case PlaybackStream.Drain skips
+// the server request.
+func (out *pulseAudioOutput) Drain() {
+	err := out.client.RawRequest(&proto.DrainPlaybackStream{StreamIndex: out.stream.StreamIndex()}, nil)
+	if err != nil {
+		out.log.WithError(err).Warn("could not drain PulseAudio playback before advancing")
+	}
 }
 
 func (out *pulseAudioOutput) DelayMs() (int64, error) {

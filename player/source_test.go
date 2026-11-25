@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -739,4 +740,53 @@ func TestConcurrentAccess(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestTerminalDrainPreservesLastSamples(t *testing.T) {
+	for _, crossfade := range []int{0, 4} {
+		s := NewSwitchingAudioSource(crossfade)
+		entered, release := make(chan struct{}), make(chan struct{})
+		s.drainOutput = func() {
+			close(entered)
+			<-release
+		}
+		src := rampSource(16, 1, 4)
+		src.eofWithLastRead = true
+		s.SetPrimary(src)
+
+		var samples []float32
+		buf := make([]float32, 6)
+		for {
+			n, err := s.Read(buf)
+			if err == io.EOF {
+				if n != 0 {
+					t.Fatal("Pulse drops any samples returned alongside EOF")
+				}
+				break
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			samples = append(samples, buf[:n]...)
+		}
+		if !slices.Equal(samples, src.samples) {
+			t.Fatalf("crossfade %d: received %v, want %v", crossfade, samples, src.samples)
+		}
+		select {
+		case <-entered:
+		case <-time.After(time.Second):
+			t.Fatal("drain did not start")
+		}
+		select {
+		case <-s.Done():
+			t.Fatal("track ended before the output drained")
+		default:
+		}
+		close(release)
+		select {
+		case <-s.Done():
+		case <-time.After(time.Second):
+			t.Fatal("missing track end after drain")
+		}
+	}
 }

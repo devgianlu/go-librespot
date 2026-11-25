@@ -27,7 +27,10 @@ type SwitchingAudioSource struct {
 
 	done chan struct{}
 
-	eofReported bool
+	eofReported  bool
+	drainOutput  func()
+	pendingDrain *trackDrain
+	paused       bool
 
 	// Crossfade state. When crossfadeSamples is zero the source behaves
 	// exactly as it did before crossfade support was introduced.
@@ -48,6 +51,12 @@ type SwitchingAudioSource struct {
 	fadeTotal        int       // samples of tail at fade start, gain ramp length
 	fadePos          int       // samples of tail already mixed
 	scratch          []float32 // reusable buffer for fill and fade-in reads
+}
+
+// trackDrain belongs to a single source and output. A transport command may
+// replace either one while the server is playing the last samples.
+type trackDrain struct {
+	complete bool
 }
 
 // NewSwitchingAudioSource creates an audio source that switches seamlessly
@@ -102,6 +111,8 @@ func (s *SwitchingAudioSource) SetPrimary(source librespot.AudioSource) {
 		delete(s.source, !s.which)
 	}
 
+	s.cancelDrain()
+	s.paused = false
 	s.eofReported = false
 	s.cond.Broadcast()
 }
@@ -158,13 +169,10 @@ func (s *SwitchingAudioSource) readDirect(p []float32) (n int, err error) {
 
 	n, err = s.source[s.which].Read(p)
 	if errors.Is(err, io.EOF) {
-		// notify this source is done
-		s.reportDone()
-
-		// if there's no other source just let the EOF through
 		if s.source[!s.which] == nil {
-			return n, err
+			return s.endOfInput(n)
 		}
+		s.reportDone()
 
 		// delete current source and switch to the other one
 		delete(s.source, s.which)
@@ -266,16 +274,14 @@ func (s *SwitchingAudioSource) readCrossfade(p []float32) (n int, err error) {
 		if s.bufLen == 0 {
 			// Tail fully drained and nobody to switch to: this is the end
 			// of playback, matching the original EOF timing.
-			s.reportDone()
-			return 0, io.EOF
+			return s.endOfInput(0)
 		}
 
 		// No next track (yet): keep draining the tail. A late prefetch can
 		// still upgrade this to a crossfade on a following read.
 		n = s.popChunk(p, s.bufLen)
 		if s.bufLen == 0 {
-			s.reportDone()
-			return n, io.EOF
+			return s.endOfInput(n)
 		}
 		return n, nil
 	}
@@ -390,6 +396,72 @@ func (s *SwitchingAudioSource) popChunk(p []float32, limit int) (n int) {
 	return n
 }
 
+// endOfInput is reached only when there is no secondary source to play.
+func (s *SwitchingAudioSource) endOfInput(n int) (int, error) {
+	if s.drainOutput == nil {
+		s.reportDone()
+		return n, io.EOF
+	}
+	// Pulse discards samples returned alongside an error. Wait for its next
+	// read so the final samples have been submitted before requesting a drain.
+	if n > 0 {
+		return n, nil
+	}
+	if !s.eofReported && s.pendingDrain == nil {
+		pending := &trackDrain{}
+		s.pendingDrain = pending
+		go func(drain func()) {
+			// The Pulse reader must return EOF to keep servicing the protocol
+			// while the server plays the remaining samples.
+			drain()
+			s.cond.L.Lock()
+			defer s.cond.L.Unlock()
+			if s.pendingDrain == pending {
+				pending.complete = true
+				if !s.paused {
+					s.reportDone()
+				}
+			}
+		}(s.drainOutput)
+	}
+	return 0, io.EOF
+}
+
+// cancelDrain is called under the source lock. A completion queued while
+// the player was handling a command belongs to the old playback position.
+func (s *SwitchingAudioSource) cancelDrain() {
+	if s.pendingDrain != nil && s.eofReported {
+		select {
+		case <-s.done:
+		default:
+		}
+		s.eofReported = false
+	}
+	s.pendingDrain = nil
+}
+
+// setPaused holds a terminal notification until playback resumes. Once the
+// reader has reached EOF, restarting an empty Pulse stream can block in Start.
+func (s *SwitchingAudioSource) setPaused(paused bool) (atEnd bool) {
+	s.cond.L.Lock()
+	defer s.cond.L.Unlock()
+	s.paused = paused
+	if s.pendingDrain == nil {
+		return false
+	}
+	if paused && s.eofReported {
+		select {
+		case <-s.done:
+			s.eofReported = false
+		default:
+		}
+	}
+	if !paused && s.pendingDrain.complete {
+		s.reportDone()
+	}
+	return true
+}
+
 func (s *SwitchingAudioSource) reportDone() {
 	if s.eofReported {
 		return
@@ -420,7 +492,8 @@ func (s *SwitchingAudioSource) SetPositionMs(pos int64) error {
 		return err
 	}
 
-	if s.crossfadeSamples > 0 {
+	s.cancelDrain()
+	if s.crossfadeSamples > 0 || s.drainOutput != nil {
 		// The crossfade path can discover EOF and report done well before the
 		// audio finishes; a seek revives the source, so re-arm the signal.
 		// The disabled path keeps the original behavior untouched.
