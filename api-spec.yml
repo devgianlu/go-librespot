@@ -985,15 +985,26 @@ components:
           format: date-time
     play:
       x-go-name: ApiPlay
-      description: An initiate playback payload
+      description: >-
+        An initiate playback payload, naming either a context to play (uri) or
+        the tracks to play as a list of their own (uris)
       type: object
-      required: [ uri ]
       properties:
         uri:
           description: Spotify URI to start playing
           type: string
+          x-go-type-skip-optional-pointer: true
+        uris:
+          description: >-
+            Track or episode URIs to play in this order, 1 to 10000, instead of
+            a context. They play as a list without a context of its own, as the
+            Web API plays a list of uris.
+          type: array
+          items:
+            type: string
+          x-go-type-skip-optional-pointer: true
         skip_to_uri:
-          description: Spotify URI to skip to (when playing playlists)
+          description: Spotify URI to skip to (when playing playlists or a list of uris)
           type: string
           x-go-type-skip-optional-pointer: true
         paused:
@@ -1007,6 +1018,17 @@ components:
           type: integer
           format: int64
           x-go-type-skip-optional-pointer: true
+    updateList:
+      x-go-name: ApiUpdateList
+      description: A replace the playing list payload
+      type: object
+      required: [ uris ]
+      properties:
+        uris:
+          description: Track or episode URIs the list holds now, 1 to 10000
+          type: array
+          items:
+            type: string
     next:
       x-go-name: ApiNext
       description: A skip to next payload
@@ -1991,7 +2013,9 @@ paths:
         200:
           description: Successful response
         400:
-          description: The uri is missing or empty
+          description: >-
+            Neither or both of uri and uris are given, or uris holds more than
+            10000 items or one that is no track or episode URI
   /player/resume:
     post:
       operationId: playerResume
@@ -2187,6 +2211,30 @@ paths:
           description: Successful response
         400:
           description: The uri is missing or empty
+  /player/update_list:
+    post:
+      operationId: playerUpdateList
+      description: >-
+        Replace the items of the list playing, one /player/play started with
+        uris, without interrupting it. The item playing keeps playing, even
+        when uris lacks it, and the list goes on with what uris holds after
+        it. Shuffled, the order is kept: items gone from uris drop out and new
+        ones are mixed into what is still to come. The queue is not touched.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/updateList'
+      responses:
+        200:
+          description: Successful response
+        400:
+          description: >-
+            uris is missing, holds more than 10000 items or one that is no
+            track or episode URI
+        409:
+          description: What plays is no list started with uris
   /connect/devices:
     get:
       operationId: getConnectDevices

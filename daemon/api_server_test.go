@@ -20,6 +20,7 @@ import (
 	librespot "github.com/devgianlu/go-librespot"
 	"github.com/devgianlu/go-librespot/player"
 	"github.com/devgianlu/go-librespot/spclient"
+	"github.com/devgianlu/go-librespot/tracks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,6 +141,7 @@ var endpointMethods = map[string][]string{
 	"/token":                          {http.MethodPost},
 	"/set_device_name":                {http.MethodPost},
 	"/player/play":                    {http.MethodPost},
+	"/player/update_list":             {http.MethodPost},
 	"/player/resume":                  {http.MethodPost},
 	"/player/pause":                   {http.MethodPost},
 	"/player/playpause":               {http.MethodPost},
@@ -450,16 +452,76 @@ func TestApiPlay(t *testing.T) {
 		require.EqualValues(t, 0, ts.request().Data.(ApiPlay).Position)
 	})
 
+	t.Run("decodes a list of uris", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		resp := ts.do(http.MethodPost, "/player/play", map[string]any{
+			"uris":        []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"},
+			"skip_to_uri": "spotify:episode:512ojhOuo1ktJprKbVcKyQ",
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, ApiPlay{
+			Uris:      []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"},
+			SkipToUri: "spotify:episode:512ojhOuo1ktJprKbVcKyQ",
+		}, ts.request().Data)
+	})
+
+	tooMany := make([]string, maxPlayUris+1)
+	for i := range tooMany {
+		tooMany[i] = "spotify:track:4uLU6hMCjMI75M1A2tKUQC"
+	}
+
 	for name, payload := range map[string]any{
-		"missing uri":  map[string]any{"paused": true},
-		"empty uri":    map[string]any{"uri": ""},
-		"no body":      nil,
-		"invalid json": "{not json",
+		"missing uri":          map[string]any{"paused": true},
+		"empty uri":            map[string]any{"uri": ""},
+		"both uri and uris":    map[string]any{"uri": "spotify:playlist:xxx", "uris": []string{"spotify:track:xxx"}},
+		"empty uris":           map[string]any{"uris": []string{}},
+		"an album in uris":     map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:album:4aawyAB9vmqN3uQ7FjRGTy"}},
+		"an invalid uri":       map[string]any{"uris": []string{"not a uri"}},
+		"more than 10000 uris": map[string]any{"uris": tooMany},
+		"no body":              nil,
+		"invalid json":         "{not json",
 	} {
 		t.Run("rejects "+name, func(t *testing.T) {
 			ts := newTestServer(t, okReply)
 
 			resp := ts.do(http.MethodPost, "/player/play", payload)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			ts.requireNoRequest()
+		})
+	}
+}
+
+func TestApiUpdateList(t *testing.T) {
+	t.Run("decodes the uris", func(t *testing.T) {
+		ts := newTestServer(t, okReply)
+
+		uris := []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC", "spotify:episode:512ojhOuo1ktJprKbVcKyQ"}
+		resp := ts.do(http.MethodPost, "/player/update_list", map[string]any{"uris": uris})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		req := ts.request()
+		require.Equal(t, ApiRequestTypeUpdateList, req.Type)
+		require.Equal(t, ApiUpdateList{Uris: uris}, req.Data)
+	})
+
+	t.Run("answers 409 when no list plays", func(t *testing.T) {
+		ts := newTestServer(t, func(ApiRequest) (any, error) { return nil, tracks.ErrNotATrackList })
+
+		resp := ts.do(http.MethodPost, "/player/update_list", map[string]any{"uris": []string{"spotify:track:4uLU6hMCjMI75M1A2tKUQC"}})
+		require.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+
+	for name, payload := range map[string]any{
+		"missing uris":     map[string]any{},
+		"empty uris":       map[string]any{"uris": []string{}},
+		"an album in uris": map[string]any{"uris": []string{"spotify:album:4aawyAB9vmqN3uQ7FjRGTy"}},
+		"no body":          nil,
+	} {
+		t.Run("rejects "+name, func(t *testing.T) {
+			ts := newTestServer(t, okReply)
+
+			resp := ts.do(http.MethodPost, "/player/update_list", payload)
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 			ts.requireNoRequest()
 		})

@@ -23,6 +23,7 @@ import (
 	"github.com/devgianlu/go-librespot/player"
 	metadatapb "github.com/devgianlu/go-librespot/proto/spotify/metadata"
 	"github.com/devgianlu/go-librespot/spclient"
+	"github.com/devgianlu/go-librespot/tracks"
 	"github.com/rs/cors"
 )
 
@@ -133,6 +134,7 @@ const (
 	ApiRequestTypeSetRepeatingTrack   ApiRequestType = "repeating_track"
 	ApiRequestTypeSetShufflingContext ApiRequestType = "shuffling_context"
 	ApiRequestTypeAddToQueue          ApiRequestType = "add_to_queue"
+	ApiRequestTypeUpdateList          ApiRequestType = "update_list"
 	ApiRequestTypeToken               ApiRequestType = "token"
 	ApiRequestSetDeviceName           ApiRequestType = "set_device_name"
 	ApiRequestTypeReopenOutput        ApiRequestType = "reopen_output"
@@ -554,7 +556,8 @@ func (s *ConcreteApiServer) handleRequest(req ApiRequest, w http.ResponseWriter)
 			}
 			w.WriteHeader(http.StatusTooManyRequests)
 			return
-		case errors.Is(resp.err, ErrSuperseded), errors.Is(resp.err, ErrLoaderBusy), errors.Is(resp.err, spclient.ErrPlaylistConflict):
+		case errors.Is(resp.err, ErrSuperseded), errors.Is(resp.err, ErrLoaderBusy), errors.Is(resp.err, spclient.ErrPlaylistConflict),
+			errors.Is(resp.err, tracks.ErrNotATrackList):
 			w.WriteHeader(http.StatusConflict)
 			return
 		case errors.Is(resp.err, ErrBadRequest):
@@ -766,6 +769,27 @@ func validItemUris(uris []string, types ...librespot.SpotifyIdType) bool {
 	return true
 }
 
+// maxPlayUris caps how many items a list played by /player/play may hold,
+// as many as a playlist can.
+const maxPlayUris = 10000
+
+// validPlayUris reports whether uris holds 1 to maxPlayUris track or episode
+// URIs.
+func validPlayUris(uris []string) bool {
+	if len(uris) == 0 || len(uris) > maxPlayUris {
+		return false
+	}
+
+	for _, uri := range uris {
+		id, err := librespot.SpotifyIdFromUri(uri)
+		if err != nil || (id.Type() != librespot.SpotifyIdTypeTrack && id.Type() != librespot.SpotifyIdTypeEpisode) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (s *ConcreteApiServer) GetLiked(w http.ResponseWriter, _ *http.Request, params GetLikedParams) {
 	if !validItemUris(params.Uris, librespot.SpotifyIdTypeTrack) {
 		w.WriteHeader(http.StatusBadRequest)
@@ -902,7 +926,12 @@ func (s *ConcreteApiServer) PlayerPlay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(data.Uri) == 0 {
+	// Either a context or a list of items plays, never both.
+	if (len(data.Uri) == 0) == (data.Uris == nil) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if data.Uris != nil && !validPlayUris(data.Uris) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -978,6 +1007,21 @@ func (s *ConcreteApiServer) PlayerShuffleContext(w http.ResponseWriter, r *http.
 	}
 
 	s.handleRequest(ApiRequest{Type: ApiRequestTypeSetShufflingContext, Data: data.ShuffleContext}, w)
+}
+
+func (s *ConcreteApiServer) PlayerUpdateList(w http.ResponseWriter, r *http.Request) {
+	var data ApiUpdateList
+	if err := jsonDecode(r, &data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if !validPlayUris(data.Uris) {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	s.handleRequest(ApiRequest{Type: ApiRequestTypeUpdateList, Data: data}, w)
 }
 
 func (s *ConcreteApiServer) PlayerAddToQueue(w http.ResponseWriter, r *http.Request) {

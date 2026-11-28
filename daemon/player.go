@@ -816,14 +816,18 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 
 		p.loadGen++
 		p.loader.submit(loaderJob{
-			name:  "resolve " + data.Uri,
+			name:  playJobName(data),
 			class: classLoad,
 			gen:   p.loadGen,
 			reply: apiReply(req),
 			run: func(ctx context.Context) loaderResult {
-				spotCtx, err := p.sess.Spclient().ContextResolve(ctx, data.Uri)
-				if err != nil {
-					return loaderResult{err: fmt.Errorf("failed resolving context: %w", err)}
+				spotCtx := trackListContext(data.Uris)
+				if spotCtx == nil {
+					var err error
+					spotCtx, err = p.sess.Spclient().ContextResolve(ctx, data.Uri)
+					if err != nil {
+						return loaderResult{err: fmt.Errorf("failed resolving context: %w", err)}
+					}
 				}
 
 				return loaderResult{commit: func(p *AppPlayer, err error) {
@@ -862,6 +866,9 @@ func (p *AppPlayer) handleApiRequest(req ApiRequest) (any, error) {
 			},
 		})
 
+		return nil, errReplyDeferred
+	case ApiRequestTypeUpdateList:
+		p.updateList(req.Data.(ApiUpdateList).Uris, apiReply(req))
 		return nil, errReplyDeferred
 	case ApiRequestTypeGetVolume:
 		return &ApiVolume{

@@ -288,7 +288,7 @@ type ApiOutput struct {
 	Device string `json:"device,omitempty"`
 }
 
-// ApiPlay An initiate playback payload
+// ApiPlay An initiate playback payload, naming either a context to play (uri) or the tracks to play as a list of their own (uris)
 type ApiPlay struct {
 	// Paused Start playback as paused
 	Paused bool `json:"paused,omitempty"`
@@ -296,11 +296,14 @@ type ApiPlay struct {
 	// Position Position in milliseconds to start playback at within the selected track (0 starts from the beginning)
 	Position int64 `json:"position,omitempty"`
 
-	// SkipToUri Spotify URI to skip to (when playing playlists)
+	// SkipToUri Spotify URI to skip to (when playing playlists or a list of uris)
 	SkipToUri string `json:"skip_to_uri,omitempty"`
 
 	// Uri Spotify URI to start playing
-	Uri string `json:"uri"`
+	Uri string `json:"uri,omitempty"`
+
+	// Uris Track or episode URIs to play in this order, 1 to 10000, instead of a context. They play as a list without a context of its own, as the Web API plays a list of uris.
+	Uris []string `json:"uris,omitempty"`
 }
 
 // ApiPlaylistAddTracks An append to playlist payload
@@ -711,6 +714,12 @@ type ApiTrack struct {
 // TrackCodec Codec family of the audio file
 type TrackCodec string
 
+// ApiUpdateList A replace the playing list payload
+type ApiUpdateList struct {
+	// Uris Track or episode URIs the list holds now, 1 to 10000
+	Uris []string `json:"uris"`
+}
+
 // ApiVolume The player volume settings
 type ApiVolume struct {
 	// Max The max volume value
@@ -897,6 +906,9 @@ type PlayerSeekJSONRequestBody = ApiSeek
 // PlayerShuffleContextJSONRequestBody defines body for PlayerShuffleContext for application/json ContentType.
 type PlayerShuffleContextJSONRequestBody = ApiShuffleContext
 
+// PlayerUpdateListJSONRequestBody defines body for PlayerUpdateList for application/json ContentType.
+type PlayerUpdateListJSONRequestBody = ApiUpdateList
+
 // PlayerSetVolumeJSONRequestBody defines body for PlayerSetVolume for application/json ContentType.
 type PlayerSetVolumeJSONRequestBody = ApiSetVolume
 
@@ -998,6 +1010,9 @@ type ServerInterface interface {
 
 	// (POST /player/stop)
 	PlayerStop(w http.ResponseWriter, r *http.Request)
+
+	// (POST /player/update_list)
+	PlayerUpdateList(w http.ResponseWriter, r *http.Request)
 
 	// (GET /player/volume)
 	PlayerGetVolume(w http.ResponseWriter, r *http.Request)
@@ -1617,6 +1632,20 @@ func (siw *ServerInterfaceWrapper) PlayerStop(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// PlayerUpdateList operation middleware
+func (siw *ServerInterfaceWrapper) PlayerUpdateList(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PlayerUpdateList(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // PlayerGetVolume operation middleware
 func (siw *ServerInterfaceWrapper) PlayerGetVolume(w http.ResponseWriter, r *http.Request) {
 
@@ -2180,6 +2209,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/player/seek", wrapper.PlayerSeek)
 	m.HandleFunc("POST "+options.BaseURL+"/player/shuffle_context", wrapper.PlayerShuffleContext)
 	m.HandleFunc("POST "+options.BaseURL+"/player/stop", wrapper.PlayerStop)
+	m.HandleFunc("POST "+options.BaseURL+"/player/update_list", wrapper.PlayerUpdateList)
 	m.HandleFunc("GET "+options.BaseURL+"/player/volume", wrapper.PlayerGetVolume)
 	m.HandleFunc("POST "+options.BaseURL+"/player/volume", wrapper.PlayerSetVolume)
 	m.HandleFunc("GET "+options.BaseURL+"/search/albums", wrapper.GetSearchAlbums)
